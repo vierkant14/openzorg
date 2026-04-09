@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   # ── PostgreSQL 16 ──────────────────────────────────────────
   postgres:
@@ -58,13 +56,13 @@ services:
       MEDPLUM_SUPER_ADMIN_PASSWORD: SuperAdmin123!
     volumes:
       - medplum_data:/var/lib/medplum
-      - ../medplum/medplum.config.json:/usr/src/medplum/packages/server/medplum.config.json
+      - ../medplum/medplum.config.json:/usr/src/medplum/medplum.config.json
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8103/healthcheck"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 30s
+      test: ["CMD", "node", "-e", "fetch('http://localhost:8103/healthcheck').then(r=>{if(!r.ok)throw 1}).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 90s
 
   # ── ECD Service (Hono) ─────────────────────────────────────
   ecd:
@@ -83,7 +81,7 @@ services:
       ECD_PORT: 4001
       MEDPLUM_BASE_URL: http://medplum:8103
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:4001/health"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:4001/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -106,7 +104,7 @@ services:
       ECD_SERVICE_URL: http://ecd:4001
       NEXT_PUBLIC_MEDPLUM_BASE_URL: http://localhost:8103
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5

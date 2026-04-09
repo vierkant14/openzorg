@@ -1,26 +1,34 @@
 FROM node:20-alpine AS base
 RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
 
-FROM base AS deps
+FROM base AS builder
 WORKDIR /app
-COPY package.json pnpm-workspace.yaml pnpm-lock.yaml* ./
-COPY apps/web/package.json ./apps/web/
+
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml* .npmrc ./
 COPY packages/shared-domain/package.json ./packages/shared-domain/
 COPY packages/shared-config/package.json ./packages/shared-config/
 COPY packages/shared-ui/package.json ./packages/shared-ui/
-RUN pnpm install --frozen-lockfile || pnpm install
+COPY packages/shared-test/package.json ./packages/shared-test/
+COPY services/ecd/package.json ./services/ecd/
+COPY services/planning/package.json ./services/planning/
+COPY services/facturatie/package.json ./services/facturatie/
+COPY services/workflow-bridge/package.json ./services/workflow-bridge/
+COPY apps/web/package.json ./apps/web/
+COPY adapters/ons-import/package.json ./adapters/ons-import/
 
-FROM base AS builder
-WORKDIR /app
-COPY --from=deps /app/node_modules ./node_modules
-COPY --from=deps /app/apps/web/node_modules ./apps/web/node_modules
-COPY --from=deps /app/packages/shared-domain/node_modules ./packages/shared-domain/node_modules 2>/dev/null || true
-COPY --from=deps /app/packages/shared-config/node_modules ./packages/shared-config/node_modules 2>/dev/null || true
-COPY --from=deps /app/packages/shared-ui/node_modules ./packages/shared-ui/node_modules 2>/dev/null || true
-COPY . .
+RUN echo "node-linker=hoisted" >> .npmrc && \
+    (pnpm install --frozen-lockfile || pnpm install)
+
+COPY tsconfig.base.json ./
+COPY packages/shared-domain/ ./packages/shared-domain/
+COPY packages/shared-config/ ./packages/shared-config/
+COPY packages/shared-ui/ ./packages/shared-ui/
+COPY apps/web/ ./apps/web/
+
+ENV STANDALONE=true
 RUN pnpm --filter @openzorg/shared-domain build && \
     pnpm --filter @openzorg/shared-config build && \
-    pnpm --filter @openzorg/web build
+    cd apps/web && ../../node_modules/.bin/next build
 
 FROM base AS runner
 WORKDIR /app
@@ -28,7 +36,6 @@ ENV NODE_ENV=production
 RUN addgroup --system --gid 1001 nodejs && adduser --system --uid 1001 nextjs
 COPY --from=builder /app/apps/web/.next/standalone ./
 COPY --from=builder /app/apps/web/.next/static ./apps/web/.next/static
-COPY --from=builder /app/apps/web/public ./apps/web/public 2>/dev/null || true
 USER nextjs
 EXPOSE 3000
 ENV PORT=3000

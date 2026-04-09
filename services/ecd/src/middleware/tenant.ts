@@ -1,6 +1,6 @@
 import type { Context, Next } from "hono";
 
-import type { AppEnv } from "../app";
+import type { AppEnv } from "../app.js";
 
 /**
  * Tenant middleware extracts and validates the tenant context from the request.

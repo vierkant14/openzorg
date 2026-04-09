@@ -2,8 +2,8 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 
-import { tenantMiddleware } from "./middleware/tenant";
-import { healthRoutes } from "./routes/health";
+import { tenantMiddleware } from "./middleware/tenant.js";
+import { healthRoutes } from "./routes/health.js";
 
 export type AppEnv = {
   Variables: {

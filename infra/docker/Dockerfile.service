@@ -1,36 +1,52 @@
 FROM node:20-alpine AS base
 RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
-ARG SERVICE_NAME
-
-FROM base AS deps
-ARG SERVICE_NAME
-WORKDIR /app
-COPY package.json pnpm-workspace.yaml pnpm-lock.yaml* ./
-COPY services/${SERVICE_NAME}/package.json ./services/${SERVICE_NAME}/
-COPY packages/shared-domain/package.json ./packages/shared-domain/
-COPY packages/shared-config/package.json ./packages/shared-config/
-RUN pnpm install --frozen-lockfile || pnpm install
 
 FROM base AS builder
-ARG SERVICE_NAME
+ARG SERVICE_NAME=ecd
 WORKDIR /app
-COPY --from=deps /app/node_modules ./node_modules
-COPY --from=deps /app/services/${SERVICE_NAME}/node_modules ./services/${SERVICE_NAME}/node_modules 2>/dev/null || true
-COPY --from=deps /app/packages/shared-domain/node_modules ./packages/shared-domain/node_modules 2>/dev/null || true
-COPY --from=deps /app/packages/shared-config/node_modules ./packages/shared-config/node_modules 2>/dev/null || true
-COPY . .
+
+# Copy all package manifests for workspace resolution
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml* .npmrc ./
+COPY packages/shared-domain/package.json ./packages/shared-domain/
+COPY packages/shared-config/package.json ./packages/shared-config/
+COPY packages/shared-ui/package.json ./packages/shared-ui/
+COPY packages/shared-test/package.json ./packages/shared-test/
+COPY services/ecd/package.json ./services/ecd/
+COPY services/planning/package.json ./services/planning/
+COPY services/facturatie/package.json ./services/facturatie/
+COPY services/workflow-bridge/package.json ./services/workflow-bridge/
+COPY apps/web/package.json ./apps/web/
+COPY adapters/ons-import/package.json ./adapters/ons-import/
+
+# Use hoisted node_modules in Docker for reliable resolution
+RUN echo "node-linker=hoisted" >> .npmrc && \
+    (pnpm install --frozen-lockfile || pnpm install)
+
+# Copy source and build
+COPY tsconfig.base.json ./
+COPY packages/shared-domain/ ./packages/shared-domain/
+COPY packages/shared-config/ ./packages/shared-config/
+COPY services/${SERVICE_NAME}/ ./services/${SERVICE_NAME}/
+
 RUN pnpm --filter @openzorg/shared-domain build && \
     pnpm --filter @openzorg/shared-config build && \
     pnpm --filter @openzorg/service-${SERVICE_NAME} build
 
 FROM base AS runner
-ARG SERVICE_NAME
+ARG SERVICE_NAME=ecd
 WORKDIR /app
 ENV NODE_ENV=production
-COPY --from=builder /app/services/${SERVICE_NAME}/dist ./dist
-COPY --from=builder /app/services/${SERVICE_NAME}/node_modules ./node_modules 2>/dev/null || true
-COPY --from=builder /app/node_modules ./host_modules 2>/dev/null || true
-COPY --from=builder /app/packages/shared-domain/dist ./packages/shared-domain/dist 2>/dev/null || true
-COPY --from=builder /app/packages/shared-config/dist ./packages/shared-config/dist 2>/dev/null || true
+ENV SERVICE_ENTRYPOINT=services/${SERVICE_NAME}/dist/index.js
+
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/packages/shared-domain/dist ./packages/shared-domain/dist
+COPY --from=builder /app/packages/shared-domain/package.json ./packages/shared-domain/package.json
+COPY --from=builder /app/packages/shared-config/dist ./packages/shared-config/dist
+COPY --from=builder /app/packages/shared-config/package.json ./packages/shared-config/package.json
+COPY --from=builder /app/services/${SERVICE_NAME}/dist ./services/${SERVICE_NAME}/dist
+COPY --from=builder /app/services/${SERVICE_NAME}/package.json ./services/${SERVICE_NAME}/package.json
+COPY --from=builder /app/package.json ./
+COPY --from=builder /app/pnpm-workspace.yaml ./
+
 EXPOSE 4001
-CMD ["node", "dist/index.js"]
+CMD ["sh", "-c", "node $SERVICE_ENTRYPOINT"]
