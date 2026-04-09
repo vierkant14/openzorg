@@ -1,0 +1,33 @@
+{
+  "name": "openzorg",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Open source modulair zorgplatform voor Nederlandse zorginstellingen",
+  "license": "Apache-2.0",
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "lint": "turbo run lint",
+    "lint:fix": "turbo run lint:fix",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "test:coverage": "turbo run test:coverage",
+    "forbidden-words": "node scripts/forbidden-words-check.mjs",
+    "check-all": "pnpm lint && pnpm typecheck && pnpm forbidden-words && pnpm test && pnpm build",
+    "clean": "turbo run clean"
+  },
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "eslint": "^9.0.0",
+    "eslint-plugin-import": "^2.31.0",
+    "prettier": "^3.4.0",
+    "turbo": "^2.3.0",
+    "typescript": "^5.7.0"
+  },
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  }
+}

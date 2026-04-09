@@ -1,0 +1,5 @@
+# Root-level convenience file that delegates to infra/compose/docker-compose.yml
+# Usage: docker compose up (from repo root)
+
+include:
+  - infra/compose/docker-compose.yml

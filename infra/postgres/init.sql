@@ -1,0 +1,80 @@
+-- OpenZorg PostgreSQL initialization
+-- Creates the required databases and schemas for local development.
+
+-- Medplum uses its own database
+CREATE DATABASE medplum;
+
+-- Flowable schema (sprint 3, prepared now)
+-- Flowable will use the openzorg database with its own schema
+CREATE SCHEMA IF NOT EXISTS flowable;
+
+-- OpenZorg tenant configuration schema
+CREATE SCHEMA IF NOT EXISTS openzorg;
+
+-- Tenant table with RLS
+CREATE TABLE openzorg.tenants (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name TEXT NOT NULL,
+    slug TEXT NOT NULL UNIQUE,
+    medplum_project_id TEXT NOT NULL UNIQUE,
+    enabled_modules TEXT[] NOT NULL DEFAULT ARRAY['ecd', 'planning'],
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Tenant configuration table (three-layer model, layer 2 data)
+CREATE TABLE openzorg.tenant_configurations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL REFERENCES openzorg.tenants(id),
+    config_type TEXT NOT NULL, -- 'custom_field', 'validation_rule', 'workflow', etc.
+    config_data JSONB NOT NULL,
+    version INTEGER NOT NULL DEFAULT 1,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Enable Row-Level Security on tenant-scoped tables
+ALTER TABLE openzorg.tenant_configurations ENABLE ROW LEVEL SECURITY;
+
+-- RLS policy: tenants can only see their own configurations
+-- The tenant_id is set via a session variable: SET openzorg.current_tenant_id = '...'
+CREATE POLICY tenant_isolation_policy ON openzorg.tenant_configurations
+    USING (tenant_id::text = current_setting('openzorg.current_tenant_id', true));
+
+-- Insert two test tenants for Sprint 1
+INSERT INTO openzorg.tenants (id, name, slug, medplum_project_id, enabled_modules)
+VALUES
+    ('a0000000-0000-0000-0000-000000000001', 'Zorggroep Horizon', 'zorggroep-horizon', 'medplum-project-horizon', ARRAY['ecd', 'planning']),
+    ('b0000000-0000-0000-0000-000000000002', 'Thuiszorg De Linde', 'thuiszorg-de-linde', 'medplum-project-linde', ARRAY['ecd']);
+
+-- Insert test configurations for tenant A
+INSERT INTO openzorg.tenant_configurations (tenant_id, config_type, config_data)
+VALUES
+    ('a0000000-0000-0000-0000-000000000001', 'custom_field', '{"resourceType": "Patient", "fieldName": "voorkeurstaal", "fieldType": "string", "required": false}'),
+    ('a0000000-0000-0000-0000-000000000001', 'validation_rule', '{"resourceType": "Patient", "fieldPath": "birthDate", "operator": "required", "value": true, "errorMessage": "Geboortedatum is verplicht"}');
+
+-- Insert test configuration for tenant B
+INSERT INTO openzorg.tenant_configurations (tenant_id, config_type, config_data)
+VALUES
+    ('b0000000-0000-0000-0000-000000000002', 'custom_field', '{"resourceType": "Patient", "fieldName": "huisdier", "fieldType": "string", "required": false}');
+
+-- Audit log table (NEN 7513)
+CREATE TABLE openzorg.audit_log (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL REFERENCES openzorg.tenants(id),
+    user_id TEXT NOT NULL,
+    action TEXT NOT NULL, -- 'read', 'create', 'update', 'delete'
+    resource_type TEXT NOT NULL,
+    resource_id TEXT,
+    timestamp TIMESTAMPTZ NOT NULL DEFAULT now(),
+    details JSONB
+);
+
+ALTER TABLE openzorg.audit_log ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY audit_tenant_isolation ON openzorg.audit_log
+    USING (tenant_id::text = current_setting('openzorg.current_tenant_id', true));
+
+-- Index for audit log queries
+CREATE INDEX idx_audit_log_tenant_timestamp ON openzorg.audit_log (tenant_id, timestamp DESC);
+CREATE INDEX idx_audit_log_resource ON openzorg.audit_log (tenant_id, resource_type, resource_id);
