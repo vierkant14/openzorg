@@ -3,7 +3,7 @@
  * Uses X-Master-Key authentication instead of tenant context.
  */
 
-const ECD_BASE = process.env.NEXT_PUBLIC_ECD_URL || "http://localhost:4001";
+const ECD_BASE = process.env.NEXT_PUBLIC_ECD_URL || "/api/ecd";
 
 const MASTER_KEY = "dev-master-key"; // In production: from env or secure storage
 
