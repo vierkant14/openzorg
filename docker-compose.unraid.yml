@@ -1,5 +1,5 @@
 # OpenZorg — Unraid deployment (conflict-vrije poorten)
-# Gebruik: docker compose -f docker-compose.unraid.yml up -d
+# Gebruik: docker compose -f docker-compose.unraid.yml up -d --build
 #
 # Poorten:
 #   Web UI:     http://192.168.1.10:13000
@@ -7,6 +7,241 @@
 #   PostgreSQL: 192.168.1.10:15432
 #   Redis:      192.168.1.10:16379
 
-include:
-  - path: infra/compose/docker-compose.yml
-  - path: infra/compose/docker-compose.unraid.yml
+services:
+  # ── PostgreSQL 16 ──────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: openzorg
+      POSTGRES_USER: openzorg
+      POSTGRES_PASSWORD: openzorg_dev_password
+    ports:
+      - "15432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/01-init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U openzorg"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ── Redis (Medplum dependency) ──────────────────────────────
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "16379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ── Medplum Server (FHIR R4 backend) ───────────────────────
+  medplum:
+    image: medplum/medplum-server:latest
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "18103:8103"
+    environment:
+      NODE_ENV: development
+      MEDPLUM_PORT: 8103
+      MEDPLUM_BASE_URL: http://localhost:18103/
+      MEDPLUM_DATABASE_HOST: postgres
+      MEDPLUM_DATABASE_PORT: 5432
+      MEDPLUM_DATABASE_DBNAME: medplum
+      MEDPLUM_DATABASE_USERNAME: openzorg
+      MEDPLUM_DATABASE_PASSWORD: openzorg_dev_password
+      MEDPLUM_REDIS_HOST: redis
+      MEDPLUM_REDIS_PORT: 6379
+      MEDPLUM_SUPER_ADMIN_EMAIL: admin@openzorg.local
+      MEDPLUM_SUPER_ADMIN_PASSWORD: SuperAdmin123!
+    volumes:
+      - medplum_data:/var/lib/medplum
+      - ./infra/medplum/medplum.config.json:/usr/src/medplum/medplum.config.json
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:8103/healthcheck').then(r=>{if(!r.ok)throw 1}).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 30s
+      retries: 60
+      start_period: 600s
+
+  # ── ECD Service (Hono) ─────────────────────────────────────
+  ecd:
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile.service
+      args:
+        SERVICE_NAME: ecd
+    restart: unless-stopped
+    depends_on:
+      medplum:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    ports:
+      - "14001:4001"
+    environment:
+      ECD_PORT: 4001
+      MEDPLUM_BASE_URL: http://medplum:8103
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: openzorg
+      POSTGRES_USER: openzorg
+      POSTGRES_PASSWORD: openzorg_dev_password
+      MASTER_ADMIN_KEY: ${MASTER_ADMIN_KEY:-dev-master-key}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:4001/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Flowable Community REST (BPMN engine) ──────────────────
+  flowable:
+    image: flowable/flowable-rest:7.1.0
+    ports:
+      - "18080:8080"
+    environment:
+      - spring.datasource.driver-class-name=org.postgresql.Driver
+      - spring.datasource.url=jdbc:postgresql://postgres:5432/openzorg
+      - spring.datasource.username=openzorg
+      - spring.datasource.password=openzorg_dev_password
+      - flowable.rest.app.admin.user-id=admin
+      - flowable.rest.app.admin.password=admin
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- --header='Authorization: Basic YWRtaW46YWRtaW4=' http://localhost:8080/flowable-rest/actuator/health || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 15
+      start_period: 60s
+
+  # ── Planning Service (Hono) ────────────────────────────────
+  planning:
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile.service
+      args:
+        SERVICE_NAME: planning
+    restart: unless-stopped
+    depends_on:
+      medplum:
+        condition: service_healthy
+    ports:
+      - "14002:4002"
+    environment:
+      PLANNING_PORT: 4002
+      MEDPLUM_BASE_URL: http://medplum:8103
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:4002/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Workflow Bridge Service (Hono) ──────────────────────────
+  workflow-bridge:
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile.service
+      args:
+        SERVICE_NAME: workflow-bridge
+    restart: unless-stopped
+    depends_on:
+      medplum:
+        condition: service_healthy
+      flowable:
+        condition: service_healthy
+    ports:
+      - "14003:4003"
+    environment:
+      WORKFLOW_PORT: 4003
+      MEDPLUM_BASE_URL: http://medplum:8103
+      FLOWABLE_BASE_URL: http://flowable:8080/flowable-rest
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:4003/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Facturatie Service (Hono) ────────────────────────────────
+  facturatie:
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile.service
+      args:
+        SERVICE_NAME: facturatie
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "14004:4004"
+    environment:
+      FACTURATIE_PORT: 4004
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: openzorg
+      POSTGRES_USER: openzorg
+      POSTGRES_PASSWORD: openzorg_dev_password
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:4004/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Web (Next.js) ──────────────────────────────────────────
+  web:
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile.web
+    restart: unless-stopped
+    depends_on:
+      medplum:
+        condition: service_healthy
+      ecd:
+        condition: service_healthy
+      workflow-bridge:
+        condition: service_healthy
+      facturatie:
+        condition: service_healthy
+    ports:
+      - "13000:3000"
+    environment:
+      MEDPLUM_BASE_URL: http://medplum:8103
+      ECD_SERVICE_URL: http://ecd:4001
+      PLANNING_SERVICE_URL: http://planning:4002
+      WORKFLOW_SERVICE_URL: http://workflow-bridge:4003
+      FACTURATIE_SERVICE_URL: http://facturatie:4004
+      MASTER_ADMIN_KEY: ${MASTER_ADMIN_KEY:-dev-master-key}
+      NEXT_PUBLIC_MEDPLUM_BASE_URL: http://192.168.1.10:18103
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Seed (runs once, creates users) ───────────────────────────
+  seed:
+    image: node:20-alpine
+    depends_on:
+      medplum:
+        condition: service_healthy
+    environment:
+      MEDPLUM_BASE_URL: http://medplum:8103
+    volumes:
+      - ./infra/scripts/seed.sh:/seed.sh
+    command: sh /seed.sh
+    restart: "no"
+
+volumes:
+  postgres_data:
+  medplum_data:
