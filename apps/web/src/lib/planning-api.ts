@@ -41,9 +41,10 @@ export async function planningFetch<T = unknown>(
         window.location.href = "/login?expired=1";
         return { data: null, error: "Sessie verlopen", status: 401 };
       }
+      const issues = body?.issue as Array<{ diagnostics?: string }> | undefined;
       const message =
-        body?.issue?.[0]?.diagnostics || body?.error || text || `Fout ${res.status}`;
-      return { data: null, error: message as string, status: res.status };
+        issues?.[0]?.diagnostics || (body?.error as string | undefined) || text || `Fout ${res.status}`;
+      return { data: null, error: message, status: res.status };
     }
 
     return { data: (body ?? {}) as T, error: null, status: res.status };
