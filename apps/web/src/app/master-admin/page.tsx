@@ -77,15 +77,26 @@ export default function MasterAdminPage() {
                 <p className="text-body-sm text-navy-300">Platform beheer &middot; Alle omgevingen</p>
               </div>
             </div>
-            <a
-              href="/dashboard"
-              className="inline-flex items-center gap-2 px-4 py-2 text-navy-300 text-body-sm font-medium rounded-xl hover:text-white hover:bg-navy-800 transition-colors"
-            >
-              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M15 18l-6-6 6-6" />
-              </svg>
-              Terug naar app
-            </a>
+            <div className="flex items-center gap-2">
+              <a
+                href="/dashboard"
+                className="inline-flex items-center gap-2 px-4 py-2 text-navy-300 text-body-sm font-medium rounded-xl hover:text-white hover:bg-navy-800 transition-colors"
+              >
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M15 18l-6-6 6-6" />
+                </svg>
+                Terug naar app
+              </a>
+              <a
+                href="/master-admin/wiki"
+                className="inline-flex items-center gap-2 px-4 py-2 text-navy-300 text-body-sm font-medium rounded-xl hover:text-white hover:bg-navy-800 transition-colors"
+              >
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20" />
+                </svg>
+                Wiki
+              </a>
+            </div>
             <a
               href="/master-admin/onboarding"
               className="inline-flex items-center gap-2 px-5 py-2.5 bg-brand-500 text-white text-body-sm font-semibold rounded-xl hover:bg-brand-600 transition-colors"

@@ -1,7 +1,11 @@
+import crypto from "node:crypto";
+
 import { Hono } from "hono";
 
 import type { AppEnv } from "../app.js";
 import { pool } from "../lib/db.js";
+
+const MEDPLUM_BASE_URL = process.env["MEDPLUM_BASE_URL"] ?? "http://localhost:8103";
 
 export const tenantRoutes = new Hono<AppEnv>();
 
@@ -198,6 +202,132 @@ tenantRoutes.get("/:id/audit", async (c) => {
   const total = parseInt((countResult.rows[0] as { total: string })?.total ?? "0", 10);
 
   return c.json({ entries: result.rows, total, limit, offset });
+});
+
+/**
+ * POST /api/master/tenants/:id/provision — Create Medplum project + first admin user.
+ *
+ * Body: {
+ *   adminEmail: string,
+ *   adminPassword: string,
+ *   adminFirstName: string,
+ *   adminLastName: string,
+ * }
+ *
+ * This calls Medplum's newuser → newproject → token exchange flow,
+ * then updates the tenant record with the real Medplum project ID.
+ */
+tenantRoutes.post("/:id/provision", async (c) => {
+  const tenantId = c.req.param("id");
+  const body = await c.req.json<{
+    adminEmail: string;
+    adminPassword: string;
+    adminFirstName: string;
+    adminLastName: string;
+  }>();
+
+  if (!body.adminEmail || !body.adminPassword || !body.adminFirstName || !body.adminLastName) {
+    return c.json({ error: "E-mail, wachtwoord, voornaam en achternaam zijn verplicht" }, 400);
+  }
+
+  // Get the tenant
+  const tenantResult = await pool.query<TenantRow>(
+    "SELECT * FROM openzorg.tenants WHERE id = $1",
+    [tenantId],
+  );
+  const tenant = tenantResult.rows[0];
+  if (!tenant) {
+    return c.json({ error: "Tenant niet gevonden" }, 404);
+  }
+
+  // Generate PKCE challenge
+  const codeVerifier = crypto.randomBytes(32).toString("base64url");
+  const codeChallenge = crypto.createHash("sha256").update(codeVerifier).digest("base64url");
+
+  try {
+    // Step 1: Create Medplum user
+    const newuserRes = await fetch(`${MEDPLUM_BASE_URL}/auth/newuser`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        firstName: body.adminFirstName,
+        lastName: body.adminLastName,
+        email: body.adminEmail,
+        password: body.adminPassword,
+        recaptchaToken: "",
+        codeChallenge,
+        codeChallengeMethod: "S256",
+      }),
+    });
+
+    if (!newuserRes.ok) {
+      const err = await newuserRes.text();
+      return c.json({ error: `Medplum gebruiker aanmaken mislukt: ${err}` }, 502);
+    }
+
+    const newuserData = await newuserRes.json() as { login?: string };
+    if (!newuserData.login) {
+      return c.json({ error: "Medplum registratie mislukt (geen login ID)" }, 502);
+    }
+
+    // Step 2: Create Medplum project
+    const newprojectRes = await fetch(`${MEDPLUM_BASE_URL}/auth/newproject`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        login: newuserData.login,
+        projectName: tenant.name,
+      }),
+    });
+
+    if (!newprojectRes.ok) {
+      const err = await newprojectRes.text();
+      return c.json({ error: `Medplum project aanmaken mislukt: ${err}` }, 502);
+    }
+
+    const projectData = await newprojectRes.json() as { code?: string };
+    if (!projectData.code) {
+      return c.json({ error: "Medplum project aanmaken mislukt (geen code)" }, 502);
+    }
+
+    // Step 3: Token exchange to complete registration
+    const tokenRes = await fetch(`${MEDPLUM_BASE_URL}/oauth2/token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: `grant_type=authorization_code&code=${projectData.code}&code_verifier=${codeVerifier}`,
+    });
+
+    if (!tokenRes.ok) {
+      return c.json({ error: "Medplum token uitwisseling mislukt" }, 502);
+    }
+
+    const tokenData = await tokenRes.json() as {
+      access_token?: string;
+      project?: { reference?: string; display?: string };
+    };
+
+    // Extract the real Medplum project ID
+    const medplumProjectId = tokenData.project?.reference?.replace("Project/", "") ?? "";
+
+    if (medplumProjectId) {
+      // Update tenant with real Medplum project ID
+      await pool.query(
+        "UPDATE openzorg.tenants SET medplum_project_id = $1, updated_at = now() WHERE id = $2",
+        [medplumProjectId, tenantId],
+      );
+    }
+
+    return c.json({
+      success: true,
+      medplumProjectId,
+      adminEmail: body.adminEmail,
+      projectName: tenant.name,
+      loginUrl: `/login`,
+    }, 201);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return c.json({ error: `Provisioning mislukt: ${msg}` }, 502);
+  }
 });
 
 /**

@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { useRouter } from "next/navigation";
 
 import { masterFetch } from "../../../lib/master-api";
 
@@ -35,10 +34,11 @@ const VVT_MODULES = [
   { id: "facturatie", label: "Facturatie (gepland)" },
 ];
 
-type Step = 0 | 1 | 2 | 3;
+type Step = 0 | 1 | 2 | 3 | 4;
+
+const STEP_LABELS = ["Organisatie", "Contact", "Modules", "Beheerder", "Bevestiging"];
 
 export default function OnboardingPage() {
-  const router = useRouter();
   const [step, setStep] = useState<Step>(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -58,8 +58,19 @@ export default function OnboardingPage() {
     [...KERN_MODULES.map((m) => m.id), ...VVT_MODULES.filter((m) => m.id !== "facturatie").map((m) => m.id)],
   );
 
-  // Step 3: Bevestiging + resultaat
-  const [createdTenant, setCreatedTenant] = useState<{ id: string; name: string; slug: string } | null>(null);
+  // Step 3: Beheerder account
+  const [adminFirstName, setAdminFirstName] = useState("");
+  const [adminLastName, setAdminLastName] = useState("");
+  const [adminEmail, setAdminEmail] = useState("");
+  const [adminPassword, setAdminPassword] = useState("");
+
+  // Step 4: Resultaat
+  const [result, setResult] = useState<{
+    tenantId: string;
+    tenantName: string;
+    adminEmail: string;
+    medplumProjectId: string;
+  } | null>(null);
 
   function generateSlug(value: string) {
     return value
@@ -81,34 +92,62 @@ export default function OnboardingPage() {
     setError(null);
     setLoading(true);
 
-    const { data, error: apiError } = await masterFetch<{ id: string; name: string; slug: string }>(
-      "/api/master/tenants",
-      {
-        method: "POST",
-        body: JSON.stringify({
-          name,
-          slug,
-          sector: sectors[0] ?? "vvt",
-          sectors,
-          contactName: contactName || undefined,
-          contactEmail: contactEmail || undefined,
-          enabledModules: selectedModules,
-        }),
-      },
-    );
+    // Step 1: Create tenant in DB
+    const { data: tenantData, error: tenantError } = await masterFetch<{
+      id: string;
+      name: string;
+      slug: string;
+    }>("/api/master/tenants", {
+      method: "POST",
+      body: JSON.stringify({
+        name,
+        slug,
+        sector: sectors[0] ?? "vvt",
+        sectors,
+        contactName: contactName || undefined,
+        contactEmail: contactEmail || undefined,
+        enabledModules: selectedModules,
+      }),
+    });
 
-    setLoading(false);
-
-    if (apiError) {
-      setError(apiError);
+    if (tenantError || !tenantData) {
+      setLoading(false);
+      setError(tenantError ?? "Tenant aanmaken mislukt");
       return;
     }
 
-    if (data) {
-      setCreatedTenant(data);
-      setStep(3);
+    // Step 2: Provision Medplum project + admin user
+    const { data: provisionData, error: provisionError } = await masterFetch<{
+      success: boolean;
+      medplumProjectId: string;
+      adminEmail: string;
+    }>(`/api/master/tenants/${tenantData.id}/provision`, {
+      method: "POST",
+      body: JSON.stringify({
+        adminEmail,
+        adminPassword,
+        adminFirstName,
+        adminLastName,
+      }),
+    });
+
+    setLoading(false);
+
+    if (provisionError) {
+      setError(`Tenant aangemaakt, maar provisioning mislukt: ${provisionError}`);
+      return;
     }
+
+    setResult({
+      tenantId: tenantData.id,
+      tenantName: tenantData.name,
+      adminEmail: provisionData?.adminEmail ?? adminEmail,
+      medplumProjectId: provisionData?.medplumProjectId ?? "",
+    });
+    setStep(4);
   }
+
+  const inputCls = "w-full border border-default bg-raised rounded-xl px-4 py-3 text-body-sm text-fg placeholder:text-fg-subtle focus:border-brand-400 focus:ring-2 focus:ring-brand-500/20 transition-all outline-none";
 
   return (
     <div className="min-h-screen bg-page">
@@ -132,7 +171,7 @@ export default function OnboardingPage() {
       <div className="max-w-3xl mx-auto px-6 py-8">
         {/* Progress bar */}
         <div className="flex items-center gap-2 mb-10">
-          {["Organisatie", "Contact", "Modules", "Bevestiging"].map((label, i) => (
+          {STEP_LABELS.map((label, i) => (
             <div key={label} className="flex-1">
               <div className={`h-1.5 rounded-full transition-colors ${i <= step ? "bg-brand-500" : "bg-surface-200 dark:bg-surface-700"}`} />
               <p className={`text-caption mt-2 ${i <= step ? "text-brand-600 dark:text-brand-400 font-medium" : "text-fg-subtle"}`}>
@@ -166,7 +205,7 @@ export default function OnboardingPage() {
                     }
                   }}
                   placeholder="bijv. Zorggroep Horizon"
-                  className="w-full border border-default bg-raised rounded-xl px-4 py-3 text-body-sm text-fg placeholder:text-fg-subtle focus:border-brand-400 focus:ring-2 focus:ring-brand-500/20 transition-all outline-none"
+                  className={inputCls}
                 />
               </div>
 
@@ -182,7 +221,7 @@ export default function OnboardingPage() {
                     value={slug}
                     onChange={(e) => setSlug(generateSlug(e.target.value))}
                     placeholder="zorggroep-horizon"
-                    className="flex-1 border border-default bg-raised rounded-xl px-4 py-3 text-body-sm text-fg font-mono placeholder:text-fg-subtle focus:border-brand-400 focus:ring-2 focus:ring-brand-500/20 transition-all outline-none"
+                    className={`flex-1 ${inputCls} font-mono`}
                   />
                 </div>
                 <p className="text-caption text-fg-subtle mt-1.5">Alleen kleine letters, cijfers en streepjes.</p>
@@ -190,7 +229,7 @@ export default function OnboardingPage() {
 
               <div>
                 <label className="block text-body-sm font-medium text-fg mb-1.5">Zorgsectoren</label>
-                <p className="text-caption text-fg-subtle mb-3">Selecteer alle sectoren die deze organisatie levert. Meerdere combinaties zijn mogelijk (bijv. VVT + GGZ).</p>
+                <p className="text-caption text-fg-subtle mb-3">Selecteer alle sectoren die deze organisatie levert.</p>
                 <div className="space-y-2">
                   {SECTORS.map((s) => {
                     const checked = sectors.includes(s.value);
@@ -245,40 +284,17 @@ export default function OnboardingPage() {
             <div className="bg-raised rounded-2xl border border-default p-6 space-y-5">
               <div>
                 <label className="block text-body-sm font-medium text-fg mb-1.5">Naam contactpersoon</label>
-                <input
-                  type="text"
-                  value={contactName}
-                  onChange={(e) => setContactName(e.target.value)}
-                  placeholder="Jan de Vries"
-                  className="w-full border border-default bg-raised rounded-xl px-4 py-3 text-body-sm text-fg placeholder:text-fg-subtle focus:border-brand-400 focus:ring-2 focus:ring-brand-500/20 transition-all outline-none"
-                />
+                <input type="text" value={contactName} onChange={(e) => setContactName(e.target.value)} placeholder="Jan de Vries" className={inputCls} />
               </div>
-
               <div>
                 <label className="block text-body-sm font-medium text-fg mb-1.5">E-mailadres</label>
-                <input
-                  type="email"
-                  value={contactEmail}
-                  onChange={(e) => setContactEmail(e.target.value)}
-                  placeholder="admin@zorginstelling.nl"
-                  className="w-full border border-default bg-raised rounded-xl px-4 py-3 text-body-sm text-fg placeholder:text-fg-subtle focus:border-brand-400 focus:ring-2 focus:ring-brand-500/20 transition-all outline-none"
-                />
+                <input type="email" value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} placeholder="admin@zorginstelling.nl" className={inputCls} />
               </div>
             </div>
 
             <div className="flex justify-between">
-              <button
-                onClick={() => setStep(0)}
-                className="px-6 py-3 text-body-sm font-medium text-fg-muted hover:text-fg transition-colors"
-              >
-                Terug
-              </button>
-              <button
-                onClick={() => setStep(2)}
-                className="px-6 py-3 bg-brand-600 text-white text-body-sm font-semibold rounded-xl hover:bg-brand-700 transition-colors"
-              >
-                Volgende
-              </button>
+              <button onClick={() => setStep(0)} className="px-6 py-3 text-body-sm font-medium text-fg-muted hover:text-fg transition-colors">Terug</button>
+              <button onClick={() => setStep(2)} className="px-6 py-3 bg-brand-600 text-white text-body-sm font-semibold rounded-xl hover:bg-brand-700 transition-colors">Volgende</button>
             </div>
           </div>
         )}
@@ -335,37 +351,66 @@ export default function OnboardingPage() {
             </div>
 
             <div className="flex justify-between">
-              <button
-                onClick={() => setStep(1)}
-                className="px-6 py-3 text-body-sm font-medium text-fg-muted hover:text-fg transition-colors"
-              >
-                Terug
-              </button>
-              <button
-                onClick={() => setStep(3)}
-                className="px-6 py-3 bg-brand-600 text-white text-body-sm font-semibold rounded-xl hover:bg-brand-700 transition-colors"
-              >
-                Bevestigen
-              </button>
+              <button onClick={() => setStep(1)} className="px-6 py-3 text-body-sm font-medium text-fg-muted hover:text-fg transition-colors">Terug</button>
+              <button onClick={() => setStep(3)} className="px-6 py-3 bg-brand-600 text-white text-body-sm font-semibold rounded-xl hover:bg-brand-700 transition-colors">Volgende</button>
             </div>
           </div>
         )}
 
-        {/* Step 3: Bevestiging */}
-        {step === 3 && !createdTenant && (
+        {/* Step 3: Beheerder account */}
+        {step === 3 && !result && (
           <div className="space-y-6">
             <div>
-              <h2 className="text-display-md text-fg font-display mb-2">Bevestig onboarding</h2>
-              <p className="text-body-sm text-fg-muted">Controleer de gegevens en maak de omgeving aan.</p>
+              <h2 className="text-display-md text-fg font-display mb-2">Eerste beheerder</h2>
+              <p className="text-body-sm text-fg-muted">Dit wordt de admin van de organisatie. Zij kunnen zelf extra gebruikers aanmaken.</p>
             </div>
 
-            <div className="bg-raised rounded-2xl border border-default p-6 space-y-4">
-              <SummaryRow label="Organisatie" value={name} />
-              <SummaryRow label="Slug" value={slug} mono />
-              <SummaryRow label="Sectoren" value={sectors.map((s) => SECTORS.find((x) => x.value === s)?.label.split("—")[0]?.trim() ?? s).join(", ")} />
-              <SummaryRow label="Contactpersoon" value={contactName || "—"} />
-              <SummaryRow label="E-mail" value={contactEmail || "—"} />
-              <SummaryRow label="Modules" value={`${selectedModules.length} actief`} />
+            <div className="bg-raised rounded-2xl border border-default p-6 space-y-5">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-body-sm font-medium text-fg mb-1.5">
+                    Voornaam <span className="text-coral-500">*</span>
+                  </label>
+                  <input type="text" required value={adminFirstName} onChange={(e) => setAdminFirstName(e.target.value)} placeholder="Jan" className={inputCls} />
+                </div>
+                <div>
+                  <label className="block text-body-sm font-medium text-fg mb-1.5">
+                    Achternaam <span className="text-coral-500">*</span>
+                  </label>
+                  <input type="text" required value={adminLastName} onChange={(e) => setAdminLastName(e.target.value)} placeholder="de Vries" className={inputCls} />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-body-sm font-medium text-fg mb-1.5">
+                  E-mailadres <span className="text-coral-500">*</span>
+                </label>
+                <input
+                  type="email"
+                  required
+                  value={adminEmail}
+                  onChange={(e) => setAdminEmail(e.target.value)}
+                  placeholder="beheerder@zorginstelling.nl"
+                  className={inputCls}
+                />
+                <p className="text-caption text-fg-subtle mt-1.5">Dit wordt het login-adres voor de beheerder.</p>
+              </div>
+
+              <div>
+                <label className="block text-body-sm font-medium text-fg mb-1.5">
+                  Wachtwoord <span className="text-coral-500">*</span>
+                </label>
+                <input
+                  type="password"
+                  required
+                  minLength={12}
+                  value={adminPassword}
+                  onChange={(e) => setAdminPassword(e.target.value)}
+                  placeholder="Minimaal 12 tekens"
+                  className={inputCls}
+                />
+                <p className="text-caption text-fg-subtle mt-1.5">Minimaal 12 tekens, mix van hoofdletters, cijfers en symbolen.</p>
+              </div>
             </div>
 
             {error && (
@@ -375,15 +420,10 @@ export default function OnboardingPage() {
             )}
 
             <div className="flex justify-between">
-              <button
-                onClick={() => { setStep(2); setError(null); }}
-                className="px-6 py-3 text-body-sm font-medium text-fg-muted hover:text-fg transition-colors"
-              >
-                Terug
-              </button>
+              <button onClick={() => { setStep(2); setError(null); }} className="px-6 py-3 text-body-sm font-medium text-fg-muted hover:text-fg transition-colors">Terug</button>
               <button
                 onClick={(e) => handleSubmit(e as unknown as FormEvent)}
-                disabled={loading}
+                disabled={loading || !adminEmail || !adminPassword || !adminFirstName || !adminLastName || adminPassword.length < 12}
                 className="px-8 py-3 bg-brand-600 text-white text-body-sm font-semibold rounded-xl hover:bg-brand-700 disabled:opacity-50 transition-colors shadow-soft"
               >
                 {loading ? "Omgeving aanmaken..." : "Omgeving aanmaken"}
@@ -392,8 +432,8 @@ export default function OnboardingPage() {
           </div>
         )}
 
-        {/* Step 3: Success */}
-        {step === 3 && createdTenant && (
+        {/* Step 4: Success */}
+        {step === 4 && result && (
           <div className="text-center py-12">
             <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-brand-50 dark:bg-brand-950/30 mb-6">
               <svg className="w-10 h-10 text-brand-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -401,27 +441,38 @@ export default function OnboardingPage() {
               </svg>
             </div>
 
-            <h2 className="text-display-md text-fg font-display mb-2">Omgeving aangemaakt!</h2>
+            <h2 className="text-display-md text-fg font-display mb-2">Omgeving is live!</h2>
             <p className="text-body text-fg-muted max-w-md mx-auto mb-8">
-              <strong>{createdTenant.name}</strong> is succesvol aangemaakt en klaar voor gebruik.
+              <strong>{result.tenantName}</strong> is volledig ingericht en klaar voor gebruik.
             </p>
 
-            <div className="bg-raised rounded-2xl border border-default p-6 max-w-md mx-auto mb-8 text-left">
-              <h3 className="text-subheading text-fg mb-3">Volgende stappen</h3>
-              <ol className="space-y-2 text-body-sm text-fg-muted">
-                <li className="flex gap-3">
-                  <span className="w-6 h-6 rounded-full bg-brand-100 dark:bg-brand-900/40 text-brand-600 dark:text-brand-400 text-caption font-bold flex items-center justify-center shrink-0">1</span>
-                  Configureer de Medplum project koppeling
-                </li>
-                <li className="flex gap-3">
-                  <span className="w-6 h-6 rounded-full bg-brand-100 dark:bg-brand-900/40 text-brand-600 dark:text-brand-400 text-caption font-bold flex items-center justify-center shrink-0">2</span>
-                  Maak de eerste beheerder aan
-                </li>
-                <li className="flex gap-3">
-                  <span className="w-6 h-6 rounded-full bg-brand-100 dark:bg-brand-900/40 text-brand-600 dark:text-brand-400 text-caption font-bold flex items-center justify-center shrink-0">3</span>
-                  Deel de login-URL met de organisatie
-                </li>
-              </ol>
+            <div className="bg-raised rounded-2xl border border-default p-6 max-w-lg mx-auto mb-8 text-left space-y-4">
+              <h3 className="text-subheading text-fg">Inloggegevens beheerder</h3>
+
+              <div className="space-y-3">
+                <div className="flex items-center justify-between py-2 border-b border-subtle">
+                  <span className="text-body-sm text-fg-muted">E-mail</span>
+                  <code className="text-body-sm text-fg font-mono bg-sunken px-2 py-0.5 rounded">{result.adminEmail}</code>
+                </div>
+                <div className="flex items-center justify-between py-2 border-b border-subtle">
+                  <span className="text-body-sm text-fg-muted">Wachtwoord</span>
+                  <span className="text-body-sm text-fg-subtle italic">Zoals zojuist ingevoerd</span>
+                </div>
+                <div className="flex items-center justify-between py-2 border-b border-subtle">
+                  <span className="text-body-sm text-fg-muted">Project ID</span>
+                  <code className="text-body-sm text-fg font-mono bg-sunken px-2 py-0.5 rounded text-xs">{result.medplumProjectId || "—"}</code>
+                </div>
+                <div className="flex items-center justify-between py-2">
+                  <span className="text-body-sm text-fg-muted">Login URL</span>
+                  <code className="text-body-sm text-brand-600 dark:text-brand-400 font-mono">/login</code>
+                </div>
+              </div>
+
+              <div className="bg-brand-50 dark:bg-brand-950/20 rounded-xl p-4 mt-4">
+                <p className="text-body-sm text-brand-700 dark:text-brand-300">
+                  Deel deze gegevens met de beheerder van {result.tenantName}. Zij kunnen daarna zelf medewerkers uitnodigen via het admin panel.
+                </p>
+              </div>
             </div>
 
             <div className="flex gap-3 justify-center">
@@ -432,25 +483,15 @@ export default function OnboardingPage() {
                 Terug naar overzicht
               </a>
               <a
-                href="/master-admin/onboarding"
-                onClick={(e) => { e.preventDefault(); setCreatedTenant(null); setStep(0); setName(""); setSlug(""); setContactName(""); setContactEmail(""); }}
+                href={`/master-admin/tenants/${result.tenantId}`}
                 className="px-6 py-3 bg-brand-600 text-white text-body-sm font-semibold rounded-xl hover:bg-brand-700 transition-colors"
               >
-                Nog een omgeving aanmaken
+                Naar tenant details
               </a>
             </div>
           </div>
         )}
       </div>
-    </div>
-  );
-}
-
-function SummaryRow({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
-  return (
-    <div className="flex items-center justify-between py-2 border-b border-subtle last:border-0">
-      <span className="text-body-sm text-fg-muted">{label}</span>
-      <span className={`text-body-sm text-fg font-medium ${mono ? "font-mono" : ""}`}>{value}</span>
     </div>
   );
 }
