@@ -19,6 +19,11 @@ const CODELIJST_TYPES: Record<string, { label: string; snomedTags: string[] }> =
   allergieen: { label: "Allergieën & Intoleranties", snomedTags: ["substance", "product", "organism"] },
   medicatie: { label: "Medicatie", snomedTags: ["product", "substance"] },
   verrichtingen: { label: "Verrichtingen", snomedTags: ["procedure"] },
+  observaties: { label: "Observaties & Metingen", snomedTags: ["observable entity", "finding"] },
+  lichaamsdelen: { label: "Lichaamsdelen & Locaties", snomedTags: ["body structure"] },
+  wondtypen: { label: "Wondtypen & Huidletsel", snomedTags: ["morphologic abnormality", "disorder"] },
+  hulpmiddelen: { label: "Hulpmiddelen", snomedTags: ["physical object"] },
+  voeding: { label: "Voeding & Diëten", snomedTags: ["regime/therapy", "substance"] },
 };
 
 /**

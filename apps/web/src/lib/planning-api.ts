@@ -26,7 +26,13 @@ export async function planningFetch<T = unknown>(
       headers,
     });
 
-    const body = await res.json();
+    const text = await res.text();
+    let body: Record<string, unknown> | null = null;
+    try {
+      body = JSON.parse(text) as Record<string, unknown>;
+    } catch {
+      // Non-JSON response
+    }
 
     if (!res.ok) {
       if (res.status === 401 && typeof window !== "undefined") {
@@ -36,11 +42,11 @@ export async function planningFetch<T = unknown>(
         return { data: null, error: "Sessie verlopen", status: 401 };
       }
       const message =
-        body?.issue?.[0]?.diagnostics || body?.error || `Fout ${res.status}`;
-      return { data: null, error: message, status: res.status };
+        body?.issue?.[0]?.diagnostics || body?.error || text || `Fout ${res.status}`;
+      return { data: null, error: message as string, status: res.status };
     }
 
-    return { data: body as T, error: null, status: res.status };
+    return { data: (body ?? {}) as T, error: null, status: res.status };
   } catch {
     return {
       data: null,

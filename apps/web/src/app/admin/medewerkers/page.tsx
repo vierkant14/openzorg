@@ -54,6 +54,26 @@ const FUNCTIES = [
 
 const AGB_SYSTEM = "http://fhir.nl/fhir/NamingSystem/agb";
 
+/** Standard AGB beroepsgroep prefixes (first 2 digits of 8-digit AGB code) */
+const AGB_BEROEPSGROEPEN: Array<{ code: string; label: string }> = [
+  { code: "01", label: "01 — Huisarts" },
+  { code: "02", label: "02 — Apotheek" },
+  { code: "03", label: "03 — Verloskundige" },
+  { code: "04", label: "04 — Fysiotherapeut" },
+  { code: "05", label: "05 — Logopedist" },
+  { code: "06", label: "06 — Oefentherapeut" },
+  { code: "08", label: "08 — Ergotherapeut" },
+  { code: "14", label: "14 — Psycholoog" },
+  { code: "16", label: "16 — Verpleegkundige" },
+  { code: "17", label: "17 — Verzorgende" },
+  { code: "25", label: "25 — Tandarts" },
+  { code: "30", label: "30 — Specialist (medisch)" },
+  { code: "83", label: "83 — GGZ instelling" },
+  { code: "84", label: "84 — Thuiszorginstelling" },
+  { code: "85", label: "85 — Verpleeghuis / Verzorgingshuis" },
+  { code: "87", label: "87 — Gehandicaptenzorginstelling" },
+];
+
 /* ---------- Helpers ---------- */
 
 function getNaam(p: Practitioner): string {
@@ -84,6 +104,7 @@ export default function MedewerkersPage() {
 
   const [voornaam, setVoornaam] = useState("");
   const [achternaam, setAchternaam] = useState("");
+  const [agbPrefix, setAgbPrefix] = useState("");
   const [agbCode, setAgbCode] = useState("");
   const [email, setEmail] = useState("");
   const [telefoon, setTelefoon] = useState("");
@@ -111,12 +132,14 @@ export default function MedewerkersPage() {
     setError(null);
     setSaving(true);
 
+    const fullAgb = agbPrefix && agbCode ? `${agbPrefix}${agbCode}` : undefined;
+
     const { error: err } = await ecdFetch("/api/medewerkers", {
       method: "POST",
       body: JSON.stringify({
         voornaam,
         achternaam,
-        agbCode: agbCode || undefined,
+        agbCode: fullAgb,
         email: email || undefined,
         telefoon: telefoon || undefined,
         functie,
@@ -131,6 +154,7 @@ export default function MedewerkersPage() {
 
     setVoornaam("");
     setAchternaam("");
+    setAgbPrefix("");
     setAgbCode("");
     setEmail("");
     setTelefoon("");
@@ -260,15 +284,34 @@ export default function MedewerkersPage() {
                 <label className="block text-xs font-medium text-fg-muted mb-1">
                   AGB-code
                 </label>
-                <input
-                  type="text"
-                  value={agbCode}
-                  onChange={(e) => setAgbCode(e.target.value)}
-                  placeholder="12345678"
-                  maxLength={8}
-                  className={inputClass}
-                />
-                <p className="mt-1 text-xs text-fg-subtle">8 cijfers</p>
+                <div className="flex gap-2">
+                  <select
+                    value={agbPrefix}
+                    onChange={(e) => setAgbPrefix(e.target.value)}
+                    className={`${inputClass} w-[55%]`}
+                  >
+                    <option value="">Beroepsgroep...</option>
+                    {AGB_BEROEPSGROEPEN.map((bg) => (
+                      <option key={bg.code} value={bg.code}>
+                        {bg.label}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    type="text"
+                    value={agbCode}
+                    onChange={(e) => {
+                      const v = e.target.value.replace(/\D/g, "");
+                      setAgbCode(v);
+                    }}
+                    placeholder="123456"
+                    maxLength={6}
+                    className={`${inputClass} w-[45%] font-mono`}
+                  />
+                </div>
+                <p className="mt-1 text-xs text-fg-subtle">
+                  Selecteer beroepsgroep + 6 cijfers = 8-cijferige AGB-code
+                </p>
               </div>
               <div>
                 <label className="block text-xs font-medium text-fg-muted mb-1">

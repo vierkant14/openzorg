@@ -34,6 +34,8 @@ export async function workflowFetch<T = unknown>(
       if (!res.ok) {
         return { data: null, error: text || `Fout ${res.status}`, status: res.status };
       }
+      // OK response but not valid JSON — return null data instead of empty object
+      return { data: null, error: null, status: res.status };
     }
 
     if (!res.ok) {

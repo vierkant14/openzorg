@@ -33,7 +33,14 @@ export async function ecdFetch<T = unknown>(
       headers,
     });
 
-    const body = await res.json();
+    // Parse response body safely — handle non-JSON responses
+    const text = await res.text();
+    let body: Record<string, unknown> | null = null;
+    try {
+      body = JSON.parse(text) as Record<string, unknown>;
+    } catch {
+      // Non-JSON response
+    }
 
     if (!res.ok) {
       // Auto-redirect to login on 401 (expired token)
@@ -49,11 +56,11 @@ export async function ecdFetch<T = unknown>(
         return { data: null, error: "Onvoldoende rechten", status: 403 };
       }
       const message =
-        body?.issue?.[0]?.diagnostics || body?.error || `Fout ${res.status}`;
-      return { data: null, error: message, status: res.status };
+        body?.issue?.[0]?.diagnostics || body?.error || text || `Fout ${res.status}`;
+      return { data: null, error: message as string, status: res.status };
     }
 
-    return { data: body as T, error: null, status: res.status };
+    return { data: (body ?? {}) as T, error: null, status: res.status };
   } catch {
     return { data: null, error: "Kan geen verbinding maken met de server", status: 0 };
   }
