@@ -59,10 +59,10 @@ services:
       - ../medplum/medplum.config.json:/usr/src/medplum/medplum.config.json
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://localhost:8103/healthcheck').then(r=>{if(!r.ok)throw 1}).catch(()=>process.exit(1))"]
-      interval: 15s
-      timeout: 10s
-      retries: 20
-      start_period: 90s
+      interval: 30s
+      timeout: 15s
+      retries: 40
+      start_period: 300s
 
   # ── ECD Service (Hono) ─────────────────────────────────────
   ecd:
