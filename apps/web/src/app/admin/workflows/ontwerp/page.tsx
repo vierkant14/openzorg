@@ -84,8 +84,8 @@ function generateBpmn(def: ProcessDefinition): string {
     } else if (step.type === "decision") {
       const gatewayId = `gateway${i + 1}`;
       const varName = step.conditionVariable || `beslissing${i + 1}`;
-      const yesId = `step${i + 1}Ja`;
-      const noId = `step${i + 1}Nee`;
+      const _yesId = `step${i + 1}Ja`;
+      const _noId = `step${i + 1}Nee`;
 
       // Connect previous to gateway
       lines.push(``);

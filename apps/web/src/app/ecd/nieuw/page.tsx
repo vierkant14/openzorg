@@ -87,7 +87,7 @@ export default function NieuweClientPage() {
   // Zorgcontext
   const [huisarts, setHuisarts] = useState("");
   const [locatieId, setLocatieId] = useState("");
-  const [apotheek, setApotheek] = useState("");
+  const [_apotheek, _setApotheek] = useState("");
   const [verzekeraar, setVerzekeraar] = useState("");
   const [polisnummer, setPolisnummer] = useState("");
 

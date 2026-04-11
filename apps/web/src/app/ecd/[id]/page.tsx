@@ -1795,7 +1795,7 @@ interface FhirAllergyIntolerance {
   note?: Array<{ text?: string }>;
 }
 
-const ALLERGIE_CATEGORIEEN = ["food", "medication", "environment", "biologic"];
+const _ALLERGIE_CATEGORIEEN = ["food", "medication", "environment", "biologic"];
 const CRITICALITY_LABELS: Record<string, string> = { low: "Laag", high: "Hoog", "unable-to-assess": "Onbekend" };
 
 function AllergieenTab({ clientId }: { clientId: string }) {

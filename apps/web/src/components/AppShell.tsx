@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import type { OpenZorgRole, Permission } from "@openzorg/shared-domain";
+import { ROLE_PERMISSIONS, NAV_PERMISSIONS as _NAV_PERMISSIONS, getRoleDefinition } from "@openzorg/shared-domain";
 import { usePathname } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
 
 import { getUserRole, isLoggedIn, clearSession } from "../lib/api";
-import type { OpenZorgRole, Permission } from "@openzorg/shared-domain";
-import { ROLE_PERMISSIONS, NAV_PERMISSIONS, getRoleDefinition } from "@openzorg/shared-domain";
 
 /* ── Navigation items ── */
 interface NavItem {

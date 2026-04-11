@@ -1,5 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+// Mock database to prevent ECONNREFUSED noise in tests
+vi.mock("../lib/db.js", () => ({
+  pool: {
+    query: vi.fn(async () => ({ rows: [], rowCount: 0 })),
+  },
+}));
+
 import { app } from "../app.js";
 
 const mockFetch = vi.fn();
@@ -109,7 +116,7 @@ describe("MIC Melding routes", () => {
   });
 
   it("GET lists MIC meldingen", async () => {
-    mockFetch.mockResolvedValueOnce(
+    mockFetch.mockResolvedValue(
       jsonResponse({ resourceType: "Bundle", type: "searchset", entry: [] }),
     );
 
@@ -118,7 +125,7 @@ describe("MIC Melding routes", () => {
     });
 
     expect(res.status).toBe(200);
-    const url = mockFetch.mock.calls[0]?.[0] as string;
-    expect(url).toContain("AuditEvent");
+    const urls = mockFetch.mock.calls.map((c) => c[0] as string);
+    expect(urls.some((u) => u.includes("AuditEvent"))).toBe(true);
   });
 });

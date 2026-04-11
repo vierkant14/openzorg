@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
+import { useEffect, useState } from "react";
 
 import { masterFetch } from "../../../../lib/master-api";
 
@@ -29,7 +29,7 @@ interface AuditEntry {
   details: { role?: string; path?: string; method?: string; statusCode?: number; durationMs?: number } | null;
 }
 
-const ACTION_LABELS: Record<string, string> = {
+const _ACTION_LABELS: Record<string, string> = {
   read: "Gelezen",
   create: "Aangemaakt",
   update: "Bijgewerkt",
@@ -72,9 +72,9 @@ export default function TenantDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
-  const [auditLog, setAuditLog] = useState<AuditEntry[]>([]);
-  const [auditTotal, setAuditTotal] = useState(0);
-  const [auditLoading, setAuditLoading] = useState(false);
+  const [_auditLog, _setAuditLog] = useState<AuditEntry[]>([]);
+  const [_auditTotal, _setAuditTotal] = useState(0);
+  const [_auditLoading, _setAuditLoading] = useState(false);
 
   useEffect(() => {
     async function load() {

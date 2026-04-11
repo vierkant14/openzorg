@@ -97,12 +97,12 @@ app.route("/api/clients", mdoRoutes);
 app.route("/api/clients", vbmRoutes);
 app.route("/api/vbm", vbmRoutes);
 
+// MIC Meldingen (Incident reports)
+app.route("/api/mic-meldingen", micMeldingRoutes);
+
 // Vragenlijsten (Questionnaire + QuestionnaireResponse)
 app.route("/api/vragenlijsten", vragenlijstenRoutes);
 app.route("/api", vragenlijstenRoutes);
-
-// MIC Meldingen (Incident reports)
-app.route("/api/mic-meldingen", micMeldingRoutes);
 
 // Admin configuratie (custom fields, validation rules)
 app.route("/api/admin", configuratieRoutes);

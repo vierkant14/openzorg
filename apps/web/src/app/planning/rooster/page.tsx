@@ -4,8 +4,8 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import AppShell from "../../../components/AppShell";
-import { planningFetch } from "../../../lib/planning-api";
 import { ecdFetch } from "../../../lib/api";
+import { planningFetch } from "../../../lib/planning-api";
 
 /* ---------- Types ---------- */
 
@@ -195,7 +195,6 @@ export default function RoosterPage() {
         setLoading(false);
       }
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [weekOffset]);
 
   const isToday = (d: Date) => dateString(d) === dateString(new Date());

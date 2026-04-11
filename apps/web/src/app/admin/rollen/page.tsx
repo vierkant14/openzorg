@@ -1,10 +1,10 @@
 "use client";
 
+import type { OpenZorgRole, Permission } from "@openzorg/shared-domain";
+import { ALL_ROLES, ROLE_DEFINITIONS, ROLE_PERMISSIONS } from "@openzorg/shared-domain";
 import { useMemo, useState } from "react";
 
 import AppShell from "../../../components/AppShell";
-import type { OpenZorgRole, Permission } from "@openzorg/shared-domain";
-import { ALL_ROLES, ROLE_DEFINITIONS, ROLE_PERMISSIONS } from "@openzorg/shared-domain";
 
 /* ── Permission categories for display ── */
 const PERMISSION_CATEGORIES = [

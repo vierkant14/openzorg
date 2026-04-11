@@ -1,5 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+// Mock database to prevent ECONNREFUSED noise in tests
+vi.mock("../lib/db.js", () => ({
+  pool: {
+    query: vi.fn(async () => ({ rows: [], rowCount: 0 })),
+  },
+}));
+
 import { app } from "../app.js";
 
 // Mock global fetch to avoid calling Medplum
@@ -42,6 +49,11 @@ describe("Client routes — BSN validation", () => {
   });
 
   it("POST /api/clients accepts valid BSN (123456782)", async () => {
+    // First call: generateClientnummer counts existing patients
+    mockFetch.mockResolvedValueOnce(
+      jsonResponse({ resourceType: "Bundle", type: "searchset", total: 0 }),
+    );
+    // Second call: actual Patient create
     mockFetch.mockResolvedValueOnce(
       jsonResponse({ resourceType: "Patient", id: "new-id" }, 201),
     );
@@ -60,10 +72,15 @@ describe("Client routes — BSN validation", () => {
     });
 
     expect(res.status).toBe(201);
-    expect(mockFetch).toHaveBeenCalledOnce();
+    expect(mockFetch).toHaveBeenCalledTimes(2);
   });
 
   it("POST /api/clients allows Patient without BSN", async () => {
+    // First call: generateClientnummer counts existing patients
+    mockFetch.mockResolvedValueOnce(
+      jsonResponse({ resourceType: "Bundle", type: "searchset", total: 0 }),
+    );
+    // Second call: actual Patient create
     mockFetch.mockResolvedValueOnce(
       jsonResponse({ resourceType: "Patient", id: "no-bsn" }, 201),
     );
