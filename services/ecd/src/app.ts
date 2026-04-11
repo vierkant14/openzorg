@@ -6,13 +6,18 @@ import { auditMiddleware } from "./middleware/audit.js";
 import { rbacMiddleware } from "./middleware/rbac.js";
 import { tenantMiddleware } from "./middleware/tenant.js";
 import { allergieRoutes } from "./routes/allergie.js";
+import { capaciteitRoutes } from "./routes/capaciteit.js";
+import { contractenRoutes } from "./routes/contracten.js";
+import { roosterRoutes } from "./routes/rooster.js";
 import { diagnoseRoutes } from "./routes/diagnose.js";
 import { risicoscreeningRoutes } from "./routes/risicoscreening.js";
 import { tenantSettingsRoutes } from "./routes/tenant-settings.js";
 import { tenantRoutes } from "./routes/tenants.js";
 import { berichtenRoutes } from "./routes/berichten.js";
+import { apiDocsRoutes } from "./routes/api-docs.js";
 import { clientRoutes } from "./routes/client.js";
 import { codelijstenRoutes } from "./routes/codelijsten.js";
+import { integratieRoutes } from "./routes/integraties.js";
 import { configuratieRoutes } from "./routes/configuratie.js";
 import { contactpersoonRoutes } from "./routes/contactpersoon.js";
 import { documentenRoutes } from "./routes/documenten.js";
@@ -98,6 +103,15 @@ app.route("/api/berichten", berichtenRoutes);
 
 // Tenant settings (current tenant context)
 app.route("/api/tenant-settings", tenantSettingsRoutes);
+
+// Sprint 5: Contracten, Rooster, Capaciteit
+app.route("/api/contracten", contractenRoutes);
+app.route("/api/rooster", roosterRoutes);
+app.route("/api/capaciteit", capaciteitRoutes);
+
+// Sprint 6: API docs, Integraties (webhooks + API keys)
+app.route("/api/docs", apiDocsRoutes);
+app.route("/api/admin/integraties", integratieRoutes);
 
 // Master admin: tenant management (no tenant context required)
 // Protected by X-Master-Key header in production

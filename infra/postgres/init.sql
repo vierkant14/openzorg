@@ -68,6 +68,29 @@ INSERT INTO openzorg.tenant_configurations (tenant_id, config_type, config_data)
 VALUES
     ('b0000000-0000-0000-0000-000000000002', 'custom_field', '{"resourceType": "Patient", "fieldName": "huisdier", "fieldType": "string", "required": false}');
 
+-- Webhook registrations per tenant
+CREATE TABLE openzorg.webhooks (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL REFERENCES openzorg.tenants(id),
+    url TEXT NOT NULL,
+    events TEXT[] NOT NULL DEFAULT ARRAY['*'],
+    secret TEXT NOT NULL,
+    active BOOLEAN NOT NULL DEFAULT true,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- API keys per tenant (for external integrations)
+CREATE TABLE openzorg.api_keys (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL REFERENCES openzorg.tenants(id),
+    name TEXT NOT NULL,
+    key_hash TEXT NOT NULL,
+    permissions TEXT[] NOT NULL DEFAULT ARRAY['clients:read'],
+    active BOOLEAN NOT NULL DEFAULT true,
+    last_used_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 -- Audit log table (NEN 7513)
 CREATE TABLE openzorg.audit_log (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
