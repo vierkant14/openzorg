@@ -1,24 +1,23 @@
 /**
  * API helper for master admin / super-admin endpoints.
- * Uses X-Master-Key authentication instead of tenant context.
+ * Calls /api/master/* which is proxied server-side with the X-Master-Key injected.
+ * The master key never leaves the server.
  */
-
-const ECD_BASE = process.env.NEXT_PUBLIC_ECD_URL || "/api/ecd";
-
-const MASTER_KEY = "dev-master-key"; // In production: from env or secure storage
 
 export async function masterFetch<T = unknown>(
   path: string,
   options: RequestInit = {},
 ): Promise<{ data: T | null; error: string | null; status: number }> {
+  // Strip the /api/master prefix from the path since the proxy adds it
+  const cleanPath = path.replace(/^\/api\/master/, "");
+
   const headers: Record<string, string> = {
-    "X-Master-Key": MASTER_KEY,
     "Content-Type": "application/json",
     ...(options.headers as Record<string, string> | undefined),
   };
 
   try {
-    const res = await fetch(`${ECD_BASE}${path}`, {
+    const res = await fetch(`/api/master${cleanPath}`, {
       ...options,
       headers,
     });
