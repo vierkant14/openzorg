@@ -24,7 +24,7 @@ jobs:
   deploy:
     needs: test
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && vars.DEPLOY_ENABLED == 'true'
     steps:
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3
@@ -35,5 +35,5 @@ jobs:
           script: |
             cd /opt/openzorg
             git pull origin main
-            docker compose -f infra/compose/docker-compose.yml up -d --build ecd web planning workflow-bridge
+            docker compose -f infra/compose/docker-compose.yml up -d --build ecd web planning workflow-bridge facturatie
             echo "Deploy complete: $(date)"

@@ -126,3 +126,8 @@ export function getUserRole(): string {
   if (typeof window === "undefined") return "zorgmedewerker";
   return localStorage.getItem("openzorg_role") || "zorgmedewerker";
 }
+
+export function isMasterAdmin(): boolean {
+  if (typeof window === "undefined") return false;
+  return localStorage.getItem("openzorg_is_master") === "true";
+}

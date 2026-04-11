@@ -1,11 +1,11 @@
 "use client";
 
 import type { OpenZorgRole, Permission } from "@openzorg/shared-domain";
-import { ROLE_PERMISSIONS, NAV_PERMISSIONS as _NAV_PERMISSIONS, getRoleDefinition } from "@openzorg/shared-domain";
+import { ROLE_PERMISSIONS, getRoleDefinition } from "@openzorg/shared-domain";
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
-import { getUserRole, isLoggedIn, clearSession } from "../lib/api";
+import { clearSession, getUserRole, isMasterAdmin, isLoggedIn } from "../lib/api";
 
 /* ── Navigation items ── */
 interface NavItem {
@@ -18,19 +18,40 @@ interface NavItem {
 interface NavSection {
   label: string;
   items: NavItem[];
+  /** If true, section is only shown to master admins */
+  masterOnly?: boolean;
 }
 
+/**
+ * Navigation structure:
+ * - Overzicht: dashboard + berichten (everyone)
+ * - Zorg: clienten, MIC-meldingen (zorgmedewerker/beheerder/teamleider)
+ * - Planning: all planning pages (planner/beheerder/teamleider)
+ * - Beheer: admin pages (beheerder only)
+ * - Platform: master admin only
+ */
 const NAV_SECTIONS: NavSection[] = [
+  {
+    label: "Overzicht",
+    items: [
+      { href: "/dashboard", label: "Dashboard", icon: IconGrid, permission: null },
+      { href: "/berichten", label: "Berichten", icon: IconInbox, permission: "berichten:read" },
+    ],
+  },
   {
     label: "Zorg",
     items: [
-      { href: "/dashboard", label: "Dashboard", icon: IconGrid, permission: null },
       { href: "/ecd", label: "Clienten", icon: IconUsers, permission: "clients:read" },
-      { href: "/planning", label: "Planning", icon: IconCalendar, permission: "planning:read" },
-      { href: "/planning/dagplanning", label: "Dagplanning", icon: IconCalendar, permission: "planning:read" },
-      { href: "/planning/herhalingen", label: "Herhalingen", icon: IconRepeat, permission: "planning:read" },
+    ],
+  },
+  {
+    label: "Planning",
+    items: [
+      { href: "/planning", label: "Overzicht", icon: IconCalendar, permission: "planning:read" },
+      { href: "/planning/dagplanning", label: "Dagplanning", icon: IconCalendarDay, permission: "planning:read" },
       { href: "/planning/rooster", label: "Rooster", icon: IconClock, permission: "planning:read" },
-      { href: "/berichten", label: "Berichten", icon: IconInbox, permission: "berichten:read" },
+      { href: "/planning/herhalingen", label: "Herhalingen", icon: IconRepeat, permission: "planning:write" },
+      { href: "/planning/wachtlijst", label: "Wachtlijst", icon: IconQueue, permission: "planning:read" },
     ],
   },
   {
@@ -38,9 +59,9 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { href: "/admin/medewerkers", label: "Medewerkers", icon: IconUserCog, permission: "medewerkers:read" },
       { href: "/admin/organisatie", label: "Organisatie", icon: IconBuilding, permission: "organisatie:read" },
-      { href: "/admin/configuratie", label: "Configuratie", icon: IconSettings, permission: "configuratie:read" },
       { href: "/admin/facturatie", label: "Facturatie", icon: IconReceipt, permission: "configuratie:read" },
       { href: "/admin/contracten", label: "Contracten", icon: IconContract, permission: "medewerkers:read" },
+      { href: "/admin/configuratie", label: "Configuratie", icon: IconSettings, permission: "configuratie:read" },
       { href: "/admin/codelijsten", label: "Codelijsten", icon: IconList, permission: "configuratie:read" },
       { href: "/admin/workflows", label: "Workflows", icon: IconFlow, permission: "workflows:read" },
       { href: "/admin/rollen", label: "Rollen", icon: IconShield, permission: "rollen:read" },
@@ -48,8 +69,11 @@ const NAV_SECTIONS: NavSection[] = [
   },
   {
     label: "Platform",
+    masterOnly: true,
     items: [
-      { href: "/master-admin", label: "Platform beheer", icon: IconGlobe, permission: "configuratie:read" },
+      { href: "/master-admin", label: "Tenants", icon: IconGlobe, permission: null },
+      { href: "/master-admin/onboarding", label: "Onboarding", icon: IconUserPlus, permission: null },
+      { href: "/master-admin/wiki", label: "Wiki", icon: IconBook, permission: null },
     ],
   },
 ];
@@ -72,6 +96,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const role = getUserRole() as OpenZorgRole;
   const rolePermissions = ROLE_PERMISSIONS[role] ?? [];
   const roleDef = getRoleDefinition(role);
+  const masterAdmin = isMasterAdmin();
 
   const userName = typeof window !== "undefined"
     ? localStorage.getItem("openzorg_user_name") || "Gebruiker"
@@ -79,17 +104,24 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   const userInitials = userName.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2) || "?";
 
-  /* Filter nav sections based on role permissions */
+  /* Filter nav sections based on role permissions + master admin flag */
   const filteredSections = useMemo(() => {
     return NAV_SECTIONS
+      .filter((section) => {
+        // Master-only sections require master admin flag
+        if (section.masterOnly && !masterAdmin) return false;
+        return true;
+      })
       .map((section) => ({
         ...section,
-        items: section.items.filter((item) =>
-          item.permission === null || rolePermissions.includes(item.permission),
-        ),
+        items: section.items.filter((item) => {
+          // Master-only sections: show all items (no permission filtering)
+          if (section.masterOnly) return true;
+          return item.permission === null || rolePermissions.includes(item.permission);
+        }),
       }))
       .filter((section) => section.items.length > 0);
-  }, [rolePermissions]);
+  }, [rolePermissions, masterAdmin]);
 
   /* Close mobile drawer on navigation */
   useEffect(() => {
@@ -109,6 +141,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     const isDark = html.classList.contains("dark");
     html.classList.toggle("dark");
     localStorage.setItem("oz-theme", isDark ? "light" : "dark");
+  }
+
+  /** Check if a nav item (or any subpage) is currently active */
+  function isActive(href: string): boolean {
+    if (href === "/dashboard") return pathname === "/dashboard";
+    if (href === "/planning") return pathname === "/planning";
+    return pathname === href || pathname.startsWith(href + "/");
   }
 
   return (
@@ -134,7 +173,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       >
         {/* Logo area */}
         <div className="flex items-center gap-3 px-5 h-16 shrink-0">
-          {/* Logo mark — teal square with OZ */}
           <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-brand-500 shrink-0">
             <span className="font-display text-sm font-extrabold text-white tracking-tight">OZ</span>
           </div>
@@ -149,31 +187,34 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </div>
 
         {/* Nav sections */}
-        <nav className="flex-1 overflow-y-auto px-3 py-2 space-y-6">
-          {filteredSections.map((section) => (
+        <nav className="flex-1 overflow-y-auto px-3 py-2 space-y-5">
+          {filteredSections.map((section, sIdx) => (
             <div key={section.label}>
+              {/* Section divider (not on first section) */}
+              {sIdx > 0 && !collapsed && (
+                <div
+                  className="mx-2 mb-3 border-t"
+                  style={{ borderColor: "var(--color-sidebar-hover)" }}
+                />
+              )}
               {!collapsed && (
                 <span
-                  className="block px-2 mb-2 text-overline uppercase"
-                  style={{ color: "var(--color-sidebar-fg-muted)" }}
+                  className="block px-2 mb-1.5 text-[0.65rem] font-semibold uppercase tracking-widest"
+                  style={{ color: "var(--color-sidebar-fg-muted)", opacity: 0.6 }}
                 >
                   {section.label}
                 </span>
               )}
               <ul className="space-y-0.5">
                 {section.items.map((item) => {
-                  const active = pathname === item.href || pathname.startsWith(item.href + "/");
+                  const active = isActive(item.href);
                   return (
                     <li key={item.href}>
                       <a
                         href={item.href}
                         className={`
-                          flex items-center gap-3 rounded-xl px-3 py-2.5
+                          flex items-center gap-3 rounded-xl px-3 py-2
                           text-body-sm font-medium transition-colors duration-150
-                          ${active
-                            ? "text-white"
-                            : "hover:text-white"
-                          }
                           ${collapsed ? "justify-center px-0" : ""}
                         `}
                         style={{
@@ -188,7 +229,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                         }}
                         title={collapsed ? item.label : undefined}
                       >
-                        <item.icon className="w-5 h-5 shrink-0 opacity-80" />
+                        <item.icon className="w-[1.125rem] h-[1.125rem] shrink-0 opacity-80" />
                         {!collapsed && item.label}
                       </a>
                     </li>
@@ -203,25 +244,25 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         <div className="px-3 pb-4 space-y-1">
           <button
             onClick={toggleTheme}
-            className="flex items-center gap-3 rounded-xl px-3 py-2.5 w-full text-body-sm font-medium transition-colors"
+            className="flex items-center gap-3 rounded-xl px-3 py-2 w-full text-body-sm font-medium transition-colors"
             style={{ color: "var(--color-sidebar-fg-muted)" }}
             onMouseEnter={(e) => { e.currentTarget.style.background = "var(--color-sidebar-hover)"; }}
             onMouseLeave={(e) => { e.currentTarget.style.background = ""; }}
           >
-            <IconMoon className="w-5 h-5 shrink-0 opacity-80 dark:hidden" />
-            <IconSun className="w-5 h-5 shrink-0 opacity-80 hidden dark:block" />
+            <IconMoon className="w-[1.125rem] h-[1.125rem] shrink-0 opacity-80 dark:hidden" />
+            <IconSun className="w-[1.125rem] h-[1.125rem] shrink-0 opacity-80 hidden dark:block" />
             {!collapsed && <span className="dark:hidden">Donker thema</span>}
             {!collapsed && <span className="hidden dark:inline">Licht thema</span>}
           </button>
 
           <button
             onClick={() => setCollapsed(!collapsed)}
-            className="hidden lg:flex items-center gap-3 rounded-xl px-3 py-2.5 w-full text-body-sm font-medium transition-colors"
+            className="hidden lg:flex items-center gap-3 rounded-xl px-3 py-2 w-full text-body-sm font-medium transition-colors"
             style={{ color: "var(--color-sidebar-fg-muted)" }}
             onMouseEnter={(e) => { e.currentTarget.style.background = "var(--color-sidebar-hover)"; }}
             onMouseLeave={(e) => { e.currentTarget.style.background = ""; }}
           >
-            <IconCollapse className={`w-5 h-5 shrink-0 opacity-80 transition-transform ${collapsed ? "rotate-180" : ""}`} />
+            <IconCollapse className={`w-[1.125rem] h-[1.125rem] shrink-0 opacity-80 transition-transform ${collapsed ? "rotate-180" : ""}`} />
             {!collapsed && "Inklappen"}
           </button>
         </div>
@@ -299,6 +340,18 @@ function IconCalendar({ className }: { className?: string }) {
       <line x1="16" y1="2" x2="16" y2="6" />
       <line x1="8" y1="2" x2="8" y2="6" />
       <line x1="3" y1="10" x2="21" y2="10" />
+    </svg>
+  );
+}
+
+function IconCalendarDay({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="4" width="18" height="18" rx="2" />
+      <line x1="16" y1="2" x2="16" y2="6" />
+      <line x1="8" y1="2" x2="8" y2="6" />
+      <line x1="3" y1="10" x2="21" y2="10" />
+      <rect x="8" y="14" width="3" height="3" rx="0.5" />
     </svg>
   );
 }
@@ -454,12 +507,42 @@ function IconRepeat({ className }: { className?: string }) {
   );
 }
 
+function IconQueue({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M16 3h5v5" />
+      <path d="M8 3H3v5" />
+      <path d="M12 22v-8.3a4 4 0 0 0-1.172-2.872L3 3" />
+      <path d="m15 9 6-6" />
+    </svg>
+  );
+}
+
 function IconGlobe({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <circle cx="12" cy="12" r="10" />
       <line x1="2" y1="12" x2="22" y2="12" />
       <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+    </svg>
+  );
+}
+
+function IconUserPlus({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <line x1="19" y1="8" x2="19" y2="14" />
+      <line x1="22" y1="11" x2="16" y2="11" />
+    </svg>
+  );
+}
+
+function IconBook({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20" />
     </svg>
   );
 }
