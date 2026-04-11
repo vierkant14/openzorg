@@ -8,7 +8,11 @@ import { tenantMiddleware } from "./middleware/tenant.js";
 import { allergieRoutes } from "./routes/allergie.js";
 import { capaciteitRoutes } from "./routes/capaciteit.js";
 import { contractenRoutes } from "./routes/contracten.js";
+import { mdoRoutes } from "./routes/mdo.js";
 import { roosterRoutes } from "./routes/rooster.js";
+import { toedieningRoutes } from "./routes/toediening.js";
+import { vbmRoutes } from "./routes/vbm.js";
+import { vragenlijstenRoutes } from "./routes/vragenlijsten.js";
 import { diagnoseRoutes } from "./routes/diagnose.js";
 import { risicoscreeningRoutes } from "./routes/risicoscreening.js";
 import { tenantSettingsRoutes } from "./routes/tenant-settings.js";
@@ -82,6 +86,20 @@ app.route("/api/clients", diagnoseRoutes);
 
 // Risicoscreenings (RiskAssessment)
 app.route("/api/clients", risicoscreeningRoutes);
+
+// Toedienregistratie (MedicationAdministration)
+app.route("/api/clients", toedieningRoutes);
+
+// MDO / Overleggen (Encounter)
+app.route("/api/clients", mdoRoutes);
+
+// Vrijheidsbeperkende maatregelen (Procedure)
+app.route("/api/clients", vbmRoutes);
+app.route("/api/vbm", vbmRoutes);
+
+// Vragenlijsten (Questionnaire + QuestionnaireResponse)
+app.route("/api/vragenlijsten", vragenlijstenRoutes);
+app.route("/api", vragenlijstenRoutes);
 
 // MIC Meldingen (Incident reports)
 app.route("/api/mic-meldingen", micMeldingRoutes);
