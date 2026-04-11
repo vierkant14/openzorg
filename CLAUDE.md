@@ -161,11 +161,19 @@ Just calling `newuser` alone leaves the user in a half-registered state (can't l
 
 ### Test Accounts (created by seed container)
 
-| Account | Email | Password |
-|---------|-------|----------|
-| Super Admin | admin@openzorg.nl | Oz!Adm1n#2026mXq7 |
-| Zorggroep Horizon | jan@horizon.nl | Hz!J4n#2026pKw8 |
-| Thuiszorg De Linde | maria@delinde.nl | Ld!M4r1a#2026nRt5 |
+| Account | Email | Password | Rol |
+|---------|-------|----------|-----|
+| Super Admin | admin@openzorg.nl | Oz!Adm1n#2026mXq7 | Master admin |
+| Kevin | kevin@openzorg.nl | Oz!K3v1n#2026xYp4 | Master admin |
+| Meneka | meneka@openzorg.nl | Oz!M3n3k4#2026wZr7 | Master admin |
+| Zorggroep Horizon | jan@horizon.nl | Hz!J4n#2026pKw8 | Tenant admin |
+| Thuiszorg De Linde | maria@delinde.nl | Ld!M4r1a#2026nRt5 | Tenant admin |
+
+### Test Data per Tenant (seeded)
+
+Per tenant worden aangemaakt: 6 medewerkers, 8 clienten (met BSN, adres, indicatie),
+4 zorgplannen met doelen, 10 rapportages (SOEP + vrij), 7 medicatievoorschriften,
+4 allergieen, 6 vaccinaties, 5 contactpersonen, 6 afspraken.
 
 ## Sprint Status
 

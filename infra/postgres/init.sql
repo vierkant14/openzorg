@@ -48,8 +48,10 @@ CREATE TABLE IF NOT EXISTS openzorg.master_admins (
     created_by UUID REFERENCES openzorg.master_admins(id)
 );
 
--- Seed the default super admin
+-- Seed master admins
 INSERT INTO openzorg.master_admins (email, name) VALUES ('admin@openzorg.nl', 'Super Admin') ON CONFLICT DO NOTHING;
+INSERT INTO openzorg.master_admins (email, name) VALUES ('kevin@openzorg.nl', 'Kevin') ON CONFLICT DO NOTHING;
+INSERT INTO openzorg.master_admins (email, name) VALUES ('meneka@openzorg.nl', 'Meneka') ON CONFLICT DO NOTHING;
 
 -- Enable Row-Level Security on tenant-scoped tables
 ALTER TABLE openzorg.tenant_configurations ENABLE ROW LEVEL SECURITY;
