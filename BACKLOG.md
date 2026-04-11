@@ -1,6 +1,6 @@
 # OpenZorg Backlog
 
-Laatst bijgewerkt: 2026-04-10
+Laatst bijgewerkt: 2026-04-11
 
 ## Sprint 3 — Restant (Planning + Workflows) — COMPLEET
 
@@ -46,6 +46,22 @@ Laatst bijgewerkt: 2026-04-10
 - [ ] **INT-03: VECOZO connector** — Indicatie-verificatie en COV-check
 - [ ] **INT-04: MAZ-bericht (iWlz)** — Elektronisch bericht voor Wlz-overdracht
 
+### Vaccinaties
+
+- [x] **Vaccinaties tab (FHIR Immunization)** — Volledige CRUD, veelvoorkomende vaccins dropdown, statusbadges
+
+### Master Admin & Navigatie
+
+- [x] **Master admin management** — Meerdere admins via DB, niet meer hardcoded
+- [x] **Tenant switcher voor master admins**
+- [x] **Navigation redesign** — Aparte Planning tab, Beheer sectie, Platform master-only
+
+### Open Source & ADRs
+
+- [x] **EUPL 1.2 licentie + CONTRIBUTING.md** toegevoegd
+- [x] **ADR-005: OTAP deployment strategie**
+- [x] **ADR-006: Open-source business model**
+
 ### E2E Tests (Playwright)
 
 - [ ] **E2E-01: Login flow** — Medplum PKCE login
@@ -54,6 +70,16 @@ Laatst bijgewerkt: 2026-04-10
 - [ ] **E2E-04: Planning** — Afspraak aanmaken, dagplanning, beschikbaarheid
 - [ ] **E2E-05: Workflow** — Proces deployen, starten, taken afhandelen
 - [ ] **E2E-06: Multi-tenant** — Twee tenants, data-isolatie verificatie
+
+## Sprint 4b — Zorgplan Verrijking & Overig
+
+- [ ] Evaluatiehistorie per doel (versioning, was doel bereikt?)
+- [ ] Digitale handtekening client/vertegenwoordiger (consent)
+- [ ] PDF export van zorgplan
+- [ ] MDO-verslagen koppelen aan zorgplan
+- [ ] Wilsverklaring / BOPZ-status
+- [ ] Foto van client (Patient.photo)
+- [ ] Medicatieoverzicht (MedicationStatement)
 
 ## Verbeteringen aan bestaande functionaliteit
 
@@ -67,12 +93,12 @@ Het huidige formulier bevat nu:
 - Indicatie: type (Wlz/Wmo/Zvw/Jeugdwet), CIZ besluitnummer, start/einddatum, zorgprofiel
 
 Nog toe te voegen (gebaseerd op VVT-processen):
-- [ ] Allergieen/intoleranties tab (FHIR AllergyIntolerance)
-- [ ] Medicatieoverzicht tab (FHIR MedicationStatement)
-- [ ] Diagnoses/aandoeningen tab (FHIR Condition)
-- [ ] Risicoscreenings (valrisico, decubitus, ondervoeding) — FHIR RiskAssessment
-- [ ] Wilsverklaring / BOPZ-status
-- [ ] Foto van client (FHIR Patient.photo)
+- [x] Allergieen/intoleranties tab (FHIR AllergyIntolerance)
+- [ ] Medicatieoverzicht tab (FHIR MedicationStatement) — zie Sprint 4b
+- [x] Diagnoses/aandoeningen tab (FHIR Condition)
+- [x] Risicoscreenings (valrisico, decubitus, ondervoeding) — FHIR RiskAssessment
+- [ ] Wilsverklaring / BOPZ-status — zie Sprint 4b
+- [ ] Foto van client (FHIR Patient.photo) — zie Sprint 4b
 
 ### Zorgplan verrijken
 
@@ -82,11 +108,11 @@ Het zorgplan bevat nu:
 - Interventies per doel
 
 Nog toe te voegen:
-- [ ] Evaluatiehistorie per doel (was doel bereikt? wat is de nieuwe status?)
-- [ ] MDO-verslagen (multidisciplinair overleg) gekoppeld aan zorgplan
+- [ ] Evaluatiehistorie per doel (was doel bereikt? wat is de nieuwe status?) — zie Sprint 4b
+- [ ] MDO-verslagen (multidisciplinair overleg) gekoppeld aan zorgplan — zie Sprint 4b
 - [ ] Betrokken disciplines per zorgplan
-- [ ] Handtekening client/vertegenwoordiger (consent)
-- [ ] Export naar PDF
+- [ ] Handtekening client/vertegenwoordiger (consent) — zie Sprint 4b
+- [ ] Export naar PDF — zie Sprint 4b
 
 ### Configuratie verrijken
 
@@ -133,6 +159,10 @@ Toe te voegen VVT-processen:
 - [ ] **LOC-03: Reistijdberekening** — Extramuraal: reistijd tussen clienten meenemen in planning
 
 ## Sprint 6 — Integraties & API Platform (gepland)
+
+**Status: Niet nu — geparkeerd voor later**
+
+Dit zijn backlog-items die pas opgepakt worden nadat de kernfunctionaliteit solide is.
 
 ### API Platform
 - [ ] **API-01: OpenAPI spec** — Automatische OpenAPI 3.0 documentatie voor alle endpoints

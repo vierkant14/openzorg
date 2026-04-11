@@ -22,6 +22,7 @@ import { integratieRoutes } from "./routes/integraties.js";
 import { masterAdminRoutes } from "./routes/master-admins.js";
 import { mdoRoutes } from "./routes/mdo.js";
 import { medewerkerRoutes } from "./routes/medewerkers.js";
+import { medicatieOverzichtRoutes } from "./routes/medicatie-overzicht.js";
 import { medicatieRoutes } from "./routes/medicatie.js";
 import { micMeldingRoutes } from "./routes/mic-melding.js";
 import { organisatieRoutes } from "./routes/organisatie.js";
@@ -34,6 +35,7 @@ import { toedieningRoutes } from "./routes/toediening.js";
 import { vaccinatieRoutes } from "./routes/vaccinatie.js";
 import { vbmRoutes } from "./routes/vbm.js";
 import { vragenlijstenRoutes } from "./routes/vragenlijsten.js";
+import { wilsverklaringRoutes } from "./routes/wilsverklaring.js";
 import { zorgplanRoutes } from "./routes/zorgplan.js";
 
 export type AppEnv = {
@@ -95,6 +97,12 @@ app.route("/api/clients", toedieningRoutes);
 
 // Vaccinaties (Immunization)
 app.route("/api/clients", vaccinatieRoutes);
+
+// Wilsverklaringen / BOPZ-status (Consent)
+app.route("/api/clients", wilsverklaringRoutes);
+
+// Medicatieoverzicht (MedicationStatement)
+app.route("/api/clients", medicatieOverzichtRoutes);
 
 // MDO / Overleggen (Encounter)
 app.route("/api/clients", mdoRoutes);

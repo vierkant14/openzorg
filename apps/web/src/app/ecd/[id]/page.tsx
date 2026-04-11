@@ -113,7 +113,7 @@ interface FhirMedicationRequest {
   extension?: Array<{ url?: string; valueString?: string }>;
 }
 
-type TabKey = "rapportages" | "zorgplan" | "contactpersonen" | "medicatie" | "allergieen" | "vaccinaties" | "diagnoses" | "risicoscreenings" | "toediening" | "vragenlijsten" | "mdo" | "vbm" | "documenten" | "extra";
+type TabKey = "rapportages" | "zorgplan" | "contactpersonen" | "medicatie" | "allergieen" | "vaccinaties" | "diagnoses" | "risicoscreenings" | "toediening" | "vragenlijsten" | "mdo" | "vbm" | "wilsverklaringen" | "medicatie-overzicht" | "documenten" | "extra";
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: "rapportages", label: "Rapportages" },
@@ -128,6 +128,8 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: "vragenlijsten", label: "Vragenlijsten" },
   { key: "mdo", label: "MDO" },
   { key: "vbm", label: "VBM" },
+  { key: "wilsverklaringen", label: "Wilsverklaring" },
+  { key: "medicatie-overzicht", label: "Medicatieoverzicht" },
   { key: "documenten", label: "Documenten" },
   { key: "extra", label: "Extra velden" },
 ];
@@ -263,13 +265,61 @@ export default function ClientDetailPage() {
         {/* Profile header */}
         <div className="rounded-lg border border-default bg-raised p-6 shadow-sm">
           <div className="flex items-start justify-between">
-            <div>
-              <h1 className="text-2xl font-bold text-fg">{clientNaam(client)}</h1>
-              {client.identifier?.find((id) => id.system === "https://openzorg.nl/NamingSystem/clientnummer") && (
-                <p className="text-body-sm font-mono text-brand-600 dark:text-brand-400 mt-0.5">
-                  {client.identifier.find((id) => id.system === "https://openzorg.nl/NamingSystem/clientnummer")?.value}
-                </p>
-              )}
+            <div className="flex items-start gap-4">
+              {/* Client photo */}
+              <div className="relative shrink-0">
+                {(client as ClientResource & { photo?: Array<{ data?: string; contentType?: string }> }).photo?.[0]?.data ? (
+                  <img
+                    src={`data:${(client as ClientResource & { photo?: Array<{ data?: string; contentType?: string }> }).photo![0]!.contentType ?? "image/jpeg"};base64,${(client as ClientResource & { photo?: Array<{ data?: string; contentType?: string }> }).photo![0]!.data}`}
+                    alt={clientNaam(client)}
+                    className="h-16 w-16 rounded-full object-cover border-2 border-default"
+                  />
+                ) : (
+                  <div className="flex h-16 w-16 items-center justify-center rounded-full bg-brand-700 text-lg font-bold text-white border-2 border-default">
+                    {(client.name?.[0]?.given?.[0]?.[0] ?? "").toUpperCase()}
+                    {(client.name?.[0]?.family?.[0] ?? "").toUpperCase()}
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const input = document.createElement("input");
+                    input.type = "file";
+                    input.accept = "image/*";
+                    input.onchange = async () => {
+                      const file = input.files?.[0];
+                      if (!file) return;
+                      const reader = new FileReader();
+                      reader.onloadend = async () => {
+                        const base64 = (reader.result as string).split(",")[1];
+                        const { error: err } = await ecdFetch(`/api/clients/${id}/foto`, {
+                          method: "POST",
+                          body: JSON.stringify({ data: base64, contentType: file.type }),
+                        });
+                        if (err) alert(err);
+                        else window.location.reload();
+                      };
+                      reader.readAsDataURL(file);
+                    };
+                    input.click();
+                  }}
+                  className="absolute -bottom-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full bg-raised border border-default shadow-sm hover:bg-page transition-colors"
+                  title="Foto uploaden"
+                >
+                  <svg className="h-3.5 w-3.5 text-fg-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                </button>
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold text-fg">{clientNaam(client)}</h1>
+                {client.identifier?.find((id) => id.system === "https://openzorg.nl/NamingSystem/clientnummer") && (
+                  <p className="text-body-sm font-mono text-brand-600 dark:text-brand-400 mt-0.5">
+                    {client.identifier.find((id) => id.system === "https://openzorg.nl/NamingSystem/clientnummer")?.value}
+                  </p>
+                )}
+              </div>
             </div>
             <div className="flex items-center gap-2">
               {client.active === false && (
@@ -380,6 +430,8 @@ export default function ClientDetailPage() {
           {activeTab === "vragenlijsten" && <VragenlijstenTab clientId={id} />}
           {activeTab === "mdo" && <MdoTab clientId={id} />}
           {activeTab === "vbm" && <VbmTab clientId={id} />}
+          {activeTab === "wilsverklaringen" && <WilsverklaringenTab clientId={id} />}
+          {activeTab === "medicatie-overzicht" && <MedicatieOverzichtTab clientId={id} />}
           {activeTab === "documenten" && <DocumentenTab clientId={id} />}
           {activeTab === "extra" && <ExtraVeldenTab clientId={id} client={client} />}
         </div>
@@ -666,6 +718,23 @@ function ZorgplanTab({ clientId }: { clientId: string }) {
   const [interventieFrequentie, setInterventieFrequentie] = useState("");
   const [interventieSaving, setInterventieSaving] = useState(false);
 
+  // Evaluatie form
+  const [showEvalForm, setShowEvalForm] = useState<string | null>(null);
+  const [evalStatus, setEvalStatus] = useState("Geen verandering");
+  const [evalOpmerking, setEvalOpmerking] = useState("");
+  const [evalVoortgang, setEvalVoortgang] = useState(50);
+  const [evalSaving, setEvalSaving] = useState(false);
+  const [evaluaties, setEvaluaties] = useState<Record<string, Array<{ status?: string; opmerking?: string; voortgang?: number; datum?: string }>>>({});
+
+  // Handtekening form
+  const [showHandtekeningForm, setShowHandtekeningForm] = useState<string | null>(null);
+  const [handtekeningType, setHandtekeningType] = useState("Ondertekend");
+  const [handtekeningNaam, setHandtekeningNaam] = useState("");
+  const [handtekeningRol, setHandtekeningRol] = useState("Client");
+  const [handtekeningOpmerking, setHandtekeningOpmerking] = useState("");
+  const [handtekeningSaving, setHandtekeningSaving] = useState(false);
+  const [handtekeningen, setHandtekeningen] = useState<Record<string, Array<{ type?: string; naam?: string; rol?: string; opmerking?: string; datum?: string }>>>({});
+
   const load = useCallback(() => {
     setLoading(true);
     ecdFetch<FhirBundle<FhirCarePlan>>(`/api/clients/${clientId}/zorgplan`).then(
@@ -695,6 +764,7 @@ function ZorgplanTab({ clientId }: { clientId: string }) {
       .then(({ data }) => {
         setInterventies(data?.entry?.map((e) => e.resource).filter((r): r is FhirServiceRequest => r.resourceType === "ServiceRequest") ?? []);
       });
+    loadHandtekeningen(planId);
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -768,6 +838,58 @@ function ZorgplanTab({ clientId }: { clientId: string }) {
       setInterventieFrequentie("");
       loadPlanDetails(planId);
     }
+  }
+
+  async function handleAddEvaluatie(planId: string, goalId: string) {
+    setEvalSaving(true);
+    const { error: err } = await ecdFetch(`/api/zorgplan/${planId}/doelen/${goalId}/evaluatie`, {
+      method: "POST",
+      body: JSON.stringify({ status: evalStatus, opmerking: evalOpmerking, voortgang: evalVoortgang }),
+    });
+    setEvalSaving(false);
+    if (!err) {
+      setShowEvalForm(null);
+      setEvalStatus("Geen verandering");
+      setEvalOpmerking("");
+      setEvalVoortgang(50);
+      loadEvaluaties(planId, goalId);
+    }
+  }
+
+  function loadEvaluaties(planId: string, goalId: string) {
+    ecdFetch<{ items?: Array<{ status?: string; opmerking?: string; voortgang?: number; datum?: string }> }>(
+      `/api/zorgplan/${planId}/doelen/${goalId}/evaluaties`,
+    ).then(({ data }) => {
+      setEvaluaties((prev) => ({ ...prev, [goalId]: data?.items ?? [] }));
+    });
+  }
+
+  async function handleAddHandtekening(planId: string) {
+    setHandtekeningSaving(true);
+    const { error: err } = await ecdFetch(`/api/zorgplan/${planId}/handtekening`, {
+      method: "POST",
+      body: JSON.stringify({
+        type: handtekeningType,
+        naam: handtekeningNaam,
+        rol: handtekeningRol,
+        opmerking: handtekeningOpmerking,
+      }),
+    });
+    setHandtekeningSaving(false);
+    if (!err) {
+      setShowHandtekeningForm(null);
+      setHandtekeningNaam("");
+      setHandtekeningOpmerking("");
+      loadHandtekeningen(planId);
+    }
+  }
+
+  function loadHandtekeningen(planId: string) {
+    ecdFetch<{ items?: Array<{ type?: string; naam?: string; rol?: string; opmerking?: string; datum?: string }> }>(
+      `/api/zorgplan/${planId}/handtekeningen`,
+    ).then(({ data }) => {
+      setHandtekeningen((prev) => ({ ...prev, [planId]: data?.items ?? [] }));
+    });
   }
 
   const inputCls = "w-full rounded-md border border-default px-3 py-2 text-sm shadow-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500";
@@ -897,17 +1019,90 @@ function ZorgplanTab({ clientId }: { clientId: string }) {
                       <p className="text-xs text-fg-subtle">Nog geen doelen toegevoegd.</p>
                     ) : (
                       <ul className="space-y-2">
-                        {goals.map((g, gi) => (
-                          <li key={g.id ?? gi} className="flex items-start gap-2 rounded border border-gray-100 bg-page p-2 text-sm">
-                            <span className="mt-0.5 inline-block h-2 w-2 shrink-0 rounded-full bg-green-500" />
-                            <div>
-                              <p className="text-fg">{g.description?.text ?? "-"}</p>
-                              {g.target?.[0]?.dueDate && (
-                                <p className="text-xs text-fg-subtle">Streefdatum: {formatDate(g.target[0].dueDate)}</p>
-                              )}
-                            </div>
-                          </li>
-                        ))}
+                        {goals.map((g, gi) => {
+                          const goalId = g.id ?? `goal-${gi}`;
+                          const goalEvals = evaluaties[goalId] ?? [];
+                          return (
+                            <li key={goalId} className="rounded border border-default bg-page p-2 text-sm">
+                              <div className="flex items-start gap-2">
+                                <span className="mt-0.5 inline-block h-2 w-2 shrink-0 rounded-full bg-green-500" />
+                                <div className="flex-1">
+                                  <div className="flex items-start justify-between">
+                                    <div>
+                                      <p className="text-fg">{g.description?.text ?? "-"}</p>
+                                      {g.target?.[0]?.dueDate && (
+                                        <p className="text-xs text-fg-subtle">Streefdatum: {formatDate(g.target[0].dueDate)}</p>
+                                      )}
+                                    </div>
+                                    <button
+                                      onClick={() => {
+                                        const key = g.id ?? `goal-${gi}`;
+                                        setShowEvalForm(showEvalForm === key ? null : key);
+                                        if (showEvalForm !== key && g.id && cp.id) loadEvaluaties(cp.id, g.id);
+                                      }}
+                                      className="shrink-0 rounded bg-brand-50 px-2 py-1 text-xs font-medium text-brand-700 hover:bg-brand-100"
+                                    >
+                                      Evalueren
+                                    </button>
+                                  </div>
+
+                                  {showEvalForm === goalId && (
+                                    <div className="mt-2 rounded border border-brand-100 bg-brand-50 p-3 space-y-2">
+                                      <div className="grid gap-2 sm:grid-cols-3">
+                                        <div>
+                                          <label className="block text-xs font-medium text-fg-muted mb-1">Status</label>
+                                          <select value={evalStatus} onChange={(e) => setEvalStatus(e.target.value)} className={inputCls}>
+                                            <option value="Bereikt">Bereikt</option>
+                                            <option value="Verbeterd">Verbeterd</option>
+                                            <option value="Geen verandering">Geen verandering</option>
+                                            <option value="Verslechterd">Verslechterd</option>
+                                            <option value="Niet bereikt">Niet bereikt</option>
+                                          </select>
+                                        </div>
+                                        <div className="sm:col-span-2">
+                                          <label className="block text-xs font-medium text-fg-muted mb-1">Voortgang: {evalVoortgang}%</label>
+                                          <input type="range" min={0} max={100} value={evalVoortgang} onChange={(e) => setEvalVoortgang(Number(e.target.value))} className="w-full accent-brand-700" />
+                                        </div>
+                                      </div>
+                                      <div>
+                                        <label className="block text-xs font-medium text-fg-muted mb-1">Opmerking</label>
+                                        <textarea rows={2} value={evalOpmerking} onChange={(e) => setEvalOpmerking(e.target.value)} placeholder="Toelichting bij de evaluatie" className={inputCls} />
+                                      </div>
+                                      <button
+                                        onClick={() => g.id && cp.id && handleAddEvaluatie(cp.id, g.id)}
+                                        disabled={evalSaving}
+                                        className="rounded bg-brand-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-800 disabled:opacity-50"
+                                      >
+                                        {evalSaving ? "Opslaan..." : "Evaluatie opslaan"}
+                                      </button>
+                                    </div>
+                                  )}
+
+                                  {/* Evaluatiehistorie */}
+                                  {goalEvals.length > 0 && (
+                                    <div className="mt-2 space-y-1">
+                                      <p className="text-xs font-medium text-fg-subtle">Evaluatiehistorie:</p>
+                                      {goalEvals.map((ev, evi) => (
+                                        <div key={evi} className="flex items-center gap-2 rounded bg-raised px-2 py-1 text-xs">
+                                          <span className={`inline-block rounded-full px-1.5 py-0.5 font-semibold ${
+                                            ev.status === "Bereikt" ? "bg-green-100 text-green-800" :
+                                            ev.status === "Verbeterd" ? "bg-blue-100 text-blue-800" :
+                                            ev.status === "Verslechterd" ? "bg-coral-50 text-coral-700" :
+                                            ev.status === "Niet bereikt" ? "bg-coral-50 text-coral-700" :
+                                            "bg-gray-100 text-fg-muted"
+                                          }`}>{ev.status}</span>
+                                          {ev.voortgang !== undefined && <span className="text-fg-muted">{ev.voortgang}%</span>}
+                                          {ev.opmerking && <span className="text-fg-muted truncate">{ev.opmerking}</span>}
+                                          <span className="ml-auto text-fg-subtle">{formatDate(ev.datum)}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </li>
+                          );
+                        })}
                       </ul>
                     )}
                   </div>
@@ -947,9 +1142,85 @@ function ZorgplanTab({ clientId }: { clientId: string }) {
                     ) : (
                       <ul className="space-y-2">
                         {interventies.map((sr, si) => (
-                          <li key={sr.id ?? si} className="flex items-start gap-2 rounded border border-gray-100 bg-page p-2 text-sm">
+                          <li key={sr.id ?? si} className="flex items-start gap-2 rounded border border-default bg-page p-2 text-sm">
                             <span className="mt-0.5 inline-block h-2 w-2 shrink-0 rounded-full bg-blue-500" />
                             <p className="text-fg">{sr.code?.text ?? sr.code?.coding?.[0]?.display ?? "-"}</p>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+
+                  {/* Handtekening / Akkoord section */}
+                  <div className="border-t border-default pt-4">
+                    <div className="mb-2 flex items-center justify-between">
+                      <h4 className="text-sm font-semibold text-fg">Handtekening / Akkoord</h4>
+                      <button
+                        onClick={() => {
+                          setShowHandtekeningForm(showHandtekeningForm === cp.id ? null : cp.id!);
+                          if (showHandtekeningForm !== cp.id && cp.id) loadHandtekeningen(cp.id);
+                        }}
+                        className="text-xs font-medium text-brand-700 hover:text-brand-900"
+                      >
+                        {showHandtekeningForm === cp.id ? "Annuleren" : "+ Handtekening toevoegen"}
+                      </button>
+                    </div>
+
+                    {showHandtekeningForm === cp.id && (
+                      <div className="mb-3 rounded border border-brand-100 bg-brand-50 p-3 space-y-2">
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          <div>
+                            <label className="block text-xs font-medium text-fg-muted mb-1">Type</label>
+                            <select value={handtekeningType} onChange={(e) => setHandtekeningType(e.target.value)} className={inputCls}>
+                              <option value="Ondertekend">Ondertekend</option>
+                              <option value="Besproken">Besproken</option>
+                              <option value="Niet akkoord">Niet akkoord</option>
+                              <option value="Later bespreken">Later bespreken</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-fg-muted mb-1">Naam</label>
+                            <input type="text" value={handtekeningNaam} onChange={(e) => setHandtekeningNaam(e.target.value)} placeholder="Naam ondertekenaar" className={inputCls} />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-fg-muted mb-1">Rol</label>
+                            <select value={handtekeningRol} onChange={(e) => setHandtekeningRol(e.target.value)} className={inputCls}>
+                              <option value="Client">Client</option>
+                              <option value="Vertegenwoordiger">Vertegenwoordiger</option>
+                              <option value="Zorgverlener">Zorgverlener</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-fg-muted mb-1">Opmerking</label>
+                            <input type="text" value={handtekeningOpmerking} onChange={(e) => setHandtekeningOpmerking(e.target.value)} placeholder="Optionele toelichting" className={inputCls} />
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => cp.id && handleAddHandtekening(cp.id)}
+                          disabled={handtekeningSaving || !handtekeningNaam}
+                          className="rounded bg-brand-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-800 disabled:opacity-50"
+                        >
+                          {handtekeningSaving ? "Opslaan..." : "Handtekening opslaan"}
+                        </button>
+                      </div>
+                    )}
+
+                    {(handtekeningen[cp.id!] ?? []).length === 0 ? (
+                      <p className="text-xs text-fg-subtle">Nog geen handtekeningen.</p>
+                    ) : (
+                      <ul className="space-y-1">
+                        {(handtekeningen[cp.id!] ?? []).map((h, hi) => (
+                          <li key={hi} className="flex items-center gap-2 rounded border border-default bg-page px-3 py-2 text-xs">
+                            <span className={`inline-block rounded-full px-1.5 py-0.5 font-semibold ${
+                              h.type === "Ondertekend" ? "bg-green-100 text-green-800" :
+                              h.type === "Besproken" ? "bg-blue-100 text-blue-800" :
+                              h.type === "Niet akkoord" ? "bg-coral-50 text-coral-700" :
+                              "bg-yellow-100 text-yellow-800"
+                            }`}>{h.type}</span>
+                            <span className="font-medium text-fg">{h.naam}</span>
+                            <span className="text-fg-muted">({h.rol})</span>
+                            {h.opmerking && <span className="text-fg-subtle truncate">{h.opmerking}</span>}
+                            <span className="ml-auto text-fg-subtle">{formatDate(h.datum)}</span>
                           </li>
                         ))}
                       </ul>
@@ -3117,6 +3388,391 @@ function VbmForm({ clientId, onSaved }: { clientId: string; onSaved: () => void 
         </button>
       </div>
     </form>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Wilsverklaringen tab                                                      */
+/* -------------------------------------------------------------------------- */
+
+interface WilsverklaringItem {
+  id?: string;
+  type?: string;
+  beschrijving?: string;
+  datum?: string;
+  geldigTot?: string;
+  vertegenwoordiger?: string;
+  opmerking?: string;
+}
+
+const WILSVERKLARING_TYPES = [
+  "Behandelverbod",
+  "Euthanasieverklaring",
+  "Volmacht",
+  "Levenswensverklaring",
+  "Donorcodicil",
+  "BOPZ Mentorschap",
+  "BOPZ Curatele",
+  "BOPZ Beschermingsbewind",
+];
+
+function wilsverklaringBadgeCls(type?: string): string {
+  if (type?.startsWith("BOPZ")) return "bg-coral-50 text-coral-700";
+  if (type === "Euthanasieverklaring" || type === "Behandelverbod") return "bg-blue-100 text-blue-800";
+  return "bg-green-100 text-green-800";
+}
+
+function WilsverklaringenTab({ clientId }: { clientId: string }) {
+  const [items, setItems] = useState<WilsverklaringItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [showForm, setShowForm] = useState(false);
+
+  const [type, setType] = useState(WILSVERKLARING_TYPES[0]!);
+  const [beschrijving, setBeschrijving] = useState("");
+  const [datum, setDatum] = useState(new Date().toISOString().slice(0, 10));
+  const [geldigTot, setGeldigTot] = useState("");
+  const [vertegenwoordiger, setVertegenwoordiger] = useState("");
+  const [opmerking, setOpmerking] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    ecdFetch<{ items?: WilsverklaringItem[] }>(`/api/clients/${clientId}/wilsverklaringen`).then(
+      ({ data, error: err }) => {
+        if (err) setError(err);
+        else setItems(data?.items ?? []);
+        setLoading(false);
+      },
+    );
+  }, [clientId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setFormError(null);
+    const { error: err } = await ecdFetch(`/api/clients/${clientId}/wilsverklaringen`, {
+      method: "POST",
+      body: JSON.stringify({
+        type,
+        beschrijving,
+        datum,
+        ...(geldigTot ? { geldigTot } : {}),
+        ...(vertegenwoordiger ? { vertegenwoordiger } : {}),
+        ...(opmerking ? { opmerking } : {}),
+      }),
+    });
+    setSaving(false);
+    if (err) {
+      setFormError(err);
+    } else {
+      setShowForm(false);
+      setBeschrijving("");
+      setGeldigTot("");
+      setVertegenwoordiger("");
+      setOpmerking("");
+      load();
+    }
+  }
+
+  const inputCls = "w-full rounded-md border border-default px-3 py-2 text-sm shadow-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 bg-page text-fg";
+
+  return (
+    <section>
+      <div className="mb-4 flex items-center justify-between">
+        <h2 className="text-lg font-semibold text-fg">Wilsverklaringen</h2>
+        <button
+          onClick={() => setShowForm((v) => !v)}
+          className="rounded-md bg-brand-700 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-800"
+        >
+          {showForm ? "Annuleren" : "Wilsverklaring toevoegen"}
+        </button>
+      </div>
+
+      {showForm && (
+        <form onSubmit={handleSubmit} className="mb-5 rounded-lg border border-default bg-raised p-5 shadow-sm">
+          <h3 className="mb-4 font-semibold text-fg">Nieuwe wilsverklaring</h3>
+          {formError && <ErrorMsg msg={formError} />}
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-sm font-medium text-fg-muted">Type *</label>
+              <select value={type} onChange={(e) => setType(e.target.value)} required className={inputCls}>
+                {WILSVERKLARING_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-fg-muted">Datum *</label>
+              <input type="date" value={datum} onChange={(e) => setDatum(e.target.value)} required className={inputCls} />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="mb-1 block text-sm font-medium text-fg-muted">Beschrijving *</label>
+              <textarea rows={3} value={beschrijving} onChange={(e) => setBeschrijving(e.target.value)} required placeholder="Omschrijving van de wilsverklaring" className={inputCls} />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-fg-muted">Geldig tot</label>
+              <input type="date" value={geldigTot} onChange={(e) => setGeldigTot(e.target.value)} className={inputCls} />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-fg-muted">Vertegenwoordiger</label>
+              <input type="text" value={vertegenwoordiger} onChange={(e) => setVertegenwoordiger(e.target.value)} placeholder="Naam vertegenwoordiger" className={inputCls} />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="mb-1 block text-sm font-medium text-fg-muted">Opmerking</label>
+              <textarea rows={2} value={opmerking} onChange={(e) => setOpmerking(e.target.value)} placeholder="Aanvullende opmerkingen" className={inputCls} />
+            </div>
+          </div>
+          <div className="mt-4 flex justify-end">
+            <button type="submit" disabled={saving} className="rounded-md bg-brand-700 px-5 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-800 disabled:opacity-50">
+              {saving ? "Opslaan..." : "Wilsverklaring opslaan"}
+            </button>
+          </div>
+        </form>
+      )}
+
+      {loading && <Spinner />}
+      {error && <ErrorMsg msg={error} />}
+
+      {!loading && !error && items.length === 0 && (
+        <p className="py-8 text-center text-sm text-fg-subtle">Geen wilsverklaringen gevonden.</p>
+      )}
+
+      {items.length > 0 && (
+        <ul className="space-y-3">
+          {items.map((wv, i) => (
+            <li key={wv.id ?? i} className="rounded-lg border border-default bg-raised p-4 shadow-sm">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <div className="mb-1 flex items-center gap-2">
+                    <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${wilsverklaringBadgeCls(wv.type)}`}>
+                      {wv.type ?? "-"}
+                    </span>
+                  </div>
+                  <p className="text-sm text-fg">{wv.beschrijving ?? "-"}</p>
+                  {wv.vertegenwoordiger && (
+                    <p className="mt-1 text-xs text-fg-muted">Vertegenwoordiger: {wv.vertegenwoordiger}</p>
+                  )}
+                  {wv.opmerking && (
+                    <p className="mt-1 text-xs text-fg-subtle">{wv.opmerking}</p>
+                  )}
+                </div>
+                <div className="shrink-0 text-right text-xs text-fg-subtle">
+                  <p>Datum: {formatDate(wv.datum)}</p>
+                  {wv.geldigTot && <p>Geldig tot: {formatDate(wv.geldigTot)}</p>}
+                </div>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Medicatieoverzicht tab                                                    */
+/* -------------------------------------------------------------------------- */
+
+interface MedicatieOverzichtItem {
+  id?: string;
+  medicijnNaam?: string;
+  dosering?: string;
+  frequentie?: string;
+  route?: string;
+  status?: string;
+  startdatum?: string;
+  opmerking?: string;
+}
+
+const MEDICATIE_ROUTES = [
+  { value: "oraal", label: "Oraal" },
+  { value: "intraveneus", label: "Intraveneus" },
+  { value: "subcutaan", label: "Subcutaan" },
+  { value: "intramusculair", label: "Intramusculair" },
+  { value: "transdermaal", label: "Transdermaal" },
+  { value: "rectaal", label: "Rectaal" },
+  { value: "inhalatie", label: "Inhalatie" },
+];
+
+const MEDICATIE_STATUSSEN = [
+  { value: "actief", label: "Actief" },
+  { value: "gepauzeerd", label: "Gepauzeerd" },
+  { value: "gestopt", label: "Gestopt" },
+  { value: "afgerond", label: "Afgerond" },
+];
+
+function MedicatieOverzichtTab({ clientId }: { clientId: string }) {
+  const [items, setItems] = useState<MedicatieOverzichtItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [showForm, setShowForm] = useState(false);
+
+  const [medicijnNaam, setMedicijnNaam] = useState("");
+  const [dosering, setDosering] = useState("");
+  const [frequentie, setFrequentie] = useState("");
+  const [route, setRoute] = useState("oraal");
+  const [startdatum, setStartdatum] = useState(new Date().toISOString().slice(0, 10));
+  const [status, setStatus] = useState("actief");
+  const [opmerking, setOpmerking] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    ecdFetch<{ items?: MedicatieOverzichtItem[] }>(`/api/clients/${clientId}/medicatie-overzicht`).then(
+      ({ data, error: err }) => {
+        if (err) setError(err);
+        else setItems(data?.items ?? []);
+        setLoading(false);
+      },
+    );
+  }, [clientId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setFormError(null);
+    const { error: err } = await ecdFetch(`/api/clients/${clientId}/medicatie-overzicht`, {
+      method: "POST",
+      body: JSON.stringify({
+        medicijnNaam,
+        dosering,
+        frequentie,
+        route,
+        startdatum,
+        status,
+        ...(opmerking ? { opmerking } : {}),
+      }),
+    });
+    setSaving(false);
+    if (err) {
+      setFormError(err);
+    } else {
+      setShowForm(false);
+      setMedicijnNaam("");
+      setDosering("");
+      setFrequentie("");
+      setRoute("oraal");
+      setOpmerking("");
+      load();
+    }
+  }
+
+  const inputCls = "w-full rounded-md border border-default px-3 py-2 text-sm shadow-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 bg-page text-fg";
+
+  return (
+    <section>
+      <div className="mb-4 flex items-center justify-between">
+        <h2 className="text-lg font-semibold text-fg">Medicatieoverzicht</h2>
+        <button
+          onClick={() => setShowForm((v) => !v)}
+          className="rounded-md bg-brand-700 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-800"
+        >
+          {showForm ? "Annuleren" : "Medicatie toevoegen"}
+        </button>
+      </div>
+
+      {showForm && (
+        <form onSubmit={handleSubmit} className="mb-5 rounded-lg border border-default bg-raised p-5 shadow-sm">
+          <h3 className="mb-4 font-semibold text-fg">Nieuwe medicatie</h3>
+          {formError && <ErrorMsg msg={formError} />}
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-sm font-medium text-fg-muted">Medicijn naam *</label>
+              <input type="text" value={medicijnNaam} onChange={(e) => setMedicijnNaam(e.target.value)} required placeholder="bijv. Paracetamol 500mg" className={inputCls} />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-fg-muted">Dosering *</label>
+              <input type="text" value={dosering} onChange={(e) => setDosering(e.target.value)} required placeholder="bijv. 2 tabletten" className={inputCls} />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-fg-muted">Frequentie *</label>
+              <input type="text" value={frequentie} onChange={(e) => setFrequentie(e.target.value)} required placeholder="bijv. 3x per dag" className={inputCls} />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-fg-muted">Toedieningsweg *</label>
+              <select value={route} onChange={(e) => setRoute(e.target.value)} required className={inputCls}>
+                {MEDICATIE_ROUTES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-fg-muted">Startdatum *</label>
+              <input type="date" value={startdatum} onChange={(e) => setStartdatum(e.target.value)} required className={inputCls} />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-fg-muted">Status *</label>
+              <select value={status} onChange={(e) => setStatus(e.target.value)} required className={inputCls}>
+                {MEDICATIE_STATUSSEN.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+              </select>
+            </div>
+            <div className="sm:col-span-2">
+              <label className="mb-1 block text-sm font-medium text-fg-muted">Opmerking</label>
+              <textarea rows={2} value={opmerking} onChange={(e) => setOpmerking(e.target.value)} placeholder="Aanvullende opmerkingen" className={inputCls} />
+            </div>
+          </div>
+          <div className="mt-4 flex justify-end">
+            <button type="submit" disabled={saving} className="rounded-md bg-brand-700 px-5 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-800 disabled:opacity-50">
+              {saving ? "Opslaan..." : "Medicatie opslaan"}
+            </button>
+          </div>
+        </form>
+      )}
+
+      {loading && <Spinner />}
+      {error && <ErrorMsg msg={error} />}
+
+      {!loading && !error && items.length === 0 && (
+        <p className="py-8 text-center text-sm text-fg-subtle">Geen medicatie gevonden.</p>
+      )}
+
+      {items.length > 0 && (
+        <div className="overflow-hidden rounded-lg border border-default bg-raised shadow-sm">
+          <table className="min-w-full divide-y divide-default text-sm">
+            <thead className="bg-page">
+              <tr>
+                <th className="px-4 py-3 text-left font-medium text-fg-muted">Medicijn</th>
+                <th className="px-4 py-3 text-left font-medium text-fg-muted">Dosering</th>
+                <th className="px-4 py-3 text-left font-medium text-fg-muted">Frequentie</th>
+                <th className="px-4 py-3 text-left font-medium text-fg-muted">Toedieningsweg</th>
+                <th className="px-4 py-3 text-left font-medium text-fg-muted">Startdatum</th>
+                <th className="px-4 py-3 text-left font-medium text-fg-muted">Status</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-subtle">
+              {items.map((med, i) => {
+                const isActive = med.status === "actief";
+                const isInactive = med.status === "gestopt" || med.status === "afgerond";
+                return (
+                  <tr key={med.id ?? i} className={isInactive ? "opacity-50" : ""}>
+                    <td className="px-4 py-3 font-medium text-fg">
+                      {med.medicijnNaam ?? "-"}
+                      {med.opmerking && <p className="mt-0.5 text-xs font-normal text-fg-subtle">{med.opmerking}</p>}
+                    </td>
+                    <td className="px-4 py-3 text-fg-muted">{med.dosering ?? "-"}</td>
+                    <td className="px-4 py-3 text-fg-muted">{med.frequentie ?? "-"}</td>
+                    <td className="px-4 py-3 text-fg-muted capitalize">{med.route ?? "-"}</td>
+                    <td className="px-4 py-3 text-fg-muted">{formatDate(med.startdatum)}</td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${
+                        isActive ? "bg-green-100 text-green-800" :
+                        med.status === "gepauzeerd" ? "bg-yellow-100 text-yellow-800" :
+                        "bg-gray-100 text-fg-muted"
+                      }`}>
+                        {MEDICATIE_STATUSSEN.find((s) => s.value === med.status)?.label ?? med.status ?? "-"}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
   );
 }
 

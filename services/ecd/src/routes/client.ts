@@ -149,6 +149,75 @@ clientRoutes.put("/:id", async (c) => {
 });
 
 /**
+ * POST /api/clients/:id/foto — Upload a photo for a patient.
+ *
+ * Body: {
+ *   foto: string,        // base64-encoded image data
+ *   contentType: string,  // e.g. "image/jpeg", "image/png"
+ * }
+ */
+clientRoutes.post("/:id/foto", async (c) => {
+  const id = c.req.param("id");
+  const body = await c.req.json<{
+    foto: string;
+    contentType: string;
+  }>();
+
+  if (!body.foto || !body.contentType) {
+    return c.json(
+      operationOutcome("error", "required", "foto en contentType zijn verplicht"),
+      400,
+    );
+  }
+
+  // Fetch current patient resource
+  const current = await medplumFetch(c, `/fhir/R4/Patient/${id}`);
+
+  if (!current.ok) {
+    return proxyMedplumResponse(c, current);
+  }
+
+  const patient = (await current.json()) as Record<string, unknown>;
+
+  // Set photo on the patient resource
+  patient["photo"] = [
+    {
+      contentType: body.contentType,
+      data: body.foto,
+    },
+  ];
+
+  return medplumProxy(c, `/fhir/R4/Patient/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(patient),
+  });
+});
+
+/**
+ * DELETE /api/clients/:id/foto — Remove a patient's photo.
+ */
+clientRoutes.delete("/:id/foto", async (c) => {
+  const id = c.req.param("id");
+
+  // Fetch current patient resource
+  const current = await medplumFetch(c, `/fhir/R4/Patient/${id}`);
+
+  if (!current.ok) {
+    return proxyMedplumResponse(c, current);
+  }
+
+  const patient = (await current.json()) as Record<string, unknown>;
+
+  // Remove photo
+  patient["photo"] = [];
+
+  return medplumProxy(c, `/fhir/R4/Patient/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(patient),
+  });
+});
+
+/**
  * DELETE /api/clients/:id — Soft delete: sets Patient.active = false.
  */
 clientRoutes.delete("/:id", async (c) => {
