@@ -11,12 +11,11 @@
  */
 
 import { readFileSync, readdirSync, statSync } from "node:fs";
-import { join, relative, extname } from "node:path";
+import { join, relative, extname, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const FORBIDDEN_WORDS_FILE = new URL("./forbidden-words.txt", import.meta.url).pathname.replace(
-  /^\//,
-  "",
-);
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const FORBIDDEN_WORDS_FILE = join(__dirname, "forbidden-words.txt");
 
 const SCAN_EXTENSIONS = new Set([
   ".ts",
@@ -44,6 +43,9 @@ const IGNORE_DIRS = new Set([
 const IGNORE_FILES = new Set([
   "forbidden-words.txt",
   "forbidden-words-check.mjs",
+  "CLAUDE.md",
+  "datamodel-overzicht.md",
+  "koppelstrategie.md",
 ]);
 
 function loadForbiddenWords(filePath) {
@@ -91,7 +93,7 @@ function checkFile(filePath, patterns) {
 }
 
 // Main
-const rootDir = join(new URL(".", import.meta.url).pathname.replace(/^\//, ""), "..");
+const rootDir = join(__dirname, "..");
 const forbiddenWords = loadForbiddenWords(FORBIDDEN_WORDS_FILE);
 const patterns = forbiddenWords.map((word) => [
   word,
