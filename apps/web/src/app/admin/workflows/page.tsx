@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import AppShell from "../../../components/AppShell";
@@ -115,6 +116,20 @@ export default function WorkflowsAdminPage() {
   return (
     <AppShell>
       <main className="max-w-7xl mx-auto px-6 py-8 space-y-8">
+        {/* Header met link naar ontwerper */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-display-lg text-fg">Workflows</h1>
+            <p className="text-body text-fg-muted mt-1">Procesdefinities, templates en taken beheren</p>
+          </div>
+          <Link
+            href="/admin/workflows/ontwerp"
+            className="bg-brand-600 text-white px-5 py-2.5 rounded-lg hover:bg-brand-700 text-sm font-medium"
+          >
+            + Nieuw proces ontwerpen
+          </Link>
+        </div>
+
         {/* Section 1: Gedeployede processen */}
         <section>
           <h2 className="text-xl font-bold text-fg mb-4">

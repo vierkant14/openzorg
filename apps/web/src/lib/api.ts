@@ -55,6 +55,17 @@ export async function ecdFetch<T = unknown>(
         window.location.href = "/geen-toegang";
         return { data: null, error: "Onvoldoende rechten", status: 403 };
       }
+
+      // Detect Medplum OperationOutcome "not-found" — usually means expired token or project issue
+      const resourceType = body?.resourceType as string | undefined;
+      if (res.status === 404 && resourceType === "OperationOutcome") {
+        return {
+          data: null,
+          error: "Medplum server kon de gegevens niet vinden. Probeer opnieuw in te loggen.",
+          status: res.status,
+        };
+      }
+
       const issues = body?.issue as Array<{ diagnostics?: string }> | undefined;
       const message =
         issues?.[0]?.diagnostics || (body?.error as string | undefined) || text || `Fout ${res.status}`;
