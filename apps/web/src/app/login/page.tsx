@@ -63,6 +63,12 @@ function LoginForm() {
       // Store role — in production this comes from Medplum PractitionerRole
       localStorage.setItem("openzorg_role", data.role || role);
 
+      // Detect master admin — the platform super admin account
+      // Server can return isMaster flag; fallback: check admin email
+      const isMaster = data.isMaster === true
+        || email.toLowerCase() === "admin@openzorg.nl";
+      localStorage.setItem("openzorg_is_master", isMaster ? "true" : "false");
+
       window.location.href = "/dashboard";
     } catch (err) {
       setError(err instanceof Error ? err.message : "Er ging iets mis");

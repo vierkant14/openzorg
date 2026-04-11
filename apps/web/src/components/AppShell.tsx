@@ -7,6 +7,8 @@ import { useEffect, useMemo, useState } from "react";
 
 import { clearSession, getUserRole, isMasterAdmin, isLoggedIn } from "../lib/api";
 
+import TenantSwitcher from "./TenantSwitcher";
+
 /* ── Navigation items ── */
 interface NavItem {
   href: string;
@@ -282,8 +284,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
           <div className="flex-1" />
 
+          {/* Tenant switcher (master admin only) */}
+          {masterAdmin && <TenantSwitcher />}
+
           {/* User */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 ml-4">
             <div className="text-right hidden sm:block">
               <p className="text-body-sm font-medium text-fg">{userName}</p>
               <p className="text-caption text-fg-subtle">{roleDef.displayName}</p>
