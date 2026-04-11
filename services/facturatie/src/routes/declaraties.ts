@@ -24,17 +24,18 @@ declaratieRoutes.get("/", async (c) => {
   query += " ORDER BY created_at DESC";
 
   const res = await pool.query(query, params);
-  const declaraties = res.rows.map(mapDeclaratie);
+  type Declaratie = ReturnType<typeof mapDeclaratie>;
+  const declaraties: Declaratie[] = res.rows.map(mapDeclaratie);
 
   // Calculate statistics
   const stats = {
-    totaalOpen: declaraties.filter((d) => d.status === "concept" || d.status === "ingediend").reduce((s, d) => s + d.totaalBedrag, 0),
-    totaalBetaald: declaraties.filter((d) => d.status === "betaald").reduce((s, d) => s + d.totaalBedrag, 0),
-    concept: declaraties.filter((d) => d.status === "concept").length,
-    ingediend: declaraties.filter((d) => d.status === "ingediend").length,
-    geaccepteerd: declaraties.filter((d) => d.status === "geaccepteerd").length,
-    afgewezen: declaraties.filter((d) => d.status === "afgewezen").length,
-    betaald: declaraties.filter((d) => d.status === "betaald").length,
+    totaalOpen: declaraties.filter((d: Declaratie) => d.status === "concept" || d.status === "ingediend").reduce((s: number, d: Declaratie) => s + d.totaalBedrag, 0),
+    totaalBetaald: declaraties.filter((d: Declaratie) => d.status === "betaald").reduce((s: number, d: Declaratie) => s + d.totaalBedrag, 0),
+    concept: declaraties.filter((d: Declaratie) => d.status === "concept").length,
+    ingediend: declaraties.filter((d: Declaratie) => d.status === "ingediend").length,
+    geaccepteerd: declaraties.filter((d: Declaratie) => d.status === "geaccepteerd").length,
+    afgewezen: declaraties.filter((d: Declaratie) => d.status === "afgewezen").length,
+    betaald: declaraties.filter((d: Declaratie) => d.status === "betaald").length,
   };
 
   return c.json({ declaraties, stats });
@@ -95,7 +96,7 @@ declaratieRoutes.post("/", async (c) => {
     return c.json({ error: "Geen gevalideerde prestaties gevonden voor deze periode" }, 400);
   }
 
-  const totaal = prestaties.rows.reduce((sum, r) => sum + Number(r.totaal), 0);
+  const totaal = prestaties.rows.reduce((sum: number, r: Record<string, unknown>) => sum + Number(r.totaal), 0);
 
   // Generate declaration number
   const countRes = await pool.query(
@@ -118,7 +119,7 @@ declaratieRoutes.post("/", async (c) => {
   const declaratieId = decRes.rows[0]?.id as string;
 
   // Link prestaties to declaration
-  const prestatieIds = prestaties.rows.map((r) => r.id as string);
+  const prestatieIds = prestaties.rows.map((r: Record<string, unknown>) => r.id as string);
   await pool.query(
     `UPDATE openzorg.prestaties SET declaratie_id = $1, status = 'gedeclareerd', updated_at = now()
      WHERE id = ANY($2) AND tenant_id = $3`,

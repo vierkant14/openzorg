@@ -32,7 +32,7 @@ prestatieRoutes.get("/", async (c) => {
 
   const res = await pool.query(query, params);
   const prestaties = res.rows.map(mapPrestatie);
-  const totaal = prestaties.reduce((sum, p) => sum + p.totaal, 0);
+  const totaal = prestaties.reduce((sum: number, p: { totaal: number }) => sum + p.totaal, 0);
 
   return c.json({ prestaties, totaal, aantal: prestaties.length });
 });
