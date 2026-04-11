@@ -258,7 +258,7 @@ export default function DagplanningPage() {
         {!practitionerId && !loading && (
           <div className="rounded-lg border border-default bg-raised p-12 text-center shadow-sm">
             <p className="text-sm text-fg-subtle">
-              Voer een medewerker ID in om de dagplanning te bekijken.
+              Selecteer een medewerker om de dagplanning te bekijken.
             </p>
           </div>
         )}
