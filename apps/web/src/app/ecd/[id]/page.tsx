@@ -113,16 +113,20 @@ interface FhirMedicationRequest {
   extension?: Array<{ url?: string; valueString?: string }>;
 }
 
-type TabKey = "rapportages" | "zorgplan" | "contactpersonen" | "medicatie" | "allergieen" | "diagnoses" | "risicoscreenings" | "documenten" | "extra";
+type TabKey = "rapportages" | "zorgplan" | "contactpersonen" | "medicatie" | "allergieen" | "diagnoses" | "risicoscreenings" | "toediening" | "vragenlijsten" | "mdo" | "vbm" | "documenten" | "extra";
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: "rapportages", label: "Rapportages" },
   { key: "zorgplan", label: "Zorgplan" },
   { key: "contactpersonen", label: "Contactpersonen" },
   { key: "medicatie", label: "Medicatie" },
+  { key: "toediening", label: "Toediening" },
   { key: "allergieen", label: "Allergieën" },
   { key: "diagnoses", label: "Diagnoses" },
   { key: "risicoscreenings", label: "Screenings" },
+  { key: "vragenlijsten", label: "Vragenlijsten" },
+  { key: "mdo", label: "MDO" },
+  { key: "vbm", label: "VBM" },
   { key: "documenten", label: "Documenten" },
   { key: "extra", label: "Extra velden" },
 ];
@@ -370,6 +374,10 @@ export default function ClientDetailPage() {
           {activeTab === "allergieen" && <AllergieenTab clientId={id} />}
           {activeTab === "diagnoses" && <DiagnosesTab clientId={id} />}
           {activeTab === "risicoscreenings" && <RisicoscreeningsTab clientId={id} />}
+          {activeTab === "toediening" && <ToedieningTab clientId={id} />}
+          {activeTab === "vragenlijsten" && <VragenlijstenTab clientId={id} />}
+          {activeTab === "mdo" && <MdoTab clientId={id} />}
+          {activeTab === "vbm" && <VbmTab clientId={id} />}
           {activeTab === "documenten" && <DocumentenTab clientId={id} />}
           {activeTab === "extra" && <ExtraVeldenTab clientId={id} client={client} />}
         </div>
@@ -2149,6 +2157,758 @@ function RisicoscreeningsTab({ clientId }: { clientId: string }) {
         </div>
       )}
     </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Toediening Tab                                                            */
+/* -------------------------------------------------------------------------- */
+
+interface FhirMedicationAdministration {
+  id?: string;
+  status?: string;
+  medicationCodeableConcept?: { text?: string; coding?: Array<{ display?: string }> };
+  effectiveDateTime?: string;
+  dosage?: { text?: string; dose?: { value?: number; unit?: string } };
+  performer?: Array<{ actor?: { display?: string } }>;
+  note?: Array<{ text?: string }>;
+  extension?: Array<{ url?: string; valueString?: string }>;
+}
+
+function ToedieningTab({ clientId }: { clientId: string }) {
+  const [items, setItems] = useState<FhirMedicationAdministration[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [showForm, setShowForm] = useState(false);
+  const [medicatieList, setMedicatieList] = useState<FhirMedicationRequest[]>([]);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    ecdFetch<FhirBundle<FhirMedicationAdministration>>(
+      `/api/clients/${clientId}/toediening`,
+    ).then(({ data, error: err }) => {
+      if (err) setError(err);
+      else setItems(data?.entry?.map((e) => e.resource) ?? []);
+      setLoading(false);
+    });
+  }, [clientId]);
+
+  useEffect(() => {
+    load();
+    ecdFetch<FhirBundle<FhirMedicationRequest>>(
+      `/api/clients/${clientId}/medicatie`,
+    ).then(({ data }) => {
+      setMedicatieList(data?.entry?.map((e) => e.resource) ?? []);
+    });
+  }, [clientId, load]);
+
+  const statusLabel: Record<string, string> = {
+    completed: "Toegediend",
+    "not-done": "Niet gegeven",
+    "in-progress": "Bezig",
+  };
+
+  const statusCls: Record<string, string> = {
+    completed: "bg-green-100 text-green-800",
+    "not-done": "bg-coral-50 text-coral-700",
+    "in-progress": "bg-blue-100 text-blue-800",
+  };
+
+  return (
+    <section>
+      <div className="mb-4 flex items-center justify-between">
+        <h2 className="text-lg font-semibold text-fg">Toedienregistratie</h2>
+        <button
+          onClick={() => setShowForm((v) => !v)}
+          className="rounded-md bg-brand-700 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-800"
+        >
+          {showForm ? "Annuleren" : "Registreer toediening"}
+        </button>
+      </div>
+
+      {showForm && (
+        <ToedieningForm
+          clientId={clientId}
+          medicatieList={medicatieList}
+          onSaved={() => { setShowForm(false); load(); }}
+        />
+      )}
+
+      {loading && <Spinner />}
+      {error && <ErrorMsg msg={error} />}
+
+      {!loading && !error && items.length === 0 && (
+        <p className="py-8 text-center text-sm text-fg-subtle">Nog geen toedienregistraties.</p>
+      )}
+
+      <ul className="space-y-3">
+        {items.map((item, i) => {
+          const st = item.status ?? "completed";
+          return (
+            <li key={item.id ?? i} className="rounded-lg border border-default bg-raised p-4 shadow-sm">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="font-medium text-fg">
+                    {item.medicationCodeableConcept?.text ??
+                      item.medicationCodeableConcept?.coding?.[0]?.display ??
+                      "Onbekend medicament"}
+                  </p>
+                  {item.dosage?.text && (
+                    <p className="text-sm text-fg-muted">{item.dosage.text}</p>
+                  )}
+                  {item.performer?.[0]?.actor?.display && (
+                    <p className="text-xs text-fg-subtle">
+                      Door: {item.performer[0].actor.display}
+                    </p>
+                  )}
+                  {item.note?.[0]?.text && (
+                    <p className="mt-1 text-sm text-fg-muted italic">{item.note[0].text}</p>
+                  )}
+                </div>
+                <div className="text-right shrink-0">
+                  <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${statusCls[st] ?? "bg-gray-100 text-fg-muted"}`}>
+                    {statusLabel[st] ?? st}
+                  </span>
+                  <p className="mt-1 text-xs text-fg-subtle">{formatDateTime(item.effectiveDateTime)}</p>
+                </div>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
+function ToedieningForm({
+  clientId,
+  medicatieList,
+  onSaved,
+}: {
+  clientId: string;
+  medicatieList: FhirMedicationRequest[];
+  onSaved: () => void;
+}) {
+  const [medicatieRequestId, setMedicatieRequestId] = useState("");
+  const [status, setStatus] = useState<"completed" | "not-done">("completed");
+  const [reden, setReden] = useState("");
+  const [toedieningsdatum, setToedieningsdatum] = useState(
+    new Date().toISOString().slice(0, 16),
+  );
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setError(null);
+    const { error: err } = await ecdFetch(`/api/clients/${clientId}/toediening`, {
+      method: "POST",
+      body: JSON.stringify({
+        medicatieRequestId: medicatieRequestId || undefined,
+        status,
+        reden: reden || undefined,
+        toedieningsdatum,
+      }),
+    });
+    setSaving(false);
+    if (err) setError(err);
+    else onSaved();
+  }
+
+  const inputCls = "w-full rounded-md border border-default px-3 py-2 text-sm shadow-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 bg-page text-fg";
+
+  return (
+    <form onSubmit={handleSubmit} className="mb-5 rounded-lg border border-default bg-raised p-5 shadow-sm">
+      <h3 className="mb-4 font-semibold text-fg">Toediening registreren</h3>
+      {error && <ErrorMsg msg={error} />}
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div>
+          <label className="mb-1 block text-sm font-medium text-fg-muted">Medicament</label>
+          <select value={medicatieRequestId} onChange={(e) => setMedicatieRequestId(e.target.value)} className={inputCls}>
+            <option value="">— Kies uit actieve medicatie —</option>
+            {medicatieList.map((m) => (
+              <option key={m.id} value={m.id ?? ""}>
+                {m.medicationCodeableConcept?.text ?? m.id}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="mb-1 block text-sm font-medium text-fg-muted">Datum & tijd</label>
+          <input type="datetime-local" value={toedieningsdatum} onChange={(e) => setToedieningsdatum(e.target.value)} className={inputCls} />
+        </div>
+
+        <div>
+          <label className="mb-1 block text-sm font-medium text-fg-muted">Status</label>
+          <select value={status} onChange={(e) => setStatus(e.target.value as "completed" | "not-done")} className={inputCls}>
+            <option value="completed">Toegediend</option>
+            <option value="not-done">Niet gegeven</option>
+          </select>
+        </div>
+
+        {status === "not-done" && (
+          <div>
+            <label className="mb-1 block text-sm font-medium text-fg-muted">Reden niet gegeven</label>
+            <input type="text" value={reden} onChange={(e) => setReden(e.target.value)} className={inputCls} placeholder="bijv. client weigert" />
+          </div>
+        )}
+      </div>
+
+      <div className="mt-4 flex justify-end">
+        <button type="submit" disabled={saving} className="rounded-md bg-brand-700 px-5 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-800 disabled:opacity-50">
+          {saving ? "Opslaan..." : "Registreren"}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Vragenlijsten Tab                                                          */
+/* -------------------------------------------------------------------------- */
+
+interface FhirQuestionnaire {
+  id?: string;
+  title?: string;
+  description?: string;
+  code?: Array<{ code?: string }>;
+  status?: string;
+}
+
+interface FhirQuestionnaireResponse {
+  id?: string;
+  questionnaire?: string;
+  status?: string;
+  authored?: string;
+  item?: Array<{ linkId?: string; text?: string; answer?: Array<{ valueString?: string; valueDecimal?: number; valueBoolean?: boolean }> }>;
+}
+
+function VragenlijstenTab({ clientId }: { clientId: string }) {
+  const [responses, setResponses] = useState<FhirQuestionnaireResponse[]>([]);
+  const [templates, setTemplates] = useState<FhirQuestionnaire[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [showForm, setShowForm] = useState(false);
+  const [selectedTemplate, setSelectedTemplate] = useState<FhirQuestionnaire | null>(null);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    ecdFetch<{ entry?: Array<{ resource: FhirQuestionnaireResponse }> }>(
+      `/api/clients/${clientId}/vragenlijsten`,
+    ).then(({ data, error: err }) => {
+      if (err) setError(err);
+      else setResponses(data?.entry?.map((e) => e.resource) ?? []);
+      setLoading(false);
+    });
+  }, [clientId]);
+
+  useEffect(() => {
+    load();
+    ecdFetch<{ entry?: Array<{ resource: FhirQuestionnaire }> }>("/api/vragenlijsten").then(
+      ({ data }) => setTemplates(data?.entry?.map((e) => e.resource) ?? []),
+    );
+  }, [clientId, load]);
+
+  return (
+    <section>
+      <div className="mb-4 flex items-center justify-between">
+        <h2 className="text-lg font-semibold text-fg">Vragenlijsten</h2>
+        <button
+          onClick={() => setShowForm((v) => !v)}
+          className="rounded-md bg-brand-700 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-800"
+        >
+          {showForm ? "Annuleren" : "Invullen"}
+        </button>
+      </div>
+
+      {showForm && (
+        <VragenlijstForm
+          clientId={clientId}
+          templates={templates}
+          selectedTemplate={selectedTemplate}
+          setSelectedTemplate={setSelectedTemplate}
+          onSaved={() => { setShowForm(false); setSelectedTemplate(null); load(); }}
+        />
+      )}
+
+      {loading && <Spinner />}
+      {error && <ErrorMsg msg={error} />}
+
+      {!loading && !error && responses.length === 0 && (
+        <p className="py-8 text-center text-sm text-fg-subtle">Nog geen vragenlijsten ingevuld.</p>
+      )}
+
+      <ul className="space-y-3">
+        {responses.map((r, i) => {
+          const qId = r.questionnaire?.replace("Questionnaire/", "");
+          const template = templates.find((t) => t.id === qId);
+          return (
+            <li key={r.id ?? i} className="rounded-lg border border-default bg-raised p-4 shadow-sm">
+              <div className="flex items-center justify-between">
+                <p className="font-medium text-fg">
+                  {template?.title ?? r.questionnaire ?? "Vragenlijst"}
+                </p>
+                <span className="text-xs text-fg-subtle">{formatDateTime(r.authored)}</span>
+              </div>
+              {r.item && r.item.length > 0 && (
+                <dl className="mt-2 grid gap-1 text-sm">
+                  {r.item.slice(0, 3).map((item, j) => (
+                    <div key={j} className="flex gap-2">
+                      <dt className="text-fg-subtle shrink-0">{item.text ?? item.linkId}:</dt>
+                      <dd className="text-fg">
+                        {item.answer?.[0]?.valueString ??
+                          String(item.answer?.[0]?.valueDecimal ?? item.answer?.[0]?.valueBoolean ?? "-")}
+                      </dd>
+                    </div>
+                  ))}
+                  {r.item.length > 3 && (
+                    <p className="text-xs text-fg-subtle">+{r.item.length - 3} meer vragen</p>
+                  )}
+                </dl>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
+function VragenlijstForm({
+  clientId,
+  templates,
+  selectedTemplate,
+  setSelectedTemplate,
+  onSaved,
+}: {
+  clientId: string;
+  templates: FhirQuestionnaire[];
+  selectedTemplate: FhirQuestionnaire | null;
+  setSelectedTemplate: (t: FhirQuestionnaire | null) => void;
+  onSaved: () => void;
+}) {
+  const [antwoorden, setAntwoorden] = useState<Record<string, string>>({});
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [fullTemplate, setFullTemplate] = useState<{
+    item?: Array<{ linkId: string; text?: string; type?: string }>;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!selectedTemplate?.id) { setFullTemplate(null); return; }
+    ecdFetch<{ item?: Array<{ linkId: string; text?: string; type?: string }> }>(
+      `/api/vragenlijsten/${selectedTemplate.id}`,
+    ).then(({ data }) => setFullTemplate(data));
+  }, [selectedTemplate]);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!selectedTemplate?.id) return;
+    setSaving(true);
+    setError(null);
+    const { error: err } = await ecdFetch(`/api/clients/${clientId}/vragenlijsten`, {
+      method: "POST",
+      body: JSON.stringify({
+        questionnaireId: selectedTemplate.id,
+        antwoorden: Object.entries(antwoorden).map(([linkId, answer]) => ({ linkId, answer })),
+      }),
+    });
+    setSaving(false);
+    if (err) setError(err);
+    else onSaved();
+  }
+
+  const inputCls = "w-full rounded-md border border-default px-3 py-2 text-sm shadow-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 bg-page text-fg";
+
+  return (
+    <form onSubmit={handleSubmit} className="mb-5 rounded-lg border border-default bg-raised p-5 shadow-sm">
+      <h3 className="mb-4 font-semibold text-fg">Vragenlijst invullen</h3>
+      {error && <ErrorMsg msg={error} />}
+
+      <div className="mb-4">
+        <label className="mb-1 block text-sm font-medium text-fg-muted">Vragenlijst *</label>
+        <select
+          value={selectedTemplate?.id ?? ""}
+          onChange={(e) => {
+            const t = templates.find((t) => t.id === e.target.value) ?? null;
+            setSelectedTemplate(t);
+            setAntwoorden({});
+          }}
+          className={inputCls}
+          required
+        >
+          <option value="">— Kies een vragenlijst —</option>
+          {templates.map((t) => (
+            <option key={t.id} value={t.id ?? ""}>{t.title}</option>
+          ))}
+        </select>
+      </div>
+
+      {fullTemplate?.item && (
+        <div className="grid gap-3">
+          {fullTemplate.item.map((item) => (
+            <div key={item.linkId}>
+              <label className="mb-1 block text-sm font-medium text-fg-muted">{item.text ?? item.linkId}</label>
+              <input
+                type={item.type === "integer" || item.type === "decimal" ? "number" : "text"}
+                value={antwoorden[item.linkId] ?? ""}
+                onChange={(e) => setAntwoorden((v) => ({ ...v, [item.linkId]: e.target.value }))}
+                className={inputCls}
+              />
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="mt-4 flex justify-end">
+        <button type="submit" disabled={saving || !selectedTemplate} className="rounded-md bg-brand-700 px-5 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-800 disabled:opacity-50">
+          {saving ? "Opslaan..." : "Vragenlijst opslaan"}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/*  MDO Tab                                                                    */
+/* -------------------------------------------------------------------------- */
+
+interface FhirEncounter {
+  id?: string;
+  status?: string;
+  class?: { code?: string; display?: string };
+  reasonCode?: Array<{ text?: string }>;
+  period?: { start?: string; end?: string };
+  participant?: Array<{ individual?: { display?: string }; type?: Array<{ text?: string }> }>;
+}
+
+function MdoTab({ clientId }: { clientId: string }) {
+  const [items, setItems] = useState<FhirEncounter[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [showForm, setShowForm] = useState(false);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    ecdFetch<FhirBundle<FhirEncounter>>(`/api/clients/${clientId}/mdo`).then(
+      ({ data, error: err }) => {
+        if (err) setError(err);
+        else setItems(data?.entry?.map((e) => e.resource) ?? []);
+        setLoading(false);
+      },
+    );
+  }, [clientId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const statusLabel: Record<string, string> = {
+    planned: "Gepland",
+    "in-progress": "Bezig",
+    finished: "Afgerond",
+    cancelled: "Geannuleerd",
+  };
+
+  const statusCls: Record<string, string> = {
+    planned: "bg-blue-100 text-blue-800",
+    "in-progress": "bg-yellow-100 text-yellow-800",
+    finished: "bg-green-100 text-green-800",
+    cancelled: "bg-gray-100 text-fg-muted",
+  };
+
+  return (
+    <section>
+      <div className="mb-4 flex items-center justify-between">
+        <h2 className="text-lg font-semibold text-fg">Multidisciplinair Overleg</h2>
+        <button
+          onClick={() => setShowForm((v) => !v)}
+          className="rounded-md bg-brand-700 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-800"
+        >
+          {showForm ? "Annuleren" : "MDO plannen"}
+        </button>
+      </div>
+
+      {showForm && (
+        <MdoForm clientId={clientId} onSaved={() => { setShowForm(false); load(); }} />
+      )}
+
+      {loading && <Spinner />}
+      {error && <ErrorMsg msg={error} />}
+
+      {!loading && !error && items.length === 0 && (
+        <p className="py-8 text-center text-sm text-fg-subtle">Nog geen MDO&apos;s geregistreerd.</p>
+      )}
+
+      <ul className="space-y-3">
+        {items.map((enc, i) => {
+          const st = enc.status ?? "planned";
+          return (
+            <li key={enc.id ?? i} className="rounded-lg border border-default bg-raised p-4 shadow-sm">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <p className="font-medium text-fg">
+                    {enc.reasonCode?.[0]?.text ?? "MDO overleg"}
+                  </p>
+                  {enc.participant && enc.participant.length > 0 && (
+                    <p className="text-sm text-fg-muted">
+                      Deelnemers: {enc.participant.map((p) => p.individual?.display).filter(Boolean).join(", ")}
+                    </p>
+                  )}
+                  <p className="text-xs text-fg-subtle mt-1">
+                    {formatDate(enc.period?.start)}
+                  </p>
+                </div>
+                <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${statusCls[st] ?? "bg-gray-100 text-fg-muted"}`}>
+                  {statusLabel[st] ?? st}
+                </span>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
+function MdoForm({ clientId, onSaved }: { clientId: string; onSaved: () => void }) {
+  const [datum, setDatum] = useState(new Date().toISOString().slice(0, 10));
+  const [onderwerp, setOnderwerp] = useState("");
+  const [deelnemerNaam, setDeelnemerNaam] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!deelnemerNaam.trim()) { setError("Voeg minimaal 1 deelnemer toe"); return; }
+    setSaving(true);
+    setError(null);
+    const { error: err } = await ecdFetch(`/api/clients/${clientId}/mdo`, {
+      method: "POST",
+      body: JSON.stringify({
+        datum,
+        onderwerp,
+        deelnemers: [{ practitionerId: "unknown", naam: deelnemerNaam }],
+        status: "planned",
+      }),
+    });
+    setSaving(false);
+    if (err) setError(err);
+    else onSaved();
+  }
+
+  const inputCls = "w-full rounded-md border border-default px-3 py-2 text-sm shadow-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 bg-page text-fg";
+
+  return (
+    <form onSubmit={handleSubmit} className="mb-5 rounded-lg border border-default bg-raised p-5 shadow-sm">
+      <h3 className="mb-4 font-semibold text-fg">MDO plannen</h3>
+      {error && <ErrorMsg msg={error} />}
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div>
+          <label className="mb-1 block text-sm font-medium text-fg-muted">Datum *</label>
+          <input type="date" value={datum} onChange={(e) => setDatum(e.target.value)} required className={inputCls} />
+        </div>
+        <div>
+          <label className="mb-1 block text-sm font-medium text-fg-muted">Deelnemer naam *</label>
+          <input type="text" value={deelnemerNaam} onChange={(e) => setDeelnemerNaam(e.target.value)} placeholder="bijv. Dr. Jansen" required className={inputCls} />
+        </div>
+        <div className="sm:col-span-2">
+          <label className="mb-1 block text-sm font-medium text-fg-muted">Onderwerp *</label>
+          <input type="text" value={onderwerp} onChange={(e) => setOnderwerp(e.target.value)} required className={inputCls} />
+        </div>
+      </div>
+
+      <div className="mt-4 flex justify-end">
+        <button type="submit" disabled={saving} className="rounded-md bg-brand-700 px-5 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-800 disabled:opacity-50">
+          {saving ? "Opslaan..." : "MDO plannen"}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/*  VBM Tab                                                                    */
+/* -------------------------------------------------------------------------- */
+
+interface FhirProcedure {
+  id?: string;
+  status?: string;
+  code?: { coding?: Array<{ code?: string; display?: string }>; text?: string };
+  performedPeriod?: { start?: string; end?: string };
+  reasonCode?: Array<{ text?: string }>;
+  performer?: Array<{ actor?: { display?: string } }>;
+  note?: Array<{ text?: string }>;
+  extension?: Array<{ url?: string; extension?: Array<{ url?: string; valueCoding?: { display?: string } }> }>;
+}
+
+function VbmTab({ clientId }: { clientId: string }) {
+  const [items, setItems] = useState<FhirProcedure[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [showForm, setShowForm] = useState(false);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    ecdFetch<FhirBundle<FhirProcedure>>(`/api/clients/${clientId}/vbm`).then(
+      ({ data, error: err }) => {
+        if (err) setError(err);
+        else setItems(data?.entry?.map((e) => e.resource) ?? []);
+        setLoading(false);
+      },
+    );
+  }, [clientId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const statusCls: Record<string, string> = {
+    "in-progress": "bg-coral-50 text-coral-700",
+    completed: "bg-green-100 text-green-800",
+  };
+
+  return (
+    <section>
+      <div className="mb-4 flex items-center justify-between">
+        <h2 className="text-lg font-semibold text-fg">Vrijheidsbeperkende Maatregelen</h2>
+        <button
+          onClick={() => setShowForm((v) => !v)}
+          className="rounded-md bg-brand-700 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-800"
+        >
+          {showForm ? "Annuleren" : "Maatregel registreren"}
+        </button>
+      </div>
+
+      {showForm && (
+        <VbmForm clientId={clientId} onSaved={() => { setShowForm(false); load(); }} />
+      )}
+
+      {loading && <Spinner />}
+      {error && <ErrorMsg msg={error} />}
+
+      {!loading && !error && items.length === 0 && (
+        <p className="py-8 text-center text-sm text-fg-subtle">Geen vrijheidsbeperkende maatregelen geregistreerd.</p>
+      )}
+
+      <ul className="space-y-3">
+        {items.map((proc, i) => {
+          const st = proc.status ?? "in-progress";
+          const grondslagExt = proc.extension
+            ?.find((e) => e.url === "https://openzorg.nl/extensions/vbm")
+            ?.extension?.find((e) => e.url === "grondslag");
+          return (
+            <li key={proc.id ?? i} className="rounded-lg border border-default bg-raised p-4 shadow-sm">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <p className="font-medium text-fg">
+                    {proc.code?.coding?.[0]?.display ?? proc.code?.text ?? "Maatregel"}
+                  </p>
+                  {proc.reasonCode?.[0]?.text && (
+                    <p className="text-sm text-fg-muted">Reden: {proc.reasonCode[0].text}</p>
+                  )}
+                  {grondslagExt?.valueCoding?.display && (
+                    <p className="text-xs text-fg-subtle">Grondslag: {grondslagExt.valueCoding.display}</p>
+                  )}
+                  <p className="text-xs text-fg-subtle mt-1">
+                    Van: {formatDate(proc.performedPeriod?.start)}
+                    {proc.performedPeriod?.end ? ` t/m ${formatDate(proc.performedPeriod.end)}` : " (actief)"}
+                  </p>
+                </div>
+                <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${statusCls[st] ?? "bg-gray-100 text-fg-muted"}`}>
+                  {st === "in-progress" ? "Actief" : "Beëindigd"}
+                </span>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
+function VbmForm({ clientId, onSaved }: { clientId: string; onSaved: () => void }) {
+  const [maatregelType, setMaatregelType] = useState("");
+  const [grondslag, setGrondslag] = useState("");
+  const [reden, setReden] = useState("");
+  const [startdatum, setStartdatum] = useState(new Date().toISOString().slice(0, 10));
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const MAATREGEL_TYPES = [
+    { code: "fixatie", display: "Fixatie" },
+    { code: "afzondering", display: "Afzondering" },
+    { code: "separatie", display: "Separatie" },
+    { code: "medicatie-onvrijwillig", display: "Onvrijwillige medicatie" },
+    { code: "bewegingsbeperking", display: "Bewegingsbeperking" },
+    { code: "toezicht", display: "Continu toezicht" },
+    { code: "beperking-communicatie", display: "Beperking communicatiemiddelen" },
+    { code: "beperking-bezoek", display: "Beperking bezoek" },
+    { code: "deur-op-slot", display: "Deur op slot (individueel)" },
+    { code: "gesloten-afdeling", display: "Gesloten afdeling" },
+    { code: "camerabewaking", display: "Camerabewaking" },
+    { code: "sensor", display: "Sensortechnologie" },
+  ];
+
+  const GRONDSLAGEN = [
+    { code: "wvggz", display: "Wvggz" },
+    { code: "wzd", display: "Wzd" },
+    { code: "wmo", display: "Wmo" },
+    { code: "instemming", display: "Met instemming" },
+    { code: "noodsituatie", display: "Noodsituatie" },
+  ];
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setError(null);
+    const { error: err } = await ecdFetch(`/api/clients/${clientId}/vbm`, {
+      method: "POST",
+      body: JSON.stringify({ maatregelType, grondslag, reden, startdatum }),
+    });
+    setSaving(false);
+    if (err) setError(err);
+    else onSaved();
+  }
+
+  const inputCls = "w-full rounded-md border border-default px-3 py-2 text-sm shadow-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 bg-page text-fg";
+
+  return (
+    <form onSubmit={handleSubmit} className="mb-5 rounded-lg border border-default bg-raised p-5 shadow-sm">
+      <h3 className="mb-4 font-semibold text-fg">VBM registreren</h3>
+      {error && <ErrorMsg msg={error} />}
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div>
+          <label className="mb-1 block text-sm font-medium text-fg-muted">Type maatregel *</label>
+          <select value={maatregelType} onChange={(e) => setMaatregelType(e.target.value)} required className={inputCls}>
+            <option value="">— Kies type —</option>
+            {MAATREGEL_TYPES.map((m) => <option key={m.code} value={m.code}>{m.display}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="mb-1 block text-sm font-medium text-fg-muted">Grondslag *</label>
+          <select value={grondslag} onChange={(e) => setGrondslag(e.target.value)} required className={inputCls}>
+            <option value="">— Kies grondslag —</option>
+            {GRONDSLAGEN.map((g) => <option key={g.code} value={g.code}>{g.display}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="mb-1 block text-sm font-medium text-fg-muted">Startdatum *</label>
+          <input type="date" value={startdatum} onChange={(e) => setStartdatum(e.target.value)} required className={inputCls} />
+        </div>
+        <div className="sm:col-span-2">
+          <label className="mb-1 block text-sm font-medium text-fg-muted">Reden / toelichting *</label>
+          <textarea value={reden} onChange={(e) => setReden(e.target.value)} required rows={2} className={inputCls} />
+        </div>
+      </div>
+
+      <div className="mt-4 flex justify-end">
+        <button type="submit" disabled={saving} className="rounded-md bg-brand-700 px-5 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-800 disabled:opacity-50">
+          {saving ? "Opslaan..." : "Maatregel opslaan"}
+        </button>
+      </div>
+    </form>
   );
 }
 

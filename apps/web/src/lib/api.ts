@@ -3,7 +3,9 @@
  * Reads the auth token from the httpOnly cookie via a server-side proxy.
  */
 
-const ECD_BASE = process.env.NEXT_PUBLIC_ECD_URL || "http://localhost:4001";
+// Use relative URL so it always resolves to the same origin as the app.
+// The Next.js proxy at /api/ecd/* forwards to the ECD service server-side.
+const ECD_BASE = process.env.NEXT_PUBLIC_ECD_URL || "/api/ecd";
 
 export interface ApiError {
   error?: string;

@@ -4,7 +4,7 @@
  */
 
 const PLANNING_BASE =
-  process.env.NEXT_PUBLIC_PLANNING_URL || "http://localhost:4002";
+  process.env.NEXT_PUBLIC_PLANNING_URL || "/api/planning";
 
 export async function planningFetch<T = unknown>(
   path: string,

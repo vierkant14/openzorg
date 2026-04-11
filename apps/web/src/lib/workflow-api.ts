@@ -4,7 +4,7 @@
  */
 
 const WORKFLOW_BASE =
-  process.env.NEXT_PUBLIC_WORKFLOW_URL || "http://localhost:4003";
+  process.env.NEXT_PUBLIC_WORKFLOW_URL || "/api/workflow";
 
 export async function workflowFetch<T = unknown>(
   path: string,
