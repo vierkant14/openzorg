@@ -1,0 +1,12 @@
+# OpenZorg — Unraid deployment (conflict-vrije poorten)
+# Gebruik: docker compose -f docker-compose.unraid.yml up -d
+#
+# Poorten:
+#   Web UI:     http://192.168.1.10:13000
+#   Medplum:    http://192.168.1.10:18103
+#   PostgreSQL: 192.168.1.10:15432
+#   Redis:      192.168.1.10:16379
+
+include:
+  - path: infra/compose/docker-compose.yml
+  - path: infra/compose/docker-compose.unraid.yml
