@@ -19,6 +19,11 @@ COPY adapters/ons-import/package.json ./adapters/ons-import/
 RUN echo "node-linker=hoisted" >> .npmrc && \
     (pnpm install --frozen-lockfile || pnpm install)
 
+# Create workspace symlinks that hoisted mode does not create
+RUN mkdir -p node_modules/@openzorg && \
+    ln -s ../../packages/shared-domain node_modules/@openzorg/shared-domain && \
+    ln -s ../../packages/shared-config node_modules/@openzorg/shared-config
+
 COPY tsconfig.base.json ./
 COPY packages/shared-domain/ ./packages/shared-domain/
 COPY packages/shared-config/ ./packages/shared-config/

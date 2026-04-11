@@ -17,7 +17,13 @@ CREATE TABLE openzorg.tenants (
     name TEXT NOT NULL,
     slug TEXT NOT NULL UNIQUE,
     medplum_project_id TEXT NOT NULL UNIQUE,
-    enabled_modules TEXT[] NOT NULL DEFAULT ARRAY['ecd', 'planning'],
+    enabled_modules TEXT[] NOT NULL DEFAULT ARRAY['clientregistratie', 'medewerkers', 'organisatie', 'rapportage', 'planning', 'configuratie', 'toegangsbeheer', 'berichten'],
+    sector TEXT NOT NULL DEFAULT 'vvt',
+    sectors TEXT[] NOT NULL DEFAULT ARRAY['vvt'],
+    contact_email TEXT,
+    contact_name TEXT,
+    settings JSONB NOT NULL DEFAULT '{"bsnRequired": false, "clientnummerPrefix": "C"}',
+    status TEXT NOT NULL DEFAULT 'active',
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -42,10 +48,14 @@ CREATE POLICY tenant_isolation_policy ON openzorg.tenant_configurations
     USING (tenant_id::text = current_setting('openzorg.current_tenant_id', true));
 
 -- Insert two test tenants for Sprint 1
-INSERT INTO openzorg.tenants (id, name, slug, medplum_project_id, enabled_modules)
+INSERT INTO openzorg.tenants (id, name, slug, medplum_project_id, enabled_modules, sector, sectors, settings, contact_email, contact_name, status)
 VALUES
-    ('a0000000-0000-0000-0000-000000000001', 'Zorggroep Horizon', 'zorggroep-horizon', 'medplum-project-horizon', ARRAY['ecd', 'planning']),
-    ('b0000000-0000-0000-0000-000000000002', 'Thuiszorg De Linde', 'thuiszorg-de-linde', 'medplum-project-linde', ARRAY['ecd']);
+    ('a0000000-0000-0000-0000-000000000001', 'Zorggroep Horizon', 'zorggroep-horizon', 'medplum-project-horizon',
+     ARRAY['clientregistratie', 'medewerkers', 'organisatie', 'rapportage', 'planning', 'configuratie', 'toegangsbeheer', 'berichten', 'zorgplan', 'mic-meldingen', 'medicatie'],
+     'vvt', ARRAY['vvt'], '{"bsnRequired": false, "clientnummerPrefix": "C"}', 'admin@zorggroephorizon.nl', 'Jan de Vries', 'active'),
+    ('b0000000-0000-0000-0000-000000000002', 'Thuiszorg De Linde', 'thuiszorg-de-linde', 'medplum-project-linde',
+     ARRAY['clientregistratie', 'medewerkers', 'organisatie', 'rapportage', 'planning', 'configuratie', 'toegangsbeheer', 'berichten'],
+     'vvt', ARRAY['vvt'], '{"bsnRequired": true, "clientnummerPrefix": "L"}', 'info@thuiszorgdelinde.nl', 'Maria Jansen', 'active');
 
 -- Insert test configurations for tenant A
 INSERT INTO openzorg.tenant_configurations (tenant_id, config_type, config_data)

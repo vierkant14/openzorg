@@ -75,13 +75,90 @@ services:
     depends_on:
       medplum:
         condition: service_healthy
+      postgres:
+        condition: service_healthy
     ports:
       - "4001:4001"
     environment:
       ECD_PORT: 4001
       MEDPLUM_BASE_URL: http://medplum:8103
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: openzorg
+      POSTGRES_USER: openzorg
+      POSTGRES_PASSWORD: openzorg_dev_password
+      MASTER_ADMIN_KEY: ${MASTER_ADMIN_KEY:-dev-master-key}
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:4001/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Flowable Community REST (BPMN engine) ──────────────────
+  flowable:
+    image: flowable/flowable-rest:7.1.0
+    ports:
+      - "8080:8080"
+    environment:
+      - spring.datasource.driver-class-name=org.postgresql.Driver
+      - spring.datasource.url=jdbc:postgresql://postgres:5432/openzorg
+      - spring.datasource.username=openzorg
+      - spring.datasource.password=openzorg_dev_password
+      - flowable.rest.app.admin.user-id=admin
+      - flowable.rest.app.admin.password=admin
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- --header='Authorization: Basic YWRtaW46YWRtaW4=' http://localhost:8080/flowable-rest/actuator/health || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 15
+      start_period: 60s
+
+  # ── Planning Service (Hono) ────────────────────────────────
+  planning:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.service
+      args:
+        SERVICE_NAME: planning
+    restart: unless-stopped
+    depends_on:
+      medplum:
+        condition: service_healthy
+    ports:
+      - "4002:4002"
+    environment:
+      PLANNING_PORT: 4002
+      MEDPLUM_BASE_URL: http://medplum:8103
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:4002/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Workflow Bridge Service (Hono) ──────────────────────────
+  workflow-bridge:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.service
+      args:
+        SERVICE_NAME: workflow-bridge
+    restart: unless-stopped
+    depends_on:
+      medplum:
+        condition: service_healthy
+      flowable:
+        condition: service_healthy
+    ports:
+      - "4003:4003"
+    environment:
+      WORKFLOW_PORT: 4003
+      MEDPLUM_BASE_URL: http://medplum:8103
+      FLOWABLE_BASE_URL: http://flowable:8080/flowable-rest
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:4003/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -97,17 +174,33 @@ services:
         condition: service_healthy
       ecd:
         condition: service_healthy
+      workflow-bridge:
+        condition: service_healthy
     ports:
       - "3000:3000"
     environment:
       MEDPLUM_BASE_URL: http://medplum:8103
       ECD_SERVICE_URL: http://ecd:4001
       NEXT_PUBLIC_MEDPLUM_BASE_URL: http://localhost:8103
+      NEXT_PUBLIC_WORKFLOW_URL: http://workflow-bridge:4003
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
+
+  # ── Seed (runs once, creates users) ───────────────────────────
+  seed:
+    image: node:20-alpine
+    depends_on:
+      medplum:
+        condition: service_healthy
+    environment:
+      MEDPLUM_BASE_URL: http://medplum:8103
+    volumes:
+      - ../scripts/seed.sh:/seed.sh
+    command: sh /seed.sh
+    restart: "no"
 
 volumes:
   postgres_data:

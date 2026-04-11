@@ -99,7 +99,23 @@ export async function POST(request: NextRequest) {
 
     const tokenData = await tokenResponse.json();
 
-    const response = NextResponse.json({ success: true });
+    // Resolve the project ID from whichever source is available:
+    // 1. The token response may include project reference
+    // 2. The login response may include memberships with project references
+    // 3. The user may have passed a projectId in the request
+    const resolvedProjectId =
+      tokenData.project?.reference?.replace("Project/", "") ||
+      loginData.memberships?.[0]?.project?.reference?.replace("Project/", "") ||
+      projectId ||
+      "";
+
+    const response = NextResponse.json({
+      success: true,
+      accessToken: tokenData.access_token,
+      profile: tokenData.profile,
+      projectId: resolvedProjectId,
+      projectName: tokenData.project?.display || "",
+    });
     response.cookies.set("medplum_token", tokenData.access_token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",

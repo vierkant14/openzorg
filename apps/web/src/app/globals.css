@@ -2,13 +2,119 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── Google Fonts ── */
+@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=Source+Sans+3:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+/* ── Light theme (default) ── */
 :root {
-  --foreground: #171717;
-  --background: #ffffff;
+  --color-fg: oklch(0.18 0.005 85);
+  --color-fg-muted: oklch(0.45 0.008 85);
+  --color-fg-subtle: oklch(0.58 0.008 85);
+  --color-bg: oklch(0.99 0.003 85);
+  --color-bg-raised: oklch(1.00 0.00 0);
+  --color-bg-sunken: oklch(0.97 0.006 85);
+  --color-border: oklch(0.90 0.008 85);
+  --color-border-subtle: oklch(0.94 0.006 85);
+  --color-ring: oklch(0.58 0.13 178 / 0.4);
+
+  /* Sidebar */
+  --color-sidebar-bg: oklch(0.22 0.04 178);
+  --color-sidebar-fg: oklch(0.94 0.02 180);
+  --color-sidebar-fg-muted: oklch(0.72 0.04 180);
+  --color-sidebar-hover: oklch(0.28 0.05 178);
+  --color-sidebar-active: oklch(0.32 0.06 178);
 }
 
-body {
-  color: var(--foreground);
-  background: var(--background);
-  font-family: system-ui, -apple-system, sans-serif;
+/* ── Dark theme ── */
+.dark {
+  --color-fg: oklch(0.93 0.006 85);
+  --color-fg-muted: oklch(0.65 0.008 85);
+  --color-fg-subtle: oklch(0.50 0.008 85);
+  --color-bg: oklch(0.14 0.005 260);
+  --color-bg-raised: oklch(0.18 0.006 260);
+  --color-bg-sunken: oklch(0.11 0.004 260);
+  --color-border: oklch(0.26 0.008 260);
+  --color-border-subtle: oklch(0.22 0.006 260);
+  --color-ring: oklch(0.58 0.13 178 / 0.5);
+
+  --color-sidebar-bg: oklch(0.12 0.004 260);
+  --color-sidebar-fg: oklch(0.90 0.01 180);
+  --color-sidebar-fg-muted: oklch(0.60 0.02 180);
+  --color-sidebar-hover: oklch(0.18 0.006 260);
+  --color-sidebar-active: oklch(0.22 0.008 260);
+}
+
+/* ── Base ── */
+@layer base {
+  * {
+    border-color: var(--color-border-subtle);
+  }
+
+  body {
+    font-family: "Source Sans 3", system-ui, sans-serif;
+    color: var(--color-fg);
+    background: var(--color-bg);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: "Nunito", system-ui, sans-serif;
+  }
+
+  /* Scrollbar — subtle, warm-tinted */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: oklch(0.75 0.008 85);
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: oklch(0.60 0.010 85);
+  }
+  .dark ::-webkit-scrollbar-thumb {
+    background: oklch(0.32 0.006 260);
+  }
+
+  /* Focus ring — teal */
+  :focus-visible {
+    outline: 2px solid var(--color-ring);
+    outline-offset: 2px;
+  }
+}
+
+/* ── Utilities ── */
+@layer utilities {
+  .text-fg { color: var(--color-fg); }
+  .text-fg-muted { color: var(--color-fg-muted); }
+  .text-fg-subtle { color: var(--color-fg-subtle); }
+  .bg-page { background: var(--color-bg); }
+  .bg-raised { background: var(--color-bg-raised); }
+  .bg-sunken { background: var(--color-bg-sunken); }
+  .border-default { border-color: var(--color-border); }
+  .border-subtle { border-color: var(--color-border-subtle); }
+
+  /* Stagger animation helper */
+  .stagger > * {
+    opacity: 0;
+    animation: fade-in 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+  .stagger > *:nth-child(1) { animation-delay: 0ms; }
+  .stagger > *:nth-child(2) { animation-delay: 60ms; }
+  .stagger > *:nth-child(3) { animation-delay: 120ms; }
+  .stagger > *:nth-child(4) { animation-delay: 180ms; }
+  .stagger > *:nth-child(5) { animation-delay: 240ms; }
+  .stagger > *:nth-child(6) { animation-delay: 300ms; }
+  .stagger > *:nth-child(7) { animation-delay: 360ms; }
+  .stagger > *:nth-child(8) { animation-delay: 420ms; }
+
+  @keyframes fade-in {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
 }

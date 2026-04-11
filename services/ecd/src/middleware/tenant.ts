@@ -10,6 +10,12 @@ import type { AppEnv } from "../app.js";
  * In production, this will be derived from the Medplum project context.
  */
 export async function tenantMiddleware(c: Context<AppEnv>, next: Next): Promise<Response | void> {
+  // Master admin routes don't need tenant context
+  if (c.req.path.startsWith("/api/master/")) {
+    await next();
+    return;
+  }
+
   const tenantId = c.req.header("X-Tenant-ID");
 
   if (!tenantId) {

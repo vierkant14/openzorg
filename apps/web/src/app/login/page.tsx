@@ -1,13 +1,31 @@
 "use client";
 
-import { useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useState } from "react";
 
-const ROLES = ["Beheerder", "Zorgmedewerker", "Planner", "Teamleider"] as const;
+const ROLES = [
+  { value: "beheerder", label: "Beheerder" },
+  { value: "zorgmedewerker", label: "Zorgmedewerker" },
+  { value: "planner", label: "Planner" },
+  { value: "teamleider", label: "Teamleider" },
+] as const;
 
 export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginForm />
+    </Suspense>
+  );
+}
+
+function LoginForm() {
+  const searchParams = useSearchParams();
+  const expired = searchParams.get("expired") === "1";
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const [role, setRole] = useState<string>("zorgmedewerker");
+  const [error, setError] = useState<string | null>(expired ? "Je sessie is verlopen. Log opnieuw in." : null);
   const [loading, setLoading] = useState(false);
 
   async function handleLogin(e: React.FormEvent) {
@@ -22,10 +40,28 @@ export default function LoginPage() {
         body: JSON.stringify({ email, password }),
       });
 
+      const data = await response.json();
+
       if (!response.ok) {
-        const data = await response.json();
         throw new Error(data.message || "Inloggen mislukt");
       }
+
+      // Store token and tenant info for ECD API calls
+      if (data.accessToken) {
+        localStorage.setItem("openzorg_token", data.accessToken);
+      }
+      if (data.projectId) {
+        localStorage.setItem("openzorg_tenant_id", data.projectId);
+      }
+      if (data.projectName) {
+        localStorage.setItem("openzorg_project_name", data.projectName);
+      }
+      if (data.profile?.display) {
+        localStorage.setItem("openzorg_user_name", data.profile.display);
+      }
+
+      // Store role — in production this comes from Medplum PractitionerRole
+      localStorage.setItem("openzorg_role", data.role || role);
 
       window.location.href = "/dashboard";
     } catch (err) {
@@ -36,15 +72,24 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="w-full max-w-md bg-white rounded-lg shadow-md p-8">
-        <h1 className="text-2xl font-bold text-brand-800 mb-6 text-center">
-          Inloggen bij OpenZorg
-        </h1>
+    <div className="min-h-screen flex items-center justify-center bg-page">
+      <div className="w-full max-w-md bg-raised rounded-2xl border border-default p-8 shadow-soft">
+        {/* Logo */}
+        <div className="flex justify-center mb-6">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center justify-center w-11 h-11 rounded-xl bg-brand-500">
+              <span className="font-display text-base font-extrabold text-white tracking-tight">OZ</span>
+            </div>
+            <span className="font-display text-display-md font-bold text-fg tracking-tight">OpenZorg</span>
+          </div>
+        </div>
 
-        <form onSubmit={handleLogin} className="space-y-4">
+        <h1 className="text-heading text-fg text-center mb-1">Welkom terug</h1>
+        <p className="text-body-sm text-fg-muted text-center mb-8">Log in om verder te gaan</p>
+
+        <form onSubmit={handleLogin} className="space-y-5">
           <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="email" className="block text-body-sm font-medium text-fg mb-1.5">
               E-mailadres
             </label>
             <input
@@ -53,13 +98,13 @@ export default function LoginPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-brand-500 focus:outline-none"
+              className="w-full border border-default bg-raised rounded-xl px-4 py-3 text-body-sm text-fg placeholder:text-fg-subtle focus:border-brand-400 focus:ring-2 focus:ring-brand-500/20 transition-all outline-none"
               placeholder="naam@zorginstelling.nl"
             />
           </div>
 
           <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="password" className="block text-body-sm font-medium text-fg mb-1.5">
               Wachtwoord
             </label>
             <input
@@ -69,12 +114,31 @@ export default function LoginPage() {
               onChange={(e) => setPassword(e.target.value)}
               required
               minLength={12}
-              className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-brand-500 focus:outline-none"
+              className="w-full border border-default bg-raised rounded-xl px-4 py-3 text-body-sm text-fg placeholder:text-fg-subtle focus:border-brand-400 focus:ring-2 focus:ring-brand-500/20 transition-all outline-none"
             />
           </div>
 
+          <div>
+            <label htmlFor="role" className="block text-body-sm font-medium text-fg mb-1.5">
+              Rol
+            </label>
+            <select
+              id="role"
+              value={role}
+              onChange={(e) => setRole(e.target.value)}
+              className="w-full border border-default bg-raised rounded-xl px-4 py-3 text-body-sm text-fg focus:border-brand-400 focus:ring-2 focus:ring-brand-500/20 transition-all outline-none"
+            >
+              {ROLES.map((r) => (
+                <option key={r.value} value={r.value}>{r.label}</option>
+              ))}
+            </select>
+            <p className="text-caption text-fg-subtle mt-1.5">
+              In productie wordt je rol automatisch bepaald door de beheerder.
+            </p>
+          </div>
+
           {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-3 text-sm">
+            <div className="rounded-xl bg-coral-50 dark:bg-coral-950/20 border border-coral-200 dark:border-coral-800 p-4 text-body-sm text-coral-700 dark:text-coral-300">
               {error}
             </div>
           )}
@@ -82,17 +146,11 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-brand-600 text-white py-2 rounded-lg hover:bg-brand-700 disabled:opacity-50 transition-colors"
+            className="w-full bg-brand-600 text-white py-3 rounded-xl text-body-sm font-semibold hover:bg-brand-700 disabled:opacity-50 transition-colors shadow-soft"
           >
             {loading ? "Bezig met inloggen..." : "Inloggen"}
           </button>
         </form>
-
-        <div className="mt-6 pt-6 border-t">
-          <p className="text-xs text-gray-400 text-center">
-            Rollen: {ROLES.join(", ")}
-          </p>
-        </div>
       </div>
     </div>
   );

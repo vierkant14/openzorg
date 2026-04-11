@@ -1,3 +1,3 @@
-export * from "./tenant";
-export * from "./roles";
-export * from "./fhir-types";
+export * from "./tenant.js";
+export * from "./roles.js";
+export * from "./fhir-types.js";

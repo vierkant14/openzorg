@@ -17,12 +17,14 @@
   "dependencies": {
     "@hono/node-server": "^1.13.0",
     "@medplum/core": "^3.2.0",
-    "@openzorg/shared-domain": "workspace:*",
     "@openzorg/shared-config": "workspace:*",
-    "hono": "^4.6.0"
+    "@openzorg/shared-domain": "workspace:*",
+    "hono": "^4.6.0",
+    "pg": "^8.20.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "@types/pg": "^8.20.0",
     "tsx": "^4.19.0",
     "vitest": "^2.1.0"
   }
