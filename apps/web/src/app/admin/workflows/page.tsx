@@ -18,6 +18,9 @@ interface Task {
   name: string;
   processDefinitionId?: string;
   created: string;
+  assignee?: string;
+  description?: string;
+  formKey?: string;
 }
 
 interface BpmnTemplate {
@@ -40,6 +43,8 @@ export default function WorkflowsAdminPage() {
   const [taskError, setTaskError] = useState<string | null>(null);
   const [taskLoading, setTaskLoading] = useState(false);
   const [completingTaskId, setCompletingTaskId] = useState<string | null>(null);
+  const [taskFormOpen, setTaskFormOpen] = useState<string | null>(null);
+  const [taskFormVars, setTaskFormVars] = useState<Record<string, string>>({});
 
   useEffect(() => {
     loadProcesses();
@@ -102,15 +107,28 @@ export default function WorkflowsAdminPage() {
 
   async function handleComplete(taskId: string) {
     setCompletingTaskId(taskId);
+    // Build variables from form if any
+    const variables: Record<string, unknown> = {};
+    for (const [key, val] of Object.entries(taskFormVars)) {
+      if (key.startsWith(`${taskId}_`) && val.trim()) {
+        variables[key.replace(`${taskId}_`, "")] = val;
+      }
+    }
     const res = await workflowFetch(`/api/taken/${taskId}/complete`, {
       method: "POST",
+      body: JSON.stringify(Object.keys(variables).length > 0 ? { variables } : {}),
     });
     if (res.error) {
       setTaskError(res.error);
     } else {
       setTasks((prev) => prev.filter((t) => t.id !== taskId));
+      setTaskFormOpen(null);
     }
     setCompletingTaskId(null);
+  }
+
+  function updateFormVar(taskId: string, varName: string, value: string) {
+    setTaskFormVars((prev) => ({ ...prev, [`${taskId}_${varName}`]: value }));
   }
 
   return (
@@ -122,12 +140,20 @@ export default function WorkflowsAdminPage() {
             <h1 className="text-display-lg text-fg">Workflows</h1>
             <p className="text-body text-fg-muted mt-1">Procesdefinities, templates en taken beheren</p>
           </div>
-          <Link
-            href="/admin/workflows/ontwerp"
-            className="bg-brand-600 text-white px-5 py-2.5 rounded-lg hover:bg-brand-700 text-sm font-medium"
-          >
-            + Nieuw proces ontwerpen
-          </Link>
+          <div className="flex gap-3">
+            <Link
+              href="/admin/workflows/instanties"
+              className="border border-default text-fg px-4 py-2.5 rounded-lg hover:bg-sunken text-sm font-medium"
+            >
+              Lopende instanties
+            </Link>
+            <Link
+              href="/admin/workflows/ontwerp"
+              className="bg-brand-600 text-white px-5 py-2.5 rounded-lg hover:bg-brand-700 text-sm font-medium"
+            >
+              + Nieuw proces ontwerpen
+            </Link>
+          </div>
         </div>
 
         {/* Section 1: Gedeployede processen */}
@@ -274,7 +300,28 @@ export default function WorkflowsAdminPage() {
                   {tasks.map((task) => (
                     <tr key={task.id} className="hover:bg-sunken">
                       <td className="px-4 py-3 text-sm text-fg">
-                        {task.name}
+                        <div>{task.name}</div>
+                        {task.description && (
+                          <div className="text-xs text-fg-subtle mt-0.5">{task.description}</div>
+                        )}
+                        {/* Inline form fields */}
+                        {taskFormOpen === task.id && (
+                          <div className="mt-3 p-3 bg-sunken rounded-lg space-y-2">
+                            <p className="text-xs font-semibold text-fg-muted">Taakvariabelen (optioneel)</p>
+                            {["resultaat", "opmerking", "goedgekeurd"].map((varName) => (
+                              <div key={varName} className="flex items-center gap-2">
+                                <label className="text-xs text-fg-subtle w-24">{varName}</label>
+                                <input
+                                  type="text"
+                                  value={taskFormVars[`${task.id}_${varName}`] ?? ""}
+                                  onChange={(e) => updateFormVar(task.id, varName, e.target.value)}
+                                  placeholder={varName === "goedgekeurd" ? "true / false" : `Waarde voor ${varName}`}
+                                  className="flex-1 rounded border border-default px-2 py-1 text-xs"
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-sm text-fg-muted font-mono">
                         {task.processDefinitionId || "-"}
@@ -282,7 +329,13 @@ export default function WorkflowsAdminPage() {
                       <td className="px-4 py-3 text-sm text-fg-muted">
                         {new Date(task.created).toLocaleString("nl-NL")}
                       </td>
-                      <td className="px-4 py-3 text-sm">
+                      <td className="px-4 py-3 text-sm space-x-2">
+                        <button
+                          onClick={() => setTaskFormOpen(taskFormOpen === task.id ? null : task.id)}
+                          className="text-fg-subtle hover:text-fg font-medium"
+                        >
+                          {taskFormOpen === task.id ? "Inklappen" : "Formulier"}
+                        </button>
                         <button
                           onClick={() => handleComplete(task.id)}
                           disabled={completingTaskId === task.id}

@@ -1,123 +1,121 @@
 import { Hono } from "hono";
 
-import type { Prestatie, Financieringstype } from "../lib/declaratie-types.js";
+import type { AppEnv } from "../index.js";
+import { pool, getTenantUuid } from "../lib/db.js";
 import { getProducten } from "../lib/declaratie-types.js";
 
-const app = new Hono();
+export const prestatieRoutes = new Hono<AppEnv>();
 
-// In-memory store (will be replaced with Medplum/PostgreSQL)
-const prestaties = new Map<string, Prestatie>();
-let counter = 0;
+// GET / — List prestaties with filters
+prestatieRoutes.get("/", async (c) => {
+  const tenantId = c.get("tenantId");
+  const tenantUuid = await getTenantUuid(tenantId);
+  if (!tenantUuid) return c.json({ prestaties: [], totaal: 0 });
 
-/**
- * GET /api/prestaties — List all care activities for billing.
- * Query params: ?financieringstype=wlz&status=geregistreerd&clientId=xxx&van=2026-01-01&tot=2026-01-31
- */
-app.get("/", (c) => {
-  const filters = {
-    financieringstype: c.req.query("financieringstype"),
-    status: c.req.query("status"),
-    clientId: c.req.query("clientId"),
-    van: c.req.query("van"),
-    tot: c.req.query("tot"),
-  };
+  const financieringstype = c.req.query("financieringstype");
+  const status = c.req.query("status");
+  const clientId = c.req.query("clientId");
+  const van = c.req.query("van");
+  const tot = c.req.query("tot");
 
-  let items = Array.from(prestaties.values());
+  let query = "SELECT * FROM openzorg.prestaties WHERE tenant_id = $1";
+  const params: unknown[] = [tenantUuid];
+  let idx = 2;
 
-  if (filters.financieringstype) {
-    items = items.filter((p) => p.financieringstype === filters.financieringstype);
-  }
-  if (filters.status) {
-    items = items.filter((p) => p.status === filters.status);
-  }
-  if (filters.clientId) {
-    items = items.filter((p) => p.clientId === filters.clientId);
-  }
-  if (filters.van) {
-    items = items.filter((p) => p.datum >= filters.van!);
-  }
-  if (filters.tot) {
-    items = items.filter((p) => p.datum <= filters.tot!);
-  }
+  if (financieringstype) { query += ` AND financieringstype = $${idx++}`; params.push(financieringstype); }
+  if (status) { query += ` AND status = $${idx++}`; params.push(status); }
+  if (clientId) { query += ` AND client_id = $${idx++}`; params.push(clientId); }
+  if (van) { query += ` AND datum >= $${idx++}`; params.push(van); }
+  if (tot) { query += ` AND datum <= $${idx++}`; params.push(tot); }
 
-  items.sort((a, b) => b.datum.localeCompare(a.datum));
+  query += " ORDER BY datum DESC, created_at DESC";
 
-  return c.json({
-    prestaties: items,
-    totaal: items.reduce((sum, p) => sum + p.totaal, 0),
-    aantal: items.length,
-  });
+  const res = await pool.query(query, params);
+  const prestaties = res.rows.map(mapPrestatie);
+  const totaal = prestaties.reduce((sum, p) => sum + p.totaal, 0);
+
+  return c.json({ prestaties, totaal, aantal: prestaties.length });
 });
 
-/**
- * POST /api/prestaties — Register a new care activity.
- */
-app.post("/", async (c) => {
+// GET /producten — Product catalog
+prestatieRoutes.get("/producten", (c) => {
+  const type = c.req.query("type") || "wlz";
+  const producten = getProducten(type as "wlz" | "wmo" | "zvw" | "jeugdwet");
+  return c.json({ producten });
+});
+
+// POST / — Register new prestatie
+prestatieRoutes.post("/", async (c) => {
+  const tenantId = c.get("tenantId");
+  const tenantUuid = await getTenantUuid(tenantId);
+  if (!tenantUuid) return c.json({ error: "Tenant niet gevonden" }, 404);
+
   const body = await c.req.json<{
     clientId: string;
-    clientNaam: string;
+    medewerkerNaam?: string;
     datum: string;
     productCode: string;
-    financieringstype: Financieringstype;
-    aantal: number;
-    medewerkerNaam: string;
+    financieringstype: string;
+    aantal?: number;
+    opmerking?: string;
   }>();
 
-  if (!body.clientId || !body.productCode || !body.datum || !body.financieringstype) {
-    return c.json({ error: "clientId, productCode, datum en financieringstype zijn verplicht" }, 400);
+  if (!body.clientId || !body.datum || !body.productCode || !body.financieringstype) {
+    return c.json({ error: "clientId, datum, productCode en financieringstype zijn verplicht" }, 400);
   }
 
-  const producten = getProducten(body.financieringstype);
+  const producten = getProducten(body.financieringstype as "wlz" | "wmo" | "zvw" | "jeugdwet");
   const product = producten.find((p) => p.code === body.productCode);
-
-  if (!product) {
-    return c.json({ error: `Product ${body.productCode} niet gevonden voor ${body.financieringstype}` }, 400);
-  }
+  if (!product) return c.json({ error: `Product ${body.productCode} niet gevonden` }, 400);
 
   const aantal = body.aantal ?? 1;
+  const totaal = product.tarief * aantal;
 
-  counter++;
-  const id = `prest-${String(counter).padStart(6, "0")}`;
+  const res = await pool.query(
+    `INSERT INTO openzorg.prestaties
+      (tenant_id, client_id, medewerker_id, datum, product_code, product_naam, financieringstype, eenheid, aantal, tarief, totaal, status, opmerking)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'concept', $12)
+     RETURNING *`,
+    [tenantUuid, body.clientId, body.medewerkerNaam, body.datum, body.productCode,
+     product.omschrijving, body.financieringstype,
+     (product as { eenheid?: string }).eenheid ?? "dag",
+     aantal, product.tarief, totaal, body.opmerking],
+  );
 
-  const prestatie: Prestatie = {
-    id,
-    clientId: body.clientId,
-    clientNaam: body.clientNaam ?? "",
-    datum: body.datum,
-    productCode: body.productCode,
-    productOmschrijving: product.omschrijving,
-    eenheid: ("eenheid" in product ? product.eenheid : "dag") as Prestatie["eenheid"],
-    aantal,
-    tariefPerEenheid: product.tarief,
-    totaal: product.tarief * aantal,
-    financieringstype: body.financieringstype,
-    medewerkerNaam: body.medewerkerNaam ?? "",
-    status: "geregistreerd",
-  };
-
-  prestaties.set(id, prestatie);
-
-  return c.json(prestatie, 201);
+  return c.json({ prestatie: mapPrestatie(res.rows[0]) }, 201);
 });
 
-/**
- * GET /api/prestaties/producten?type=wlz — List available products for a financieringstype.
- */
-app.get("/producten", (c) => {
-  const type = (c.req.query("type") ?? "wlz") as Financieringstype;
-  return c.json({ producten: getProducten(type) });
-});
+// PUT /:id/valideer — Mark as validated
+prestatieRoutes.put("/:id/valideer", async (c) => {
+  const tenantId = c.get("tenantId");
+  const tenantUuid = await getTenantUuid(tenantId);
+  if (!tenantUuid) return c.json({ error: "Tenant niet gevonden" }, 404);
 
-/**
- * PUT /api/prestaties/:id/valideer — Mark prestatie as validated (ready for billing).
- */
-app.put("/:id/valideer", (c) => {
   const id = c.req.param("id");
-  const prestatie = prestaties.get(id);
-  if (!prestatie) return c.json({ error: "Prestatie niet gevonden" }, 404);
+  const res = await pool.query(
+    "UPDATE openzorg.prestaties SET status = 'gevalideerd', updated_at = now() WHERE id = $1 AND tenant_id = $2 AND status = 'concept' RETURNING *",
+    [id, tenantUuid],
+  );
 
-  prestatie.status = "gevalideerd";
-  return c.json(prestatie);
+  if (res.rows.length === 0) return c.json({ error: "Prestatie niet gevonden of al gevalideerd" }, 404);
+  return c.json({ prestatie: mapPrestatie(res.rows[0]) });
 });
 
-export { app as prestatieRoutes };
+function mapPrestatie(row: Record<string, unknown>) {
+  return {
+    id: row.id as string,
+    clientId: row.client_id as string,
+    medewerkerNaam: (row.medewerker_id as string) ?? "",
+    datum: (row.datum as string),
+    productCode: row.product_code as string,
+    productOmschrijving: row.product_naam as string,
+    financieringstype: row.financieringstype as string,
+    eenheid: row.eenheid as string,
+    aantal: Number(row.aantal),
+    tariefPerEenheid: Number(row.tarief),
+    totaal: Number(row.totaal),
+    status: row.status as string,
+    declaratieId: (row.declaratie_id as string) ?? null,
+    opmerking: (row.opmerking as string) ?? null,
+  };
+}

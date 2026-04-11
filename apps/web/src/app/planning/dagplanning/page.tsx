@@ -1,9 +1,9 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import AppShell from "../../../components/AppShell";
+import { ecdFetch } from "../../../lib/api";
 import { planningFetch } from "../../../lib/planning-api";
 
 /* -------------------------------------------------------------------------- */
@@ -113,13 +113,30 @@ function getTimeHeight(startIso: string, endIso: string): number {
 /*  Page component                                                            */
 /* -------------------------------------------------------------------------- */
 
+interface Practitioner {
+  id: string;
+  naam: string;
+}
+
 export default function DagplanningPage() {
   const [datum, setDatum] = useState(todayString());
   const [practitionerId, setPractitionerId] = useState("");
-  const [practitionerInput, setPractitionerInput] = useState("");
+  const [practitioners, setPractitioners] = useState<Practitioner[]>([]);
   const [appointments, setAppointments] = useState<FhirAppointment[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    ecdFetch<{ resourceType: string; entry?: Array<{ resource: { id?: string; name?: Array<{ family?: string; given?: string[] }> } }> }>("/api/medewerkers?_count=100")
+      .then(({ data }) => {
+        const items: Practitioner[] = (data?.entry ?? []).map((e) => {
+          const n = e.resource.name?.[0];
+          const naam = [n?.given?.[0], n?.family].filter(Boolean).join(" ") || "Onbekend";
+          return { id: e.resource.id ?? "", naam };
+        }).filter((p) => p.id);
+        setPractitioners(items);
+      });
+  }, []);
 
   const loadAfspraken = useCallback(() => {
     if (!practitionerId.trim()) return;
@@ -134,7 +151,6 @@ export default function DagplanningPage() {
         setAppointments([]);
       } else {
         const items = data?.entry?.map((e) => e.resource) ?? [];
-        // Sort by start time
         items.sort((a, b) => {
           const aTime = a.start ? new Date(a.start).getTime() : 0;
           const bTime = b.start ? new Date(b.start).getTime() : 0;
@@ -152,12 +168,6 @@ export default function DagplanningPage() {
     }
   }, [loadAfspraken, practitionerId]);
 
-  function handleSelectPractitioner() {
-    if (practitionerInput.trim()) {
-      setPractitionerId(practitionerInput.trim());
-    }
-  }
-
   function navigateDay(offset: number) {
     const d = new Date(datum);
     d.setDate(d.getDate() + offset);
@@ -174,26 +184,18 @@ export default function DagplanningPage() {
           <div className="flex flex-wrap items-end gap-4">
             <div>
               <label className="mb-1 block text-sm font-medium text-fg-muted">
-                Medewerker ID
+                Medewerker
               </label>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={practitionerInput}
-                  onChange={(e) => setPractitionerInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") handleSelectPractitioner();
-                  }}
-                  placeholder="Practitioner UUID"
-                  className="w-72 rounded-md border border-default px-3 py-2 text-sm shadow-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
-                />
-                <button
-                  onClick={handleSelectPractitioner}
-                  className="rounded-md bg-brand-700 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-800"
-                >
-                  Laden
-                </button>
-              </div>
+              <select
+                value={practitionerId}
+                onChange={(e) => setPractitionerId(e.target.value)}
+                className="w-72 rounded-md border border-default px-3 py-2 text-sm shadow-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+              >
+                <option value="">Selecteer medewerker...</option>
+                {practitioners.map((p) => (
+                  <option key={p.id} value={p.id}>{p.naam}</option>
+                ))}
+              </select>
             </div>
 
             <div>

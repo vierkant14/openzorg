@@ -2,76 +2,76 @@
  * Admin API routes for tenant configuration management.
  *
  * Provides CRUD endpoints for custom field definitions and validation rules.
- * Configuration is stored in-memory (Map<tenantId, config>) for now;
- * PostgreSQL persistence follows in the next iteration.
+ * Configuration is stored in PostgreSQL (openzorg.tenant_configurations table).
  *
  * All routes require tenant context via X-Tenant-ID header (set by tenantMiddleware).
  */
 
 import type {
   CustomFieldDefinition,
-  TenantConfiguration,
   ValidationRule,
 } from "@openzorg/shared-config";
 import { Hono } from "hono";
 
 import type { AppEnv } from "../app.js";
-
-/** In-memory store for tenant configurations. Will be replaced by PostgreSQL. */
-const tenantConfigs = new Map<string, TenantConfiguration>();
-
-function getOrCreateConfig(tenantId: string): TenantConfiguration {
-  const existing = tenantConfigs.get(tenantId);
-  if (existing) {
-    return existing;
-  }
-
-  const config: TenantConfiguration = {
-    tenantId,
-    sector: "vvt",
-    financieringstypen: ["wlz"],
-    enabledModules: [
-      "clientregistratie", "medewerkers", "organisatie", "rapportage",
-      "planning", "configuratie", "toegangsbeheer", "berichten",
-      "zorgplan-leefgebieden", "indicatieverwerking", "soep-rapportage",
-      "mic-meldingen", "vvt-facturatie", "wachtlijst", "medicatieoverzicht",
-    ],
-    customFields: [],
-    validationRules: [],
-    version: 1,
-    updatedAt: new Date().toISOString(),
-  };
-
-  tenantConfigs.set(tenantId, config);
-  return config;
-}
-
-function updateConfig(
-  tenantId: string,
-  updater: (config: TenantConfiguration) => TenantConfiguration,
-): TenantConfiguration {
-  const current = getOrCreateConfig(tenantId);
-  const updated = updater(current);
-  tenantConfigs.set(tenantId, updated);
-  return updated;
-}
+import { pool } from "../lib/db.js";
 
 export const configuratieRoutes = new Hono<AppEnv>();
 
+/* ── Helpers ── */
+
+async function getTenantUuid(tenantId: string): Promise<string | null> {
+  const res = await pool.query(
+    "SELECT id FROM openzorg.tenants WHERE medplum_project_id = $1 OR id::text = $1 OR slug = $1 LIMIT 1",
+    [tenantId],
+  );
+  return (res.rows[0]?.id as string) ?? null;
+}
+
+async function loadCustomFields(tenantUuid: string): Promise<CustomFieldDefinition[]> {
+  const res = await pool.query(
+    "SELECT id, config_data FROM openzorg.tenant_configurations WHERE tenant_id = $1 AND config_type = 'custom_field' ORDER BY created_at",
+    [tenantUuid],
+  );
+  return res.rows.map((r) => ({
+    id: r.id as string,
+    ...(r.config_data as Omit<CustomFieldDefinition, "id">),
+    layer: "uitbreiding" as const,
+  }));
+}
+
+async function loadValidationRules(tenantUuid: string): Promise<ValidationRule[]> {
+  const res = await pool.query(
+    "SELECT id, config_data FROM openzorg.tenant_configurations WHERE tenant_id = $1 AND config_type = 'validation_rule' ORDER BY created_at",
+    [tenantUuid],
+  );
+  return res.rows.map((r) => ({
+    id: r.id as string,
+    ...(r.config_data as Omit<ValidationRule, "id">),
+    layer: "uitbreiding" as const,
+  }));
+}
+
 // --- Custom Fields ---
 
-configuratieRoutes.get("/custom-fields", (c) => {
+configuratieRoutes.get("/custom-fields", async (c) => {
   const tenantId = c.get("tenantId");
-  const config = getOrCreateConfig(tenantId);
+  const tenantUuid = await getTenantUuid(tenantId);
+  if (!tenantUuid) return c.json({ customFields: [] });
+
+  const fields = await loadCustomFields(tenantUuid);
   const resourceTypeFilter = c.req.query("resourceType");
-  const fields = resourceTypeFilter
-    ? config.customFields.filter((f) => f.resourceType === resourceTypeFilter)
-    : config.customFields;
-  return c.json({ customFields: fields });
+  const filtered = resourceTypeFilter
+    ? fields.filter((f) => f.resourceType === resourceTypeFilter)
+    : fields;
+  return c.json({ customFields: filtered });
 });
 
 configuratieRoutes.post("/custom-fields", async (c) => {
   const tenantId = c.get("tenantId");
+  const tenantUuid = await getTenantUuid(tenantId);
+  if (!tenantUuid) return c.json({ error: "Tenant niet gevonden" }, 404);
+
   const body = await c.req.json<{
     resourceType: string;
     fieldName: string;
@@ -81,118 +81,108 @@ configuratieRoutes.post("/custom-fields", async (c) => {
   }>();
 
   if (!body.resourceType || !body.fieldName || !body.fieldType) {
-    return c.json(
-      { error: "resourceType, fieldName en fieldType zijn verplicht" },
-      400,
-    );
+    return c.json({ error: "resourceType, fieldName en fieldType zijn verplicht" }, 400);
   }
 
   const validTypes = ["string", "number", "boolean", "date", "codeable-concept", "dropdown", "multi-select", "textarea"];
   if (!validTypes.includes(body.fieldType)) {
-    return c.json(
-      { error: `fieldType moet een van ${validTypes.join(", ")} zijn` },
-      400,
-    );
+    return c.json({ error: `fieldType moet een van ${validTypes.join(", ")} zijn` }, 400);
   }
 
-  // Dropdown and multi-select require options
   if ((body.fieldType === "dropdown" || body.fieldType === "multi-select") && (!body.options || body.options.length === 0)) {
-    return c.json(
-      { error: "Dropdown/multi-select velden vereisen minimaal 1 optie" },
-      400,
-    );
+    return c.json({ error: "Dropdown/multi-select velden vereisen minimaal 1 optie" }, 400);
   }
 
-  const id = `cf-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
-  const newField: CustomFieldDefinition = {
-    id,
+  const configData = {
     resourceType: body.resourceType,
     fieldName: body.fieldName,
     fieldType: body.fieldType,
     required: body.required ?? false,
     extensionUrl: `https://openzorg.nl/extensions/${body.fieldName}`,
-    layer: "uitbreiding",
     options: body.options,
     active: true,
   };
 
-  const updated = updateConfig(tenantId, (config) => ({
-    ...config,
-    customFields: [...config.customFields, newField],
-    version: config.version + 1,
-    updatedAt: new Date().toISOString(),
-  }));
+  const res = await pool.query(
+    "INSERT INTO openzorg.tenant_configurations (tenant_id, config_type, config_data) VALUES ($1, 'custom_field', $2) RETURNING id",
+    [tenantUuid, JSON.stringify(configData)],
+  );
 
-  return c.json({ customField: newField, version: updated.version }, 201);
+  const newField: CustomFieldDefinition = {
+    id: res.rows[0]?.id as string,
+    ...configData,
+    layer: "uitbreiding",
+  };
+
+  return c.json({ customField: newField }, 201);
 });
 
-/**
- * PATCH /custom-fields/:id — Toggle active/inactive or update options.
- */
 configuratieRoutes.patch("/custom-fields/:id", async (c) => {
   const tenantId = c.get("tenantId");
   const fieldId = c.req.param("id");
+  const tenantUuid = await getTenantUuid(tenantId);
+  if (!tenantUuid) return c.json({ error: "Tenant niet gevonden" }, 404);
+
   const body = await c.req.json<{
     active?: boolean;
     options?: string[];
     required?: boolean;
   }>();
 
-  const config = getOrCreateConfig(tenantId);
-  const fieldIdx = config.customFields.findIndex((f) => f.id === fieldId);
-  if (fieldIdx === -1) {
-    return c.json({ error: "Custom field niet gevonden" }, 404);
-  }
+  // Load current field
+  const existing = await pool.query(
+    "SELECT config_data FROM openzorg.tenant_configurations WHERE id = $1 AND tenant_id = $2 AND config_type = 'custom_field'",
+    [fieldId, tenantUuid],
+  );
+  if (existing.rows.length === 0) return c.json({ error: "Custom field niet gevonden" }, 404);
 
-  const updated = updateConfig(tenantId, (cfg) => ({
-    ...cfg,
-    customFields: cfg.customFields.map((f) => {
-      if (f.id !== fieldId) return f;
-      return {
-        ...f,
-        ...(body.active !== undefined ? { active: body.active } : {}),
-        ...(body.options !== undefined ? { options: body.options } : {}),
-        ...(body.required !== undefined ? { required: body.required } : {}),
-      };
-    }),
-    version: cfg.version + 1,
-    updatedAt: new Date().toISOString(),
-  }));
+  const current = existing.rows[0]?.config_data as Record<string, unknown>;
+  const updated = {
+    ...current,
+    ...(body.active !== undefined ? { active: body.active } : {}),
+    ...(body.options !== undefined ? { options: body.options } : {}),
+    ...(body.required !== undefined ? { required: body.required } : {}),
+  };
 
-  const updatedField = updated.customFields.find((f) => f.id === fieldId);
-  return c.json({ customField: updatedField });
+  await pool.query(
+    "UPDATE openzorg.tenant_configurations SET config_data = $1, updated_at = now() WHERE id = $2",
+    [JSON.stringify(updated), fieldId],
+  );
+
+  return c.json({ customField: { id: fieldId, ...updated, layer: "uitbreiding" } });
 });
 
-configuratieRoutes.delete("/custom-fields/:id", (c) => {
+configuratieRoutes.delete("/custom-fields/:id", async (c) => {
   const tenantId = c.get("tenantId");
   const fieldId = c.req.param("id");
-  const config = getOrCreateConfig(tenantId);
+  const tenantUuid = await getTenantUuid(tenantId);
+  if (!tenantUuid) return c.json({ error: "Tenant niet gevonden" }, 404);
 
-  const fieldExists = config.customFields.some((f) => f.id === fieldId);
-  if (!fieldExists) {
-    return c.json({ error: "Custom field niet gevonden" }, 404);
-  }
+  const res = await pool.query(
+    "DELETE FROM openzorg.tenant_configurations WHERE id = $1 AND tenant_id = $2 AND config_type = 'custom_field'",
+    [fieldId, tenantUuid],
+  );
 
-  updateConfig(tenantId, (cfg) => ({
-    ...cfg,
-    customFields: cfg.customFields.filter((f) => f.id !== fieldId),
-    version: cfg.version + 1,
-    updatedAt: new Date().toISOString(),
-  }));
-
+  if (res.rowCount === 0) return c.json({ error: "Custom field niet gevonden" }, 404);
   return c.json({ deleted: true });
 });
 
 // --- Validation Rules ---
 
-configuratieRoutes.get("/validation-rules", (c) => {
+configuratieRoutes.get("/validation-rules", async (c) => {
   const tenantId = c.get("tenantId");
-  const config = getOrCreateConfig(tenantId);
-  return c.json({ validationRules: config.validationRules });
+  const tenantUuid = await getTenantUuid(tenantId);
+  if (!tenantUuid) return c.json({ validationRules: [] });
+
+  const rules = await loadValidationRules(tenantUuid);
+  return c.json({ validationRules: rules });
 });
 
 configuratieRoutes.post("/validation-rules", async (c) => {
   const tenantId = c.get("tenantId");
+  const tenantUuid = await getTenantUuid(tenantId);
+  if (!tenantUuid) return c.json({ error: "Tenant niet gevonden" }, 404);
+
   const body = await c.req.json<{
     resourceType: string;
     fieldPath: string;
@@ -202,57 +192,47 @@ configuratieRoutes.post("/validation-rules", async (c) => {
   }>();
 
   if (!body.resourceType || !body.fieldPath || !body.operator || !body.errorMessage) {
-    return c.json(
-      { error: "resourceType, fieldPath, operator en errorMessage zijn verplicht" },
-      400,
-    );
+    return c.json({ error: "resourceType, fieldPath, operator en errorMessage zijn verplicht" }, 400);
   }
 
   const validOperators = ["required", "min", "max", "pattern", "in", "minLength", "maxLength"];
   if (!validOperators.includes(body.operator)) {
-    return c.json(
-      { error: `operator moet een van ${validOperators.join(", ")} zijn` },
-      400,
-    );
+    return c.json({ error: `operator moet een van ${validOperators.join(", ")} zijn` }, 400);
   }
 
-  const id = `vr-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
-  const newRule: ValidationRule = {
-    id,
+  const configData = {
     resourceType: body.resourceType,
     fieldPath: body.fieldPath,
     operator: body.operator,
     value: body.value,
-    layer: "uitbreiding", // Tenant-created rules are always Layer 2
     errorMessage: body.errorMessage,
   };
 
-  const updated = updateConfig(tenantId, (config) => ({
-    ...config,
-    validationRules: [...config.validationRules, newRule],
-    version: config.version + 1,
-    updatedAt: new Date().toISOString(),
-  }));
+  const res = await pool.query(
+    "INSERT INTO openzorg.tenant_configurations (tenant_id, config_type, config_data) VALUES ($1, 'validation_rule', $2) RETURNING id",
+    [tenantUuid, JSON.stringify(configData)],
+  );
 
-  return c.json({ validationRule: newRule, version: updated.version }, 201);
+  const newRule: ValidationRule = {
+    id: res.rows[0]?.id as string,
+    ...configData,
+    layer: "uitbreiding",
+  };
+
+  return c.json({ validationRule: newRule }, 201);
 });
 
-configuratieRoutes.delete("/validation-rules/:id", (c) => {
+configuratieRoutes.delete("/validation-rules/:id", async (c) => {
   const tenantId = c.get("tenantId");
   const ruleId = c.req.param("id");
-  const config = getOrCreateConfig(tenantId);
+  const tenantUuid = await getTenantUuid(tenantId);
+  if (!tenantUuid) return c.json({ error: "Tenant niet gevonden" }, 404);
 
-  const ruleExists = config.validationRules.some((r) => r.id === ruleId);
-  if (!ruleExists) {
-    return c.json({ error: "Validatieregel niet gevonden" }, 404);
-  }
+  const res = await pool.query(
+    "DELETE FROM openzorg.tenant_configurations WHERE id = $1 AND tenant_id = $2 AND config_type = 'validation_rule'",
+    [ruleId, tenantUuid],
+  );
 
-  updateConfig(tenantId, (cfg) => ({
-    ...cfg,
-    validationRules: cfg.validationRules.filter((r) => r.id !== ruleId),
-    version: cfg.version + 1,
-    updatedAt: new Date().toISOString(),
-  }));
-
+  if (res.rowCount === 0) return c.json({ error: "Validatieregel niet gevonden" }, 404);
   return c.json({ deleted: true });
 });

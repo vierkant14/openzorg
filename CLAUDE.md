@@ -154,6 +154,7 @@ Just calling `newuser` alone leaves the user in a half-registered state (can't l
 | ECD API | http://localhost:4001 | X-Tenant-ID + Bearer token |
 | Planning API | http://localhost:4002 | X-Tenant-ID + Bearer token |
 | Workflow API | http://localhost:4003 | X-Tenant-ID + Bearer token |
+| Facturatie API | http://localhost:4004 | X-Tenant-ID + Bearer token |
 | Flowable REST | http://localhost:8080 | admin / admin (Basic auth) |
 | PostgreSQL | localhost:5432 | openzorg / openzorg_dev_password |
 | Master API | http://localhost:4001/api/master/* | X-Master-Key: dev-master-key |
@@ -172,4 +173,4 @@ Just calling `newuser` alone leaves the user in a half-registered state (can't l
 - Sprint 2 (ECD + Configuratie): COMPLETE
 - Sprint 3 (Planning + Workflows): COMPLETE
 - Sprint 3+ (RBAC, Design System, Multi-tenant Admin, Clientnummer): COMPLETE
-- Sprint 4 (Facturatie + E2E): NOT STARTED — see BACKLOG.md
+- Sprint 4 (Facturatie + E2E): FACTURATIE COMPLETE, E2E NOT STARTED — see BACKLOG.md

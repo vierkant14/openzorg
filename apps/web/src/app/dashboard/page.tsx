@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 
 import AppShell from "../../components/AppShell";
 import { ecdFetch } from "../../lib/api";
+import { planningFetch } from "../../lib/planning-api";
+import { workflowFetch } from "../../lib/workflow-api";
 
 /* ── Types ── */
 interface QuickStat {
@@ -89,9 +91,12 @@ export default function DashboardPage() {
 
   useEffect(() => {
     async function loadStats() {
-      const [clientsRes, _appointmentsRes] = await Promise.allSettled([
+      const today = new Date().toISOString().slice(0, 10);
+      const [clientsRes, appointmentsRes, takenRes, wachtlijstRes] = await Promise.allSettled([
         ecdFetch<FhirBundle>("/api/clients"),
-        ecdFetch<FhirBundle>("/api/afspraken"),
+        planningFetch<FhirBundle>(`/api/afspraken?date=${today}`),
+        workflowFetch<{ data: unknown[]; total?: number }>("/api/taken"),
+        planningFetch<FhirBundle>("/api/wachtlijst"),
       ]);
 
       const clientCount =
@@ -99,11 +104,32 @@ export default function DashboardPage() {
           ? clientsRes.value.data.entry.length
           : 0;
 
+      const appointmentCount =
+        appointmentsRes.status === "fulfilled" && appointmentsRes.value.data?.entry
+          ? appointmentsRes.value.data.entry.length
+          : 0;
+
+      let takenCount = 0;
+      if (takenRes.status === "fulfilled" && takenRes.value.data) {
+        const td = takenRes.value.data;
+        // Flowable wraps in { data: [...], total }
+        if (typeof td.total === "number") {
+          takenCount = td.total;
+        } else if (Array.isArray(td.data)) {
+          takenCount = td.data.length;
+        }
+      }
+
+      const wachtlijstCount =
+        wachtlijstRes.status === "fulfilled" && wachtlijstRes.value.data?.entry
+          ? wachtlijstRes.value.data.entry.length
+          : 0;
+
       setStats([
         { label: "Clienten", value: String(clientCount), sub: "geregistreerd" },
-        { label: "Afspraken vandaag", value: "—", sub: "gepland" },
-        { label: "Open taken", value: "—", sub: "in werkbak" },
-        { label: "Wachtlijst", value: "—", sub: "wachtend" },
+        { label: "Afspraken vandaag", value: String(appointmentCount), sub: "gepland" },
+        { label: "Open taken", value: String(takenCount), sub: "in werkbak" },
+        { label: "Wachtlijst", value: String(wachtlijstCount), sub: "wachtend" },
       ]);
     }
     loadStats();

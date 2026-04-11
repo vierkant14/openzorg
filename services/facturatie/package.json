@@ -15,7 +15,8 @@
   "dependencies": {
     "@hono/node-server": "^1.13.0",
     "@openzorg/shared-domain": "workspace:*",
-    "hono": "^4.6.0"
+    "hono": "^4.6.0",
+    "pg": "^8.13.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

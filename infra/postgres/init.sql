@@ -111,3 +111,53 @@ CREATE POLICY audit_tenant_isolation ON openzorg.audit_log
 -- Index for audit log queries
 CREATE INDEX idx_audit_log_tenant_timestamp ON openzorg.audit_log (tenant_id, timestamp DESC);
 CREATE INDEX idx_audit_log_resource ON openzorg.audit_log (tenant_id, resource_type, resource_id);
+
+-- Facturatie: Prestaties (billable care activities)
+CREATE TABLE openzorg.prestaties (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL REFERENCES openzorg.tenants(id),
+    client_id TEXT NOT NULL,
+    medewerker_id TEXT,
+    datum DATE NOT NULL,
+    product_code TEXT NOT NULL,
+    product_naam TEXT NOT NULL,
+    financieringstype TEXT NOT NULL, -- wlz, wmo, zvw, jeugdwet
+    eenheid TEXT NOT NULL DEFAULT 'dag',
+    aantal NUMERIC(10,2) NOT NULL DEFAULT 1,
+    tarief INTEGER NOT NULL, -- in cents
+    totaal INTEGER NOT NULL, -- in cents
+    status TEXT NOT NULL DEFAULT 'concept', -- concept, gevalideerd, gedeclareerd
+    declaratie_id UUID,
+    opmerking TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+ALTER TABLE openzorg.prestaties ENABLE ROW LEVEL SECURITY;
+CREATE POLICY prestatie_tenant_isolation ON openzorg.prestaties
+    USING (tenant_id::text = current_setting('openzorg.current_tenant_id', true));
+CREATE INDEX idx_prestaties_tenant_status ON openzorg.prestaties (tenant_id, status);
+CREATE INDEX idx_prestaties_tenant_client ON openzorg.prestaties (tenant_id, client_id);
+
+-- Facturatie: Declaraties (billing submissions)
+CREATE TABLE openzorg.declaraties (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL REFERENCES openzorg.tenants(id),
+    nummer TEXT NOT NULL,
+    financieringstype TEXT NOT NULL,
+    periode_van DATE NOT NULL,
+    periode_tot DATE NOT NULL,
+    status TEXT NOT NULL DEFAULT 'concept', -- concept, ingediend, geaccepteerd, afgewezen, gecrediteerd, betaald
+    totaal_bedrag INTEGER NOT NULL DEFAULT 0, -- in cents
+    aantal_prestaties INTEGER NOT NULL DEFAULT 0,
+    afwijzings_reden TEXT,
+    ingediend_op TIMESTAMPTZ,
+    antwoord_op TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+ALTER TABLE openzorg.declaraties ENABLE ROW LEVEL SECURITY;
+CREATE POLICY declaratie_tenant_isolation ON openzorg.declaraties
+    USING (tenant_id::text = current_setting('openzorg.current_tenant_id', true));
+CREATE INDEX idx_declaraties_tenant_status ON openzorg.declaraties (tenant_id, status);

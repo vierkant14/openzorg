@@ -2,7 +2,7 @@
 
 Laatst bijgewerkt: 2026-04-10
 
-## Sprint 3 — Restant (Planning + Workflows)
+## Sprint 3 — Restant (Planning + Workflows) — COMPLEET
 
 ### Hoge prioriteit
 
@@ -18,26 +18,26 @@ Laatst bijgewerkt: 2026-04-10
 ### Middelhoge prioriteit
 
 - [x] **Beschikbaarheid frontend** — `/planning/beschikbaarheid` pagina voor medewerker-roosters met slot-toevoegen en tijd-blokkeren.
-- [ ] **Dagplanning view** — Visuele dagplanning per medewerker (tijdlijn/kalender view). Backend bestaat al (`/api/dagplanning/medewerker/:id`).
-- [ ] **Herhalingen frontend** — UI voor terugkerende afspraken met RRULE. Backend bestaat al (`/api/herhalingen`).
-- [ ] **Procesinstantie details** — UI om lopende workflow-instanties te bekijken (status, taken, variabelen).
-- [ ] **Taakformulieren** — Flowable user tasks met formuliervelden (nu alleen complete/claim, geen form data).
+- [x] **Dagplanning view** — Visuele dagplanning per medewerker met medewerker-dropdown en tijdlijn. `/planning/dagplanning`.
+- [x] **Herhalingen frontend** — UI voor terugkerende afspraken met RRULE, dag-selectie en preview. `/planning/herhalingen`.
+- [x] **Procesinstantie details** — UI om lopende workflow-instanties te bekijken (status, taken, variabelen). `/admin/workflows/instanties`.
+- [x] **Taakformulieren** — Flowable user tasks met inline formuliervelden (resultaat, opmerking, goedgekeurd). Variables worden doorgegeven bij afronden.
 
 ### Lage prioriteit
 
-- [ ] **Configuratie persistentie** — Custom fields/validation rules staan nu in-memory (Map). Opslaan in Medplum als StructureDefinition of in PostgreSQL.
+- [x] **Configuratie persistentie** — Custom fields/validation rules opgeslagen in PostgreSQL `openzorg.tenant_configurations` tabel (was in-memory Map).
 - [ ] **Apotheek als Organization** — Nu alleen tekstveld, later koppelen aan FHIR Organization resource.
 - [x] **Huisarts als Practitioner** — Dropdown lookup naar medewerkers, opslaat als FHIR Practitioner referentie.
 
-## Sprint 4 — Facturatie + E2E (niet gestart)
+## Sprint 4 — Facturatie + E2E
 
 ### Facturatie (hoofdstuk 10 uit requirements)
 
-- [ ] **FAC-01: Declaratieregels engine** — Configureerbare regels voor Wlz/Wmo/Zvw/Jeugdwet
-- [ ] **FAC-02: AW319/AW320 berichten** — Vektis standaard declaratieberichten genereren
-- [ ] **FAC-03: Facturatie dashboard** — Overzicht van declaraties, status, afwijzingen
-- [ ] **FAC-04: VECOZO koppeling** — Adapter voor declaratie-indiening via VECOZO
-- [ ] **FAC-05: Retourinformatie verwerken** — Retourberichten inlezen en verwerken
+- [x] **FAC-01: Declaratieregels engine** — Product-catalogi per financieringstype (WLZ, WMO, ZVW, Jeugdwet) met tarieven. PostgreSQL persistentie.
+- [ ] **FAC-02: AW319/AW320 berichten** — Vektis standaard declaratieberichten genereren (toekomstige integratie)
+- [x] **FAC-03: Facturatie dashboard** — Volledig dashboard met overzicht, prestatie-registratie, declaratie-aanmaak, indienen, statusbeheer
+- [ ] **FAC-04: VECOZO koppeling** — Adapter voor declaratie-indiening via VECOZO (toekomstige integratie)
+- [ ] **FAC-05: Retourinformatie verwerken** — Retourberichten inlezen en verwerken (toekomstige integratie)
 
 ### Koppelingen (hoofdstuk 11 uit requirements)
 
@@ -155,6 +155,7 @@ Toe te voegen VVT-processen:
 ## Technische schuld
 
 - [ ] Configuratie opslag: in-memory Map → database
+- [x] Dashboard stats — Afspraken vandaag, open taken en wachtlijst tellen nu daadwerkelijk mee
 - [ ] API error handling: meer specifieke foutmeldingen
 - [ ] Frontend state management: overwegen React Query of SWR voor data fetching
 - [ ] Medplum auth tokens: refresh mechanisme toevoegen

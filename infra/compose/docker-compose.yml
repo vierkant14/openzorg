@@ -163,6 +163,32 @@ services:
       timeout: 5s
       retries: 5
 
+  # ── Facturatie Service (Hono) ────────────────────────────────
+  facturatie:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.service
+      args:
+        SERVICE_NAME: facturatie
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "4004:4004"
+    environment:
+      FACTURATIE_PORT: 4004
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: openzorg
+      POSTGRES_USER: openzorg
+      POSTGRES_PASSWORD: openzorg_dev_password
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:4004/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   # ── Web (Next.js) ──────────────────────────────────────────
   web:
     build:
@@ -176,6 +202,8 @@ services:
         condition: service_healthy
       workflow-bridge:
         condition: service_healthy
+      facturatie:
+        condition: service_healthy
     ports:
       - "3000:3000"
     environment:
@@ -183,6 +211,7 @@ services:
       ECD_SERVICE_URL: http://ecd:4001
       PLANNING_SERVICE_URL: http://planning:4002
       WORKFLOW_SERVICE_URL: http://workflow-bridge:4003
+      FACTURATIE_SERVICE_URL: http://facturatie:4004
       MASTER_ADMIN_KEY: ${MASTER_ADMIN_KEY:-dev-master-key}
       NEXT_PUBLIC_MEDPLUM_BASE_URL: http://localhost:8103
     healthcheck:
