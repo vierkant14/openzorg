@@ -39,6 +39,18 @@ CREATE TABLE openzorg.tenant_configurations (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Master admin table (multi-user super admin support)
+CREATE TABLE IF NOT EXISTS openzorg.master_admins (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    email TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    created_by UUID REFERENCES openzorg.master_admins(id)
+);
+
+-- Seed the default super admin
+INSERT INTO openzorg.master_admins (email, name) VALUES ('admin@openzorg.nl', 'Super Admin') ON CONFLICT DO NOTHING;
+
 -- Enable Row-Level Security on tenant-scoped tables
 ALTER TABLE openzorg.tenant_configurations ENABLE ROW LEVEL SECURITY;
 

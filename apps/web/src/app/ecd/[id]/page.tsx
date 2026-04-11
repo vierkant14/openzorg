@@ -113,7 +113,7 @@ interface FhirMedicationRequest {
   extension?: Array<{ url?: string; valueString?: string }>;
 }
 
-type TabKey = "rapportages" | "zorgplan" | "contactpersonen" | "medicatie" | "allergieen" | "diagnoses" | "risicoscreenings" | "toediening" | "vragenlijsten" | "mdo" | "vbm" | "documenten" | "extra";
+type TabKey = "rapportages" | "zorgplan" | "contactpersonen" | "medicatie" | "allergieen" | "vaccinaties" | "diagnoses" | "risicoscreenings" | "toediening" | "vragenlijsten" | "mdo" | "vbm" | "documenten" | "extra";
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: "rapportages", label: "Rapportages" },
@@ -122,6 +122,7 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: "medicatie", label: "Medicatie" },
   { key: "toediening", label: "Toediening" },
   { key: "allergieen", label: "Allergieën" },
+  { key: "vaccinaties", label: "Vaccinaties" },
   { key: "diagnoses", label: "Diagnoses" },
   { key: "risicoscreenings", label: "Screenings" },
   { key: "vragenlijsten", label: "Vragenlijsten" },
@@ -372,6 +373,7 @@ export default function ClientDetailPage() {
           {activeTab === "contactpersonen" && <ContactpersonenTab clientId={id} />}
           {activeTab === "medicatie" && <MedicatieTab clientId={id} />}
           {activeTab === "allergieen" && <AllergieenTab clientId={id} />}
+          {activeTab === "vaccinaties" && <VaccinatiesTab clientId={id} />}
           {activeTab === "diagnoses" && <DiagnosesTab clientId={id} />}
           {activeTab === "risicoscreenings" && <RisicoscreeningsTab clientId={id} />}
           {activeTab === "toediening" && <ToedieningTab clientId={id} />}
@@ -1909,6 +1911,212 @@ function AllergieenTab({ clientId }: { clientId: string }) {
               </div>
               {a.criticality === "high" && (
                 <span className="shrink-0 px-2 py-0.5 rounded text-caption font-medium bg-coral-50 text-coral-600">Hoog risico</span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Vaccinaties Tab                                                           */
+/* -------------------------------------------------------------------------- */
+
+interface FhirImmunization {
+  id?: string;
+  status?: string;
+  vaccineCode?: { text?: string; coding?: Array<{ code?: string; display?: string }> };
+  occurrenceDateTime?: string;
+  performer?: Array<{ actor?: { display?: string; reference?: string } }>;
+  lotNumber?: string;
+  site?: { text?: string };
+  route?: { text?: string };
+  note?: Array<{ text?: string }>;
+  statusReason?: { text?: string };
+}
+
+const VEELGEBRUIKTE_VACCINS = [
+  { code: "J07AL02", display: "Tetanus vaccin" },
+  { code: "J07BB01", display: "Influenza vaccin" },
+  { code: "J07BX03", display: "COVID-19 vaccin" },
+  { code: "J07AH07", display: "Pneumokokken vaccin" },
+  { code: "J07BK03", display: "Zona (gordelroos) vaccin" },
+  { code: "J07BC01", display: "Hepatitis B vaccin" },
+  { code: "J07AM01", display: "DTP (difterie-tetanus-polio) vaccin" },
+];
+
+function VaccinatiesTab({ clientId }: { clientId: string }) {
+  const [items, setItems] = useState<FhirImmunization[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [showForm, setShowForm] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  // Form fields
+  const [vaccineCode, setVaccineCode] = useState("");
+  const [vaccineDisplay, setVaccineDisplay] = useState("");
+  const [datum, setDatum] = useState(new Date().toISOString().slice(0, 10));
+  const [lotNummer, setLotNummer] = useState("");
+  const [locatie, setLocatie] = useState("Linker bovenarm");
+  const [opmerking, setOpmerking] = useState("");
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const { data, error: err } = await ecdFetch<FhirBundle<FhirImmunization>>(`/api/clients/${clientId}/vaccinaties`);
+    if (err) setError(err);
+    else setItems(data?.entry?.map((e) => e.resource) ?? []);
+    setLoading(false);
+  }, [clientId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  function handleSelectVaccin(code: string) {
+    setVaccineCode(code);
+    const found = VEELGEBRUIKTE_VACCINS.find((v) => v.code === code);
+    if (found) setVaccineDisplay(found.display);
+  }
+
+  async function handleAdd() {
+    if (!vaccineDisplay.trim() || !datum) return;
+    setSaving(true);
+    await ecdFetch(`/api/clients/${clientId}/vaccinaties`, {
+      method: "POST",
+      body: JSON.stringify({
+        vaccineCode: vaccineCode || "unknown",
+        vaccineDisplay: vaccineDisplay.trim(),
+        datum: `${datum}T00:00:00Z`,
+        lotNummer: lotNummer || undefined,
+        locatie: locatie || undefined,
+        opmerking: opmerking || undefined,
+      }),
+    });
+    setSaving(false);
+    setShowForm(false);
+    setVaccineCode(""); setVaccineDisplay(""); setLotNummer(""); setOpmerking("");
+    setDatum(new Date().toISOString().slice(0, 10));
+    load();
+  }
+
+  if (loading) return <Spinner />;
+  if (error) return <ErrorMsg msg={error} />;
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-lg font-semibold text-fg">Vaccinaties</h2>
+        <button onClick={() => setShowForm(!showForm)} className="text-sm font-medium text-brand-600 hover:text-brand-700">
+          {showForm ? "Annuleren" : "+ Vaccinatie registreren"}
+        </button>
+      </div>
+
+      {showForm && (
+        <div className="bg-raised rounded-xl border border-default p-4 mb-4 space-y-3">
+          <div>
+            <label className="block text-caption font-medium text-fg-muted mb-1">Vaccin</label>
+            <select
+              value={vaccineCode}
+              onChange={(e) => handleSelectVaccin(e.target.value)}
+              className="w-full border border-default rounded-lg px-3 py-2 text-sm bg-raised text-fg"
+            >
+              <option value="">Selecteer vaccin of typ handmatig</option>
+              {VEELGEBRUIKTE_VACCINS.map((v) => (
+                <option key={v.code} value={v.code}>{v.display}</option>
+              ))}
+            </select>
+          </div>
+          <input
+            placeholder="Vaccin naam (vrij invoer)"
+            value={vaccineDisplay}
+            onChange={(e) => setVaccineDisplay(e.target.value)}
+            className="w-full border border-default rounded-lg px-3 py-2 text-sm bg-raised text-fg"
+          />
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-caption font-medium text-fg-muted mb-1">Datum</label>
+              <input
+                type="date"
+                value={datum}
+                onChange={(e) => setDatum(e.target.value)}
+                className="w-full border border-default rounded-lg px-3 py-2 text-sm bg-raised text-fg"
+              />
+            </div>
+            <div>
+              <label className="block text-caption font-medium text-fg-muted mb-1">Lotnummer</label>
+              <input
+                placeholder="Bijv. AB1234"
+                value={lotNummer}
+                onChange={(e) => setLotNummer(e.target.value)}
+                className="w-full border border-default rounded-lg px-3 py-2 text-sm bg-raised text-fg"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="block text-caption font-medium text-fg-muted mb-1">Locatie</label>
+            <select
+              value={locatie}
+              onChange={(e) => setLocatie(e.target.value)}
+              className="w-full border border-default rounded-lg px-3 py-2 text-sm bg-raised text-fg"
+            >
+              <option value="Linker bovenarm">Linker bovenarm</option>
+              <option value="Rechter bovenarm">Rechter bovenarm</option>
+              <option value="Linker bovenbeen">Linker bovenbeen</option>
+              <option value="Rechter bovenbeen">Rechter bovenbeen</option>
+            </select>
+          </div>
+          <textarea
+            placeholder="Opmerking (optioneel)"
+            value={opmerking}
+            onChange={(e) => setOpmerking(e.target.value)}
+            rows={2}
+            className="w-full border border-default rounded-lg px-3 py-2 text-sm bg-raised text-fg"
+          />
+          <button
+            onClick={handleAdd}
+            disabled={saving || !vaccineDisplay.trim()}
+            className="bg-brand-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-brand-700 disabled:opacity-50"
+          >
+            {saving ? "Opslaan..." : "Vaccinatie opslaan"}
+          </button>
+        </div>
+      )}
+
+      {items.length === 0 ? (
+        <p className="text-sm text-fg-subtle py-4">Geen vaccinaties geregistreerd.</p>
+      ) : (
+        <div className="space-y-2">
+          {items.map((v) => (
+            <div key={v.id} className="bg-raised rounded-xl border border-default p-4">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="font-medium text-fg">
+                    {v.vaccineCode?.text ?? v.vaccineCode?.coding?.[0]?.display ?? "Onbekend vaccin"}
+                  </p>
+                  <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1 text-caption text-fg-subtle">
+                    {v.occurrenceDateTime && (
+                      <span>{new Date(v.occurrenceDateTime).toLocaleDateString("nl-NL")}</span>
+                    )}
+                    {v.lotNumber && <span>Lot: {v.lotNumber}</span>}
+                    {v.site?.text && <span>{v.site.text}</span>}
+                    {v.performer?.[0]?.actor?.display && (
+                      <span>Door: {v.performer[0].actor.display}</span>
+                    )}
+                  </div>
+                  {v.note?.[0]?.text && <p className="text-sm text-fg-muted mt-1">{v.note[0].text}</p>}
+                </div>
+                <span className={`shrink-0 px-2 py-0.5 rounded text-caption font-medium ${
+                  v.status === "completed"
+                    ? "bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-300"
+                    : v.status === "not-done"
+                      ? "bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300"
+                      : "bg-surface-100 text-fg-subtle"
+                }`}>
+                  {v.status === "completed" ? "Gegeven" : v.status === "not-done" ? "Niet gegeven" : v.status ?? "—"}
+                </span>
+              </div>
+              {v.status === "not-done" && v.statusReason?.text && (
+                <p className="text-sm text-amber-600 mt-2">Reden: {v.statusReason.text}</p>
               )}
             </div>
           ))}

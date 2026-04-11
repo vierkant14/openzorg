@@ -109,12 +109,28 @@ export async function POST(request: NextRequest) {
       projectId ||
       "";
 
+    // Check if the user is a master admin via the ECD service
+    const ecdUrl = process.env.ECD_SERVICE_URL || "http://localhost:4001";
+    let isMaster = false;
+    try {
+      const checkRes = await fetch(
+        `${ecdUrl}/api/master/check-admin?email=${encodeURIComponent(email.toLowerCase())}`,
+      );
+      if (checkRes.ok) {
+        const checkData = await checkRes.json();
+        isMaster = checkData.isMaster === true;
+      }
+    } catch {
+      // If the check fails, default to false — don't block login
+    }
+
     const response = NextResponse.json({
       success: true,
       accessToken: tokenData.access_token,
       profile: tokenData.profile,
       projectId: resolvedProjectId,
       projectName: tokenData.project?.display || "",
+      isMaster,
     });
     response.cookies.set("medplum_token", tokenData.access_token, {
       httpOnly: true,

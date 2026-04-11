@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 
+import { pool } from "./lib/db.js";
 import { auditMiddleware } from "./middleware/audit.js";
 import { rbacMiddleware } from "./middleware/rbac.js";
 import { tenantMiddleware } from "./middleware/tenant.js";
@@ -18,6 +19,7 @@ import { diagnoseRoutes } from "./routes/diagnose.js";
 import { documentenRoutes } from "./routes/documenten.js";
 import { healthRoutes } from "./routes/health.js";
 import { integratieRoutes } from "./routes/integraties.js";
+import { masterAdminRoutes } from "./routes/master-admins.js";
 import { mdoRoutes } from "./routes/mdo.js";
 import { medewerkerRoutes } from "./routes/medewerkers.js";
 import { medicatieRoutes } from "./routes/medicatie.js";
@@ -29,6 +31,7 @@ import { roosterRoutes } from "./routes/rooster.js";
 import { tenantSettingsRoutes } from "./routes/tenant-settings.js";
 import { tenantRoutes } from "./routes/tenants.js";
 import { toedieningRoutes } from "./routes/toediening.js";
+import { vaccinatieRoutes } from "./routes/vaccinatie.js";
 import { vbmRoutes } from "./routes/vbm.js";
 import { vragenlijstenRoutes } from "./routes/vragenlijsten.js";
 import { zorgplanRoutes } from "./routes/zorgplan.js";
@@ -90,6 +93,9 @@ app.route("/api/clients", risicoscreeningRoutes);
 // Toedienregistratie (MedicationAdministration)
 app.route("/api/clients", toedieningRoutes);
 
+// Vaccinaties (Immunization)
+app.route("/api/clients", vaccinatieRoutes);
+
 // MDO / Overleggen (Encounter)
 app.route("/api/clients", mdoRoutes);
 
@@ -131,9 +137,27 @@ app.route("/api/capaciteit", capaciteitRoutes);
 app.route("/api/docs", apiDocsRoutes);
 app.route("/api/admin/integraties", integratieRoutes);
 
+// Master admin check-admin endpoint (no auth required, called during login)
+app.get("/api/master/check-admin", async (c) => {
+  const email = c.req.query("email");
+  if (!email) {
+    return c.json({ isMaster: false });
+  }
+  const result = await pool.query(
+    "SELECT id FROM openzorg.master_admins WHERE email = $1",
+    [email.toLowerCase()],
+  );
+  return c.json({ isMaster: result.rows.length > 0 });
+});
+
 // Master admin: tenant management (no tenant context required)
 // Protected by X-Master-Key header in production
+// check-admin is exempt (called during login without auth)
 app.use("/api/master/*", async (c, next): Promise<Response | void> => {
+  if (c.req.path.startsWith("/api/master/check-admin")) {
+    await next();
+    return;
+  }
   const masterKey = c.req.header("X-Master-Key");
   const expectedKey = process.env["MASTER_ADMIN_KEY"] || "dev-master-key";
   if (masterKey !== expectedKey) {
@@ -142,3 +166,4 @@ app.use("/api/master/*", async (c, next): Promise<Response | void> => {
   await next();
 });
 app.route("/api/master/tenants", tenantRoutes);
+app.route("/api/master/admins", masterAdminRoutes);

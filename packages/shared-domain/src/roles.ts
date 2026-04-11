@@ -157,6 +157,7 @@ export const ROUTE_PERMISSIONS: ReadonlyArray<{
   { pattern: "/api/clients/*/documenten", GET: "documenten:read", POST: "documenten:write", DELETE: "documenten:write" },
   { pattern: "/api/clients/*/medicatie", GET: "medicatie:read", POST: "medicatie:write", PUT: "medicatie:write", DELETE: "medicatie:write" },
   { pattern: "/api/clients/*/allergieen", GET: "clients:read", POST: "clients:write", DELETE: "clients:write" },
+  { pattern: "/api/clients/*/vaccinaties", GET: "clients:read", POST: "clients:write", PUT: "clients:write", DELETE: "clients:write" },
   { pattern: "/api/clients/*/diagnoses", GET: "clients:read", POST: "clients:write", PUT: "clients:write" },
   { pattern: "/api/clients/*/risicoscreenings", GET: "clients:read", POST: "clients:write" },
   { pattern: "/api/mic-meldingen", GET: "mic:read", POST: "mic:write" },
