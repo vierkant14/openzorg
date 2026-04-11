@@ -48,18 +48,20 @@ export default function WorkflowsAdminPage() {
   async function loadTemplates() {
     const res = await workflowFetch<{ templates: BpmnTemplate[] }>("/api/bpmn-templates");
     if (!res.error && res.data) {
-      setTemplates(res.data.templates);
+      setTemplates(res.data.templates ?? []);
     }
   }
 
   async function loadProcesses() {
     setProcessLoading(true);
-    const res = await workflowFetch<ProcessDefinition[]>("/api/processen");
+    const res = await workflowFetch<{ data: ProcessDefinition[] }>("/api/processen");
     if (res.error) {
       setProcessError(res.error);
       setProcesses([]);
     } else {
-      setProcesses(res.data || []);
+      // Flowable wraps results in { data: [...] }
+      const items = Array.isArray(res.data) ? res.data : (res.data?.data ?? []);
+      setProcesses(items);
     }
     setProcessLoading(false);
   }
@@ -83,14 +85,16 @@ export default function WorkflowsAdminPage() {
     if (!userId.trim()) return;
     setTaskLoading(true);
     setTaskError(null);
-    const res = await workflowFetch<Task[]>(
+    const res = await workflowFetch<{ data: Task[] }>(
       `/api/taken?userId=${encodeURIComponent(userId.trim())}`,
     );
     if (res.error) {
       setTaskError(res.error);
       setTasks([]);
     } else {
-      setTasks(res.data || []);
+      // Flowable wraps results in { data: [...] }
+      const items = Array.isArray(res.data) ? res.data : (res.data?.data ?? []);
+      setTasks(items);
     }
     setTaskLoading(false);
   }
