@@ -1,6 +1,6 @@
-import type { Context, Next } from "hono";
 import { getRequiredPermission, hasPermission } from "@openzorg/shared-domain";
 import type { OpenZorgRole } from "@openzorg/shared-domain";
+import type { Context, Next } from "hono";
 
 import type { AppEnv } from "../app.js";
 

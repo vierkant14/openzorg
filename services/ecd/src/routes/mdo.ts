@@ -16,7 +16,7 @@ export const mdoRoutes = new Hono<AppEnv>();
  * - DocumentReference linked to Encounter for meeting notes
  */
 
-const MDO_STATUSSEN = ["planned", "in-progress", "finished", "cancelled"] as const;
+const _MDO_STATUSSEN = ["planned", "in-progress", "finished", "cancelled"] as const;
 
 /**
  * GET /api/clients/:patientId/mdo — List all MDOs for a patient.

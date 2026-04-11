@@ -1,12 +1,12 @@
 import { Hono } from "hono";
 
 import type { AppEnv } from "../app.js";
-import { searchSnomed } from "../lib/snomed.js";
 import {
   medplumFetch,
   medplumProxy,
   operationOutcome,
 } from "../lib/medplum-client.js";
+import { searchSnomed } from "../lib/snomed.js";
 
 export const codelijstenRoutes = new Hono<AppEnv>();
 
