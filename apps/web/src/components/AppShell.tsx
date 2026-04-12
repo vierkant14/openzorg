@@ -302,6 +302,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             <IconCollapse className={`w-[1.125rem] h-[1.125rem] shrink-0 opacity-80 transition-transform ${collapsed ? "rotate-180" : ""}`} />
             {!collapsed && "Inklappen"}
           </button>
+
+          {/* Version indicator */}
+          {!collapsed && (
+            <p className="px-3 py-1 text-[10px] tracking-wide opacity-40" style={{ color: "var(--color-sidebar-fg-muted)" }}>
+              v{process.env.NEXT_PUBLIC_APP_VERSION || "0.2.0"} · {process.env.NEXT_PUBLIC_GIT_SHA || "dev"}
+            </p>
+          )}
         </div>
       </aside>
 
