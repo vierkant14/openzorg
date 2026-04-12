@@ -21,11 +21,26 @@ export const configuratieRoutes = new Hono<AppEnv>();
 /* ── Helpers ── */
 
 async function getTenantUuid(tenantId: string): Promise<string | null> {
+  // Try matching on medplum_project_id, UUID, or slug
   const res = await pool.query(
     "SELECT id FROM openzorg.tenants WHERE medplum_project_id = $1 OR id::text = $1 OR slug = $1 LIMIT 1",
     [tenantId],
   );
-  return (res.rows[0]?.id as string) ?? null;
+  if (res.rows[0]?.id) return res.rows[0].id as string;
+  // Fallback: if no exact match, try to auto-register the project ID
+  // This handles the case where seed ran but didn't link the Medplum project ID
+  const fallback = await pool.query(
+    "SELECT id FROM openzorg.tenants WHERE medplum_project_id IS NULL OR medplum_project_id = '' LIMIT 1",
+  );
+  if (fallback.rows[0]?.id) {
+    const uuid = fallback.rows[0].id as string;
+    await pool.query(
+      "UPDATE openzorg.tenants SET medplum_project_id = $1 WHERE id = $2",
+      [tenantId, uuid],
+    );
+    return uuid;
+  }
+  return null;
 }
 
 async function loadCustomFields(tenantUuid: string): Promise<CustomFieldDefinition[]> {
@@ -70,7 +85,7 @@ configuratieRoutes.get("/custom-fields", async (c) => {
 configuratieRoutes.post("/custom-fields", async (c) => {
   const tenantId = c.get("tenantId");
   const tenantUuid = await getTenantUuid(tenantId);
-  if (!tenantUuid) return c.json({ error: "Tenant niet gevonden" }, 404);
+  if (!tenantUuid) return c.json({ error: `Tenant niet gevonden voor ID '${tenantId}'. Controleer of de tenant correct is aangemaakt.` }, 404);
 
   const body = await c.req.json<{
     resourceType: string;
@@ -121,7 +136,7 @@ configuratieRoutes.patch("/custom-fields/:id", async (c) => {
   const tenantId = c.get("tenantId");
   const fieldId = c.req.param("id");
   const tenantUuid = await getTenantUuid(tenantId);
-  if (!tenantUuid) return c.json({ error: "Tenant niet gevonden" }, 404);
+  if (!tenantUuid) return c.json({ error: `Tenant niet gevonden voor ID '${tenantId}'. Controleer of de tenant correct is aangemaakt.` }, 404);
 
   const body = await c.req.json<{
     active?: boolean;
@@ -156,7 +171,7 @@ configuratieRoutes.delete("/custom-fields/:id", async (c) => {
   const tenantId = c.get("tenantId");
   const fieldId = c.req.param("id");
   const tenantUuid = await getTenantUuid(tenantId);
-  if (!tenantUuid) return c.json({ error: "Tenant niet gevonden" }, 404);
+  if (!tenantUuid) return c.json({ error: `Tenant niet gevonden voor ID '${tenantId}'. Controleer of de tenant correct is aangemaakt.` }, 404);
 
   const res = await pool.query(
     "DELETE FROM openzorg.tenant_configurations WHERE id = $1 AND tenant_id = $2 AND config_type = 'custom_field'",
@@ -181,7 +196,7 @@ configuratieRoutes.get("/validation-rules", async (c) => {
 configuratieRoutes.post("/validation-rules", async (c) => {
   const tenantId = c.get("tenantId");
   const tenantUuid = await getTenantUuid(tenantId);
-  if (!tenantUuid) return c.json({ error: "Tenant niet gevonden" }, 404);
+  if (!tenantUuid) return c.json({ error: `Tenant niet gevonden voor ID '${tenantId}'. Controleer of de tenant correct is aangemaakt.` }, 404);
 
   const body = await c.req.json<{
     resourceType: string;
@@ -226,7 +241,7 @@ configuratieRoutes.delete("/validation-rules/:id", async (c) => {
   const tenantId = c.get("tenantId");
   const ruleId = c.req.param("id");
   const tenantUuid = await getTenantUuid(tenantId);
-  if (!tenantUuid) return c.json({ error: "Tenant niet gevonden" }, 404);
+  if (!tenantUuid) return c.json({ error: `Tenant niet gevonden voor ID '${tenantId}'. Controleer of de tenant correct is aangemaakt.` }, 404);
 
   const res = await pool.query(
     "DELETE FROM openzorg.tenant_configurations WHERE id = $1 AND tenant_id = $2 AND config_type = 'validation_rule'",

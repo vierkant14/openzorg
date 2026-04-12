@@ -38,6 +38,7 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { href: "/dashboard", label: "Dashboard", icon: IconGrid, permission: null },
       { href: "/berichten", label: "Berichten", icon: IconInbox, permission: "berichten:read" },
+      { href: "/werkbak", label: "Werkbak", icon: IconClipboard, permission: null },
       { href: "/wiki", label: "Wiki", icon: IconBook, permission: null },
     ],
   },
@@ -66,6 +67,7 @@ const NAV_SECTIONS: NavSection[] = [
       { href: "/admin/contracten", label: "Contracten", icon: IconContract, permission: "medewerkers:read" },
       { href: "/admin/configuratie", label: "Configuratie", icon: IconSettings, permission: "configuratie:read" },
       { href: "/admin/codelijsten", label: "Codelijsten", icon: IconList, permission: "configuratie:read" },
+      { href: "/admin/validatie", label: "Validatieregels", icon: IconShield, permission: "configuratie:read" },
       { href: "/admin/workflows", label: "Workflows", icon: IconFlow, permission: "workflows:read" },
       { href: "/admin/rollen", label: "Rollen", icon: IconShield, permission: "rollen:read" },
       { href: "/admin/client-dashboard-config", label: "Client dashboard", icon: IconGrid, permission: "configuratie:read" },
@@ -88,6 +90,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [authChecked, setAuthChecked] = useState(false);
 
+  const [sessionWarning, setSessionWarning] = useState(false);
+
   /* Auth guard — redirect to login if not authenticated */
   useEffect(() => {
     if (!isLoggedIn()) {
@@ -95,6 +99,35 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     } else {
       setAuthChecked(true);
     }
+  }, []);
+
+  /* Session timeout — 15 min inactivity (NEN 7510) */
+  useEffect(() => {
+    const TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
+    const WARNING_MS = 13 * 60 * 1000; // Warning at 13 min
+    let timeoutId: ReturnType<typeof setTimeout>;
+    let warningId: ReturnType<typeof setTimeout>;
+
+    function resetTimer() {
+      setSessionWarning(false);
+      clearTimeout(timeoutId);
+      clearTimeout(warningId);
+      warningId = setTimeout(() => setSessionWarning(true), WARNING_MS);
+      timeoutId = setTimeout(() => {
+        clearSession();
+        window.location.href = "/login?expired=1";
+      }, TIMEOUT_MS);
+    }
+
+    const events = ["mousedown", "keydown", "scroll", "touchstart"] as const;
+    events.forEach((e) => window.addEventListener(e, resetTimer));
+    resetTimer();
+
+    return () => {
+      clearTimeout(timeoutId);
+      clearTimeout(warningId);
+      events.forEach((e) => window.removeEventListener(e, resetTimer));
+    };
   }, []);
 
   const role = getUserRole() as OpenZorgRole;
@@ -306,6 +339,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             </button>
           </div>
         </header>
+
+        {/* Session timeout warning */}
+        {sessionWarning && (
+          <div className="bg-amber-50 dark:bg-amber-950/30 border-b border-amber-200 dark:border-amber-800 px-4 py-2 text-center text-sm text-amber-800 dark:text-amber-200">
+            Je sessie verloopt binnenkort wegens inactiviteit. Klik ergens om je sessie te verlengen.
+          </div>
+        )}
 
         {/* Page content */}
         <main className="flex-1 overflow-y-auto">
@@ -550,6 +590,16 @@ function IconBook({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20" />
+    </svg>
+  );
+}
+
+function IconClipboard({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+      <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
+      <path d="M9 14l2 2 4-4" />
     </svg>
   );
 }

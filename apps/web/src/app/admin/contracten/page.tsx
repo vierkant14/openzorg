@@ -7,6 +7,7 @@ import { ecdFetch } from "../../../lib/api";
 
 interface Contract {
   id: string;
+  resourceType?: string;
   practitioner?: { reference?: string; display?: string };
   organization?: { reference?: string; display?: string };
   code?: Array<{ text?: string }>;
@@ -44,8 +45,10 @@ const CONTRACT_TYPES = [
   { value: "vrijwilliger", label: "Vrijwilliger" },
 ];
 
+const CONTRACT_EXT_URL = "https://openzorg.nl/extensions/contract";
+
 function getContractExt(contract: Contract) {
-  const ext = contract.extension?.find((e) => e.url === "https://openzorg.nl/extensions/contract");
+  const ext = contract.extension?.find((e) => e.url === CONTRACT_EXT_URL);
   return {
     type: ext?.extension?.find((e) => e.url === "type")?.valueString ?? "—",
     fte: ext?.extension?.find((e) => e.url === "fte")?.valueDecimal ?? 0,
@@ -58,6 +61,7 @@ export default function ContractenPage() {
   const [samenvatting, setSamenvatting] = useState<Samenvatting | null>(null);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Lookups
   const [medewerkers, setMedewerkers] = useState<Medewerker[]>([]);
@@ -73,7 +77,17 @@ export default function ContractenPage() {
   const [einddatum, setEinddatum] = useState("");
   const [functie, setFunctie] = useState("");
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+
+  // Edit state
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editType, setEditType] = useState("");
+  const [editFte, setEditFte] = useState("");
+  const [editUren, setEditUren] = useState("");
+  const [editEinddatum, setEditEinddatum] = useState("");
+  const [editSaving, setEditSaving] = useState(false);
+
+  // Delete confirmation
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -127,6 +141,78 @@ export default function ContractenPage() {
     load();
   }
 
+  function startEdit(contract: Contract) {
+    const ext = getContractExt(contract);
+    setEditingId(contract.id);
+    setEditType(ext.type);
+    setEditFte(String(ext.fte));
+    setEditUren(String(ext.uren));
+    setEditEinddatum(contract.period?.end ?? "");
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+  }
+
+  async function saveEdit(contract: Contract) {
+    setEditSaving(true);
+    setError(null);
+
+    const updatedResource: Record<string, unknown> = {
+      resourceType: "PractitionerRole",
+      id: contract.id,
+      active: contract.active,
+      practitioner: contract.practitioner,
+      organization: contract.organization,
+      code: contract.code,
+      period: {
+        start: contract.period?.start,
+        ...(editEinddatum ? { end: editEinddatum } : {}),
+      },
+      extension: [
+        {
+          url: CONTRACT_EXT_URL,
+          extension: [
+            { url: "type", valueString: editType },
+            { url: "fte", valueDecimal: parseFloat(editFte) },
+            { url: "urenPerWeek", valueDecimal: parseFloat(editUren) },
+          ],
+        },
+      ],
+    };
+
+    const { error: err } = await ecdFetch(`/api/contracten/${contract.id}`, {
+      method: "PUT",
+      body: JSON.stringify(updatedResource),
+    });
+
+    setEditSaving(false);
+
+    if (err) {
+      setError(err);
+      return;
+    }
+
+    setEditingId(null);
+    await load();
+  }
+
+  async function handleDelete(id: string) {
+    setError(null);
+    const { error: err } = await ecdFetch(`/api/contracten/${id}`, {
+      method: "DELETE",
+    });
+    setDeletingId(null);
+    if (err) {
+      setError(err);
+      return;
+    }
+    await load();
+  }
+
+  const inputClassInline =
+    "border border-default bg-raised rounded-lg px-3 py-2 text-body-sm text-fg outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500";
+
   return (
     <AppShell>
       <div className="px-6 lg:px-10 py-8 max-w-[1400px] mx-auto">
@@ -136,10 +222,16 @@ export default function ContractenPage() {
             <p className="text-body text-fg-muted mt-1">Beheer medewerkercontracten, FTE en uren.</p>
           </div>
           <button onClick={() => setShowForm(!showForm)}
-            className="px-5 py-2.5 bg-brand-600 text-white text-body-sm font-semibold rounded-xl hover:bg-brand-700 transition-colors">
+            className="rounded-md bg-brand-700 px-5 py-2.5 text-white text-body-sm font-semibold hover:bg-brand-800 transition-colors btn-press">
             {showForm ? "Annuleren" : "+ Nieuw contract"}
           </button>
         </div>
+
+        {error && (
+          <div className="p-3 bg-coral-50 border border-coral-200 rounded-lg text-coral-600 text-sm mb-6">
+            {error}
+          </div>
+        )}
 
         {/* Stats */}
         {samenvatting && (
@@ -219,9 +311,8 @@ export default function ContractenPage() {
                 <p className="text-caption text-fg-subtle mt-1">Leeg = onbepaalde tijd</p>
               </div>
             </div>
-            {error && <p className="text-body-sm text-coral-600">{error}</p>}
             <button type="submit" disabled={saving}
-              className="bg-brand-600 text-white px-6 py-3 rounded-xl text-body-sm font-semibold hover:bg-brand-700 disabled:opacity-50 transition-colors">
+              className="rounded-md bg-brand-700 text-white px-6 py-3 text-body-sm font-semibold hover:bg-brand-800 disabled:opacity-50 transition-colors btn-press">
               {saving ? "Opslaan..." : "Contract aanmaken"}
             </button>
           </form>
@@ -249,11 +340,92 @@ export default function ContractenPage() {
                   <th className="text-left px-6 py-3.5 text-overline text-fg-subtle uppercase tracking-wider font-semibold hidden md:table-cell">Functie</th>
                   <th className="text-left px-6 py-3.5 text-overline text-fg-subtle uppercase tracking-wider font-semibold hidden lg:table-cell">Periode</th>
                   <th className="text-left px-6 py-3.5 text-overline text-fg-subtle uppercase tracking-wider font-semibold">Status</th>
+                  <th className="text-left px-6 py-3.5 text-overline text-fg-subtle uppercase tracking-wider font-semibold">Acties</th>
                 </tr>
               </thead>
               <tbody>
                 {contracts.map((contract) => {
                   const ext = getContractExt(contract);
+                  const isEditing = editingId === contract.id;
+                  const isDeleting = deletingId === contract.id;
+
+                  if (isEditing) {
+                    return (
+                      <tr key={contract.id} className="border-b border-subtle last:border-0 bg-surface-50 dark:bg-surface-900">
+                        <td className="px-6 py-4 font-medium text-fg">{contract.practitioner?.display ?? "—"}</td>
+                        <td className="px-6 py-4">
+                          <select
+                            value={editType}
+                            onChange={(e) => setEditType(e.target.value)}
+                            className={`${inputClassInline} w-24`}
+                          >
+                            {CONTRACT_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+                          </select>
+                        </td>
+                        <td className="px-6 py-4">
+                          <input
+                            type="number"
+                            step="0.1"
+                            min="0"
+                            max="1"
+                            value={editFte}
+                            onChange={(e) => setEditFte(e.target.value)}
+                            className={`${inputClassInline} w-20`}
+                          />
+                        </td>
+                        <td className="px-6 py-4">
+                          <input
+                            type="number"
+                            min="0"
+                            max="60"
+                            value={editUren}
+                            onChange={(e) => setEditUren(e.target.value)}
+                            className={`${inputClassInline} w-20`}
+                          />
+                        </td>
+                        <td className="px-6 py-4 text-fg-muted hidden md:table-cell">{contract.code?.[0]?.text ?? "—"}</td>
+                        <td className="px-6 py-4 hidden lg:table-cell">
+                          <div className="flex items-center gap-1 text-caption text-fg-subtle">
+                            <span>{contract.period?.start ? new Date(contract.period.start).toLocaleDateString("nl-NL") : "—"}</span>
+                            <span>t/m</span>
+                            <input
+                              type="date"
+                              value={editEinddatum}
+                              onChange={(e) => setEditEinddatum(e.target.value)}
+                              className={`${inputClassInline} w-36`}
+                            />
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          {contract.active !== false ? (
+                            <span className="inline-flex items-center gap-1.5 text-caption font-medium text-brand-600">
+                              <span className="w-1.5 h-1.5 rounded-full bg-brand-500" /> Actief
+                            </span>
+                          ) : (
+                            <span className="text-caption text-fg-subtle">Beeindigd</span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => saveEdit(contract)}
+                              disabled={editSaving}
+                              className="text-brand-700 hover:text-brand-900 text-xs font-medium btn-press-sm"
+                            >
+                              {editSaving ? "Opslaan..." : "Opslaan"}
+                            </button>
+                            <button
+                              onClick={cancelEdit}
+                              className="text-fg-muted hover:text-fg text-xs font-medium btn-press-sm"
+                            >
+                              Annuleren
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  }
+
                   return (
                     <tr key={contract.id} className="border-b border-subtle last:border-0 hover:bg-sunken transition-colors">
                       <td className="px-6 py-4 font-medium text-fg">{contract.practitioner?.display ?? "—"}</td>
@@ -276,6 +448,40 @@ export default function ContractenPage() {
                           </span>
                         ) : (
                           <span className="text-caption text-fg-subtle">Beeindigd</span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4">
+                        {isDeleting ? (
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-fg-muted">Verwijderen?</span>
+                            <button
+                              onClick={() => handleDelete(contract.id)}
+                              className="text-coral-600 hover:text-coral-800 text-xs font-medium btn-press-sm"
+                            >
+                              Ja
+                            </button>
+                            <button
+                              onClick={() => setDeletingId(null)}
+                              className="text-fg-muted hover:text-fg text-xs font-medium btn-press-sm"
+                            >
+                              Nee
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => startEdit(contract)}
+                              className="text-brand-700 hover:text-brand-900 text-xs font-medium btn-press-sm"
+                            >
+                              Bewerken
+                            </button>
+                            <button
+                              onClick={() => setDeletingId(contract.id)}
+                              className="text-coral-600 hover:text-coral-800 text-xs font-medium btn-press-sm"
+                            >
+                              Verwijderen
+                            </button>
+                          </div>
                         )}
                       </td>
                     </tr>

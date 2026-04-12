@@ -107,6 +107,18 @@ export default function WachtlijstPage() {
   const [inplannenError, setInplannenError] = useState<string | null>(null);
   const [inplannenSubmitting, setInplannenSubmitting] = useState(false);
 
+  // Edit state
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editPrioriteit, setEditPrioriteit] = useState<Prioriteit>("routine");
+  const [editReden, setEditReden] = useState("");
+  const [editNotitie, setEditNotitie] = useState("");
+  const [editError, setEditError] = useState<string | null>(null);
+  const [editSubmitting, setEditSubmitting] = useState(false);
+
+  // Delete state
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [deleteSubmitting, setDeleteSubmitting] = useState(false);
+
   const fetchEntries = useCallback(() => {
     setLoading(true);
     planningFetch<FhirBundle<FhirServiceRequest>>("/api/wachtlijst").then((res) => {
@@ -227,6 +239,57 @@ export default function WachtlijstPage() {
       fetchEntries();
     }
     setInplannenSubmitting(false);
+  }
+
+  function openEdit(entry: FhirServiceRequest) {
+    setEditingId(entry.id ?? null);
+    setEditPrioriteit(getPrioriteit(entry));
+    setEditReden(entry.code?.text ?? entry.code?.coding?.[0]?.display ?? "");
+    setEditNotitie(entry.note?.[0]?.text ?? "");
+    setEditError(null);
+  }
+
+  async function handleEdit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editingId) return;
+    setEditError(null);
+    setEditSubmitting(true);
+
+    const body: Record<string, unknown> = {
+      priority: editPrioriteit,
+      code: { text: editReden.trim() || undefined },
+      note: editNotitie.trim() ? [{ text: editNotitie.trim() }] : [],
+    };
+
+    const res = await planningFetch(`/api/wachtlijst/${editingId}`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    });
+
+    if (res.error) {
+      setEditError(res.error);
+    } else {
+      setEditingId(null);
+      fetchEntries();
+    }
+    setEditSubmitting(false);
+  }
+
+  async function handleDelete() {
+    if (!deleteId) return;
+    setDeleteSubmitting(true);
+
+    const res = await planningFetch(`/api/wachtlijst/${deleteId}`, {
+      method: "DELETE",
+    });
+
+    if (res.error) {
+      setError(res.error);
+    } else {
+      setDeleteId(null);
+      fetchEntries();
+    }
+    setDeleteSubmitting(false);
   }
 
   function openInplannen(id: string) {
@@ -418,9 +481,21 @@ export default function WachtlijstPage() {
                         <div className="flex items-center gap-3">
                           <button
                             onClick={() => entry.id && openInplannen(entry.id)}
-                            className="rounded-md bg-brand-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-700"
+                            className="rounded-md bg-brand-700 px-3 py-1.5 text-xs font-medium text-white shadow-sm hover:bg-brand-800 btn-press"
                           >
                             Omzetten naar afspraak
+                          </button>
+                          <button
+                            onClick={() => openEdit(entry)}
+                            className="text-brand-600 hover:text-brand-800 text-xs font-medium btn-press"
+                          >
+                            Bewerken
+                          </button>
+                          <button
+                            onClick={() => setDeleteId(entry.id ?? null)}
+                            className="text-coral-600 hover:text-coral-800 text-xs font-medium btn-press"
+                          >
+                            Verwijderen
                           </button>
                           <Link
                             href={`/planning/nieuw?client=${encodeURIComponent(entry.subject?.reference ?? "")}`}
@@ -435,6 +510,121 @@ export default function WachtlijstPage() {
                 })}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {/* Bewerken modal */}
+        {editingId && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+            <div className="w-full max-w-lg rounded-lg bg-raised p-6 shadow-xl">
+              <h3 className="text-lg font-semibold text-fg mb-4">
+                Wachtlijst-registratie bewerken
+              </h3>
+
+              <p className="text-sm text-fg-muted mb-4">
+                Client:{" "}
+                <span className="font-medium">
+                  {clientNaam(entries.find((e) => e.id === editingId) ?? {} as FhirServiceRequest)}
+                </span>
+              </p>
+
+              <form onSubmit={handleEdit} className="space-y-4">
+                {editError && (
+                  <div className="bg-coral-50 border border-coral-200 text-coral-600 rounded p-3 text-sm">
+                    {editError}
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-sm font-medium text-fg-muted mb-1">
+                    Prioriteit
+                  </label>
+                  <select
+                    value={editPrioriteit}
+                    onChange={(e) => setEditPrioriteit(e.target.value as Prioriteit)}
+                    className="w-full border border-default rounded px-3 py-2 text-sm"
+                  >
+                    <option value="urgent">Urgent</option>
+                    <option value="asap">Normaal</option>
+                    <option value="routine">Laag</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-fg-muted mb-1">
+                    Reden
+                  </label>
+                  <input
+                    type="text"
+                    value={editReden}
+                    onChange={(e) => setEditReden(e.target.value)}
+                    className="w-full border border-default rounded px-3 py-2 text-sm"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-fg-muted mb-1">
+                    Notitie
+                  </label>
+                  <textarea
+                    value={editNotitie}
+                    onChange={(e) => setEditNotitie(e.target.value)}
+                    rows={3}
+                    className="w-full border border-default rounded px-3 py-2 text-sm"
+                  />
+                </div>
+
+                <div className="flex justify-end gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditingId(null)}
+                    className="px-4 py-2 text-sm font-medium text-fg-muted border border-default rounded hover:bg-sunken btn-press"
+                  >
+                    Annuleren
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={editSubmitting}
+                    className="rounded-md bg-brand-700 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-800 btn-press disabled:opacity-50"
+                  >
+                    {editSubmitting ? "Opslaan..." : "Opslaan"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Verwijderen bevestiging */}
+        {deleteId && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+            <div className="w-full max-w-md rounded-lg bg-raised p-6 shadow-xl">
+              <h3 className="text-lg font-semibold text-fg mb-2">
+                Verwijderen bevestigen
+              </h3>
+              <p className="text-sm text-fg-muted mb-6">
+                Weet u zeker dat u de wachtlijst-registratie van{" "}
+                <span className="font-medium">
+                  {clientNaam(entries.find((e) => e.id === deleteId) ?? {} as FhirServiceRequest)}
+                </span>{" "}
+                wilt verwijderen? Dit kan niet ongedaan worden gemaakt.
+              </p>
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={() => setDeleteId(null)}
+                  className="px-4 py-2 text-sm font-medium text-fg-muted border border-default rounded hover:bg-sunken btn-press"
+                >
+                  Annuleren
+                </button>
+                <button
+                  onClick={handleDelete}
+                  disabled={deleteSubmitting}
+                  className="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-red-700 btn-press disabled:opacity-50"
+                >
+                  {deleteSubmitting ? "Verwijderen..." : "Verwijderen"}
+                </button>
+              </div>
+            </div>
           </div>
         )}
 

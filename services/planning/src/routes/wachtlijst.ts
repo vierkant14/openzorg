@@ -14,8 +14,10 @@ interface WachtlijstBody {
   resourceType?: string;
   status?: string;
   intent?: string;
+  priority?: string;
   subject?: { reference?: string };
   performer?: Array<{ reference?: string }>;
+  code?: { text?: string; coding?: Array<{ display?: string }> };
   note?: Array<{ text?: string }>;
   [key: string]: unknown;
 }
@@ -63,6 +65,48 @@ wachtlijstRoutes.post("/", async (c) => {
   return medplumProxy(c, "/fhir/R4/ServiceRequest", {
     method: "POST",
     body: JSON.stringify(resource),
+  });
+});
+
+/**
+ * PUT /api/wachtlijst/:id — Update a waiting list entry (priority, reason, note).
+ */
+wachtlijstRoutes.put("/:id", async (c) => {
+  const id = c.req.param("id");
+  const body = await c.req.json<WachtlijstBody>();
+
+  const current = await medplumFetch(c, `/fhir/R4/ServiceRequest/${id}`);
+  if (!current.ok) {
+    return proxyMedplumResponse(c, current);
+  }
+
+  const serviceRequest = (await current.json()) as Record<string, unknown>;
+
+  if (serviceRequest["status"] !== "draft") {
+    return c.json(
+      operationOutcome(
+        "error",
+        "business-rule",
+        "Alleen wachtlijst-items met status 'draft' kunnen worden bewerkt",
+      ),
+      400,
+    );
+  }
+
+  // Update allowed fields
+  if (body.priority !== undefined) {
+    serviceRequest["priority"] = body.priority;
+  }
+  if (body.note !== undefined) {
+    serviceRequest["note"] = body.note;
+  }
+  if (body.code !== undefined) {
+    serviceRequest["code"] = body.code;
+  }
+
+  return medplumProxy(c, `/fhir/R4/ServiceRequest/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(serviceRequest),
   });
 });
 

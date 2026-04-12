@@ -107,10 +107,38 @@ clientRoutes.post("/", async (c) => {
     identifier: updatedIdentifiers,
   };
 
-  return medplumProxy(c, "/fhir/R4/Patient", {
+  // Create the patient via medplumFetch so we can extract the ID for workflow trigger
+  const result = await medplumFetch(c, "/fhir/R4/Patient", {
     method: "POST",
+    headers: { "Content-Type": "application/fhir+json" },
     body: JSON.stringify(patientBody),
   });
+
+  const resultBody = await result.json() as Record<string, unknown> & { id?: string; name?: Array<{ given?: string[]; family?: string }> };
+
+  // Fire-and-forget: start intake workflow for the new patient
+  if (result.ok && resultBody.id) {
+    const tenantId = c.get("tenantId");
+    const patientName = (resultBody.name?.[0]?.given?.[0] ?? "") + " " + (resultBody.name?.[0]?.family ?? "");
+    const workflowUrl = process.env.WORKFLOW_BRIDGE_URL || "http://localhost:4003";
+    try {
+      await fetch(`${workflowUrl}/api/processen/intake-proces/start`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Tenant-ID": tenantId },
+        body: JSON.stringify({
+          variables: [
+            { name: "clientId", value: resultBody.id },
+            { name: "clientNaam", value: patientName.trim() },
+            { name: "tenantId", value: tenantId },
+          ],
+        }),
+      });
+    } catch {
+      // Workflow failure should never block patient creation
+    }
+  }
+
+  return c.json(resultBody, result.ok ? 201 : result.status as 400);
 });
 
 /**

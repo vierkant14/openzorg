@@ -5,6 +5,7 @@ import {
   medplumFetch,
   medplumProxy,
   operationOutcome,
+  proxyMedplumResponse,
 } from "../lib/medplum-client.js";
 
 export const organisatieRoutes = new Hono<AppEnv>();
@@ -108,5 +109,38 @@ organisatieRoutes.post("/locaties", async (c) => {
   return medplumProxy(c, "/fhir/R4/Organization", {
     method: "POST",
     body: JSON.stringify(resource),
+  });
+});
+
+/**
+ * PUT /api/organisatie/:id — Update an Organization resource.
+ */
+organisatieRoutes.put("/:id", async (c) => {
+  const id = c.req.param("id");
+  const body = await c.req.json<Record<string, unknown>>();
+
+  return medplumProxy(c, `/fhir/R4/Organization/${id}`, {
+    method: "PUT",
+    body: JSON.stringify({ ...body, resourceType: "Organization", id }),
+  });
+});
+
+/**
+ * DELETE /api/organisatie/:id — Soft delete: sets Organization.active = false.
+ */
+organisatieRoutes.delete("/:id", async (c) => {
+  const id = c.req.param("id");
+
+  const current = await medplumFetch(c, `/fhir/R4/Organization/${id}`);
+  if (!current.ok) {
+    return proxyMedplumResponse(c, current);
+  }
+
+  const org = (await current.json()) as Record<string, unknown>;
+  org["active"] = false;
+
+  return medplumProxy(c, `/fhir/R4/Organization/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(org),
   });
 });

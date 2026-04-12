@@ -103,6 +103,17 @@ export default function OrganisatiePage() {
   const [parentId, setParentId] = useState("");
   const [saving, setSaving] = useState(false);
 
+  // Edit state
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editNaam, setEditNaam] = useState("");
+  const [editType, setEditType] = useState("");
+  const [editAdres, setEditAdres] = useState("");
+  const [editTelefoon, setEditTelefoon] = useState("");
+  const [editSaving, setEditSaving] = useState(false);
+
+  // Delete confirmation
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
   async function loadOrganisaties() {
     setLoading(true);
     const { data, error: err, status } = await ecdFetch<OrganizationBundle>("/api/organisatie");
@@ -147,12 +158,88 @@ export default function OrganisatiePage() {
     await loadOrganisaties();
   }
 
+  function startEdit(org: Organization) {
+    setEditingId(org.id);
+    setEditNaam(org.name ?? "");
+    setEditType(getLocatieType(org));
+    setEditAdres(getAdres(org));
+    setEditTelefoon(getTelefoon(org));
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+  }
+
+  async function saveEdit(org: Organization) {
+    setEditSaving(true);
+    setError(null);
+
+    const telecom: Array<{ system: string; value: string }> = [];
+    if (editTelefoon) {
+      telecom.push({ system: "phone", value: editTelefoon });
+    }
+
+    const address: Array<{ text: string }> = [];
+    if (editAdres) {
+      address.push({ text: editAdres });
+    }
+
+    const updatedResource: Record<string, unknown> = {
+      resourceType: "Organization",
+      id: org.id,
+      active: org.active,
+      name: editNaam,
+      ...(org.partOf ? { partOf: org.partOf } : {}),
+      type: [
+        {
+          coding: [
+            {
+              system: "https://openzorg.nl/fhir/CodeSystem/locatie-type",
+              code: editType,
+              display: editType,
+            },
+          ],
+        },
+      ],
+      ...(telecom.length > 0 ? { telecom } : {}),
+      ...(address.length > 0 ? { address } : {}),
+    };
+
+    const { error: err } = await ecdFetch(`/api/organisatie/${org.id}`, {
+      method: "PUT",
+      body: JSON.stringify(updatedResource),
+    });
+
+    setEditSaving(false);
+
+    if (err) {
+      setError(err);
+      return;
+    }
+
+    setEditingId(null);
+    await loadOrganisaties();
+  }
+
+  async function handleDelete(id: string) {
+    setError(null);
+    const { error: err } = await ecdFetch(`/api/organisatie/${id}`, {
+      method: "DELETE",
+    });
+    setDeletingId(null);
+    if (err) {
+      setError(err);
+      return;
+    }
+    await loadOrganisaties();
+  }
+
   const tree = buildTree(organizations);
 
   const inputClass =
     "w-full rounded-md border border-default px-3 py-2 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none";
   const btnPrimary =
-    "px-4 py-2 text-sm font-medium text-white bg-brand-700 rounded-md hover:bg-brand-800 disabled:opacity-50";
+    "rounded-md bg-brand-700 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-800 btn-press";
 
   return (
     <AppShell>
@@ -187,7 +274,28 @@ export default function OrganisatiePage() {
           ) : (
             <div className="space-y-1">
               {tree.map((node) => (
-                <TreeNode key={node.org.id} node={node} depth={0} />
+                <TreeNode
+                  key={node.org.id}
+                  node={node}
+                  depth={0}
+                  editingId={editingId}
+                  deletingId={deletingId}
+                  editNaam={editNaam}
+                  editType={editType}
+                  editAdres={editAdres}
+                  editTelefoon={editTelefoon}
+                  editSaving={editSaving}
+                  setEditNaam={setEditNaam}
+                  setEditType={setEditType}
+                  setEditAdres={setEditAdres}
+                  setEditTelefoon={setEditTelefoon}
+                  onStartEdit={startEdit}
+                  onCancelEdit={cancelEdit}
+                  onSaveEdit={saveEdit}
+                  onStartDelete={setDeletingId}
+                  onCancelDelete={() => setDeletingId(null)}
+                  onConfirmDelete={handleDelete}
+                />
               ))}
             </div>
           )}
@@ -281,7 +389,7 @@ export default function OrganisatiePage() {
               <button
                 type="submit"
                 disabled={saving || !parentId}
-                className={btnPrimary}
+                className={`${btnPrimary} disabled:opacity-50`}
               >
                 {saving ? "Opslaan..." : "Locatie toevoegen"}
               </button>
@@ -295,16 +403,63 @@ export default function OrganisatiePage() {
 
 /* ---------- Tree component ---------- */
 
-function TreeNode({ node, depth }: { node: OrgTreeNode; depth: number }) {
+interface TreeNodeProps {
+  node: OrgTreeNode;
+  depth: number;
+  editingId: string | null;
+  deletingId: string | null;
+  editNaam: string;
+  editType: string;
+  editAdres: string;
+  editTelefoon: string;
+  editSaving: boolean;
+  setEditNaam: (v: string) => void;
+  setEditType: (v: string) => void;
+  setEditAdres: (v: string) => void;
+  setEditTelefoon: (v: string) => void;
+  onStartEdit: (org: Organization) => void;
+  onCancelEdit: () => void;
+  onSaveEdit: (org: Organization) => void;
+  onStartDelete: (id: string) => void;
+  onCancelDelete: () => void;
+  onConfirmDelete: (id: string) => void;
+}
+
+function TreeNode({
+  node,
+  depth,
+  editingId,
+  deletingId,
+  editNaam,
+  editType,
+  editAdres,
+  editTelefoon,
+  editSaving,
+  setEditNaam,
+  setEditType,
+  setEditAdres,
+  setEditTelefoon,
+  onStartEdit,
+  onCancelEdit,
+  onSaveEdit,
+  onStartDelete,
+  onCancelDelete,
+  onConfirmDelete,
+}: TreeNodeProps) {
   const org = node.org;
   const locType = getLocatieType(org);
   const tel = getTelefoon(org);
   const addr = getAdres(org);
+  const isEditing = editingId === org.id;
+  const isDeleting = deletingId === org.id;
+
+  const inlineInputClass =
+    "rounded-md border border-default px-2 py-1 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none";
 
   return (
     <div>
       <div
-        className="flex items-center gap-3 py-2 px-3 rounded hover:bg-sunken"
+        className={`flex items-center gap-3 py-2 px-3 rounded hover:bg-sunken ${isEditing ? "bg-surface-50 dark:bg-surface-900" : ""}`}
         style={{ paddingLeft: `${depth * 24 + 12}px` }}
       >
         <span className="text-fg-subtle">
@@ -319,28 +474,142 @@ function TreeNode({ node, depth }: { node: OrgTreeNode; depth: number }) {
             </svg>
           )}
         </span>
-        <div className="flex-1 min-w-0">
-          <span className="font-medium text-sm text-fg">
-            {org.name ?? "(naamloos)"}
-          </span>
-          <div className="flex items-center gap-3 text-xs text-fg-subtle">
-            {locType && <span>{locType}</span>}
-            {addr && <span>{addr}</span>}
-            {tel && <span>{tel}</span>}
+
+        {isEditing ? (
+          <div className="flex-1 min-w-0 space-y-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              <input
+                type="text"
+                value={editNaam}
+                onChange={(e) => setEditNaam(e.target.value)}
+                placeholder="Naam"
+                className={`${inlineInputClass} w-40`}
+              />
+              <select
+                value={editType}
+                onChange={(e) => setEditType(e.target.value)}
+                className={`${inlineInputClass} w-36`}
+              >
+                {LOCATIE_TYPES.map((t) => (
+                  <option key={t} value={t}>
+                    {t.charAt(0).toUpperCase() + t.slice(1).replace("-", " ")}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="text"
+                value={editAdres}
+                onChange={(e) => setEditAdres(e.target.value)}
+                placeholder="Adres"
+                className={`${inlineInputClass} w-48`}
+              />
+              <input
+                type="tel"
+                value={editTelefoon}
+                onChange={(e) => setEditTelefoon(e.target.value)}
+                placeholder="Telefoon"
+                className={`${inlineInputClass} w-32`}
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => onSaveEdit(org)}
+                disabled={editSaving}
+                className="text-brand-700 hover:text-brand-900 text-xs font-medium btn-press-sm"
+              >
+                {editSaving ? "Opslaan..." : "Opslaan"}
+              </button>
+              <button
+                onClick={onCancelEdit}
+                className="text-fg-muted hover:text-fg text-xs font-medium btn-press-sm"
+              >
+                Annuleren
+              </button>
+            </div>
           </div>
-        </div>
-        <span
-          className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
-            org.active !== false
-              ? "bg-brand-50 text-brand-700"
-              : "bg-gray-100 text-fg-subtle"
-          }`}
-        >
-          {org.active !== false ? "Actief" : "Inactief"}
-        </span>
+        ) : (
+          <div className="flex-1 min-w-0">
+            <span className="font-medium text-sm text-fg">
+              {org.name ?? "(naamloos)"}
+            </span>
+            <div className="flex items-center gap-3 text-xs text-fg-subtle">
+              {locType && <span>{locType}</span>}
+              {addr && <span>{addr}</span>}
+              {tel && <span>{tel}</span>}
+            </div>
+          </div>
+        )}
+
+        {!isEditing && (
+          <div className="flex items-center gap-2">
+            <span
+              className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                org.active !== false
+                  ? "bg-brand-50 text-brand-700"
+                  : "bg-surface-100 dark:bg-surface-800 text-fg-subtle"
+              }`}
+            >
+              {org.active !== false ? "Actief" : "Inactief"}
+            </span>
+
+            {isDeleting ? (
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-fg-muted">Verwijderen?</span>
+                <button
+                  onClick={() => onConfirmDelete(org.id)}
+                  className="text-coral-600 hover:text-coral-800 text-xs font-medium btn-press-sm"
+                >
+                  Ja
+                </button>
+                <button
+                  onClick={onCancelDelete}
+                  className="text-fg-muted hover:text-fg text-xs font-medium btn-press-sm"
+                >
+                  Nee
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => onStartEdit(org)}
+                  className="text-brand-700 hover:text-brand-900 text-xs font-medium btn-press-sm"
+                >
+                  Bewerken
+                </button>
+                <button
+                  onClick={() => onStartDelete(org.id)}
+                  className="text-coral-600 hover:text-coral-800 text-xs font-medium btn-press-sm"
+                >
+                  Verwijderen
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
       {node.children.map((child) => (
-        <TreeNode key={child.org.id} node={child} depth={depth + 1} />
+        <TreeNode
+          key={child.org.id}
+          node={child}
+          depth={depth + 1}
+          editingId={editingId}
+          deletingId={deletingId}
+          editNaam={editNaam}
+          editType={editType}
+          editAdres={editAdres}
+          editTelefoon={editTelefoon}
+          editSaving={editSaving}
+          setEditNaam={setEditNaam}
+          setEditType={setEditType}
+          setEditAdres={setEditAdres}
+          setEditTelefoon={setEditTelefoon}
+          onStartEdit={onStartEdit}
+          onCancelEdit={onCancelEdit}
+          onSaveEdit={onSaveEdit}
+          onStartDelete={onStartDelete}
+          onCancelDelete={onCancelDelete}
+          onConfirmDelete={onConfirmDelete}
+        />
       ))}
     </div>
   );

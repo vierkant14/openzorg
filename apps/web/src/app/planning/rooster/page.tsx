@@ -121,12 +121,12 @@ export default function RoosterPage() {
   const weekDays = getWeekDays(baseDate);
 
   const loadPractitioners = useCallback(async () => {
-    const { data, error: err } = await ecdFetch<PractitionerBundle>(
+    const { data, error: err, status } = await ecdFetch<PractitionerBundle>(
       "/api/medewerkers?_count=50&_sort=name",
     );
     if (err) {
-      setError(err);
-      return [];
+      setError(status === 0 ? err : null);
+      if (status === 0) return [];
     }
     const pracs = (data?.entry?.map((e) => e.resource) ?? []).filter((p) => p.active !== false);
     setPractitioners(pracs);

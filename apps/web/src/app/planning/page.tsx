@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import AppShell from "../../components/AppShell";
 import { planningFetch } from "../../lib/planning-api";
@@ -55,7 +55,20 @@ export default function PlanningPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  // Edit state
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editStart, setEditStart] = useState("");
+  const [editEnd, setEditEnd] = useState("");
+  const [editPractitioner, setEditPractitioner] = useState("");
+  const [editStatus, setEditStatus] = useState("booked");
+  const [editError, setEditError] = useState<string | null>(null);
+  const [editSubmitting, setEditSubmitting] = useState(false);
+
+  // Cancel state
+  const [cancelId, setCancelId] = useState<string | null>(null);
+  const [cancelSubmitting, setCancelSubmitting] = useState(false);
+
+  const fetchAppointments = useCallback(() => {
     setLoading(true);
     setError(null);
     planningFetch<FhirBundle>(`/api/afspraken?date=${date}`).then((res) => {
@@ -70,6 +83,86 @@ export default function PlanningPage() {
       setLoading(false);
     });
   }, [date]);
+
+  useEffect(() => {
+    fetchAppointments();
+  }, [fetchAppointments]);
+
+  function openEdit(appt: AppointmentResource) {
+    setEditingId(appt.id);
+    setEditStart(appt.start ? new Date(appt.start).toISOString().slice(0, 16) : "");
+    setEditEnd(appt.end ? new Date(appt.end).toISOString().slice(0, 16) : "");
+    setEditPractitioner(
+      appt.participant.find((p) => p.actor.reference.startsWith("Practitioner"))?.actor.reference.replace("Practitioner/", "") ?? "",
+    );
+    setEditStatus(appt.status);
+    setEditError(null);
+  }
+
+  async function handleEdit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editingId) return;
+    setEditError(null);
+
+    const currentAppt = appointments.find((a) => a.id === editingId);
+    if (!currentAppt) return;
+
+    if (!editStart || !editEnd) {
+      setEditError("Start- en eindtijd zijn verplicht.");
+      return;
+    }
+
+    setEditSubmitting(true);
+
+    // Build updated participant list — replace practitioner, keep rest
+    const updatedParticipants = currentAppt.participant.map((p) => {
+      if (p.actor.reference.startsWith("Practitioner")) {
+        return {
+          ...p,
+          actor: { reference: `Practitioner/${editPractitioner.trim()}`, display: p.actor.display },
+        };
+      }
+      return p;
+    });
+
+    const body = {
+      ...currentAppt,
+      start: new Date(editStart).toISOString(),
+      end: new Date(editEnd).toISOString(),
+      status: editStatus,
+      participant: updatedParticipants,
+    };
+
+    const res = await planningFetch(`/api/afspraken/${editingId}`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    });
+
+    if (res.error) {
+      setEditError(res.error);
+    } else {
+      setEditingId(null);
+      fetchAppointments();
+    }
+    setEditSubmitting(false);
+  }
+
+  async function handleCancel() {
+    if (!cancelId) return;
+    setCancelSubmitting(true);
+
+    const res = await planningFetch(`/api/afspraken/${cancelId}`, {
+      method: "DELETE",
+    });
+
+    if (res.error) {
+      setError(res.error);
+    } else {
+      setCancelId(null);
+      fetchAppointments();
+    }
+    setCancelSubmitting(false);
+  }
 
   return (
     <AppShell>
@@ -129,6 +222,9 @@ export default function PlanningPage() {
                   <th className="px-4 py-3 text-left text-xs font-medium text-fg-subtle uppercase">
                     Status
                   </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-fg-subtle uppercase">
+                    Acties
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-default">
@@ -153,10 +249,168 @@ export default function PlanningPage() {
                         {appt.status}
                       </span>
                     </td>
+                    <td className="px-4 py-3 text-sm">
+                      <div className="flex items-center gap-3">
+                        {appt.status !== "cancelled" && (
+                          <>
+                            <button
+                              onClick={() => openEdit(appt)}
+                              className="text-brand-600 hover:text-brand-800 text-xs font-medium btn-press"
+                            >
+                              Bewerken
+                            </button>
+                            <button
+                              onClick={() => setCancelId(appt.id)}
+                              className="text-coral-600 hover:text-coral-800 text-xs font-medium btn-press"
+                            >
+                              Annuleren
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {/* Bewerken modal */}
+        {editingId && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+            <div className="w-full max-w-lg rounded-lg bg-raised p-6 shadow-xl">
+              <h3 className="text-lg font-semibold text-fg mb-4">
+                Afspraak bewerken
+              </h3>
+
+              <p className="text-sm text-fg-muted mb-4">
+                Client:{" "}
+                <span className="font-medium">
+                  {getParticipant(
+                    appointments.find((a) => a.id === editingId)?.participant ?? [],
+                    "Patient",
+                  )}
+                </span>
+              </p>
+
+              <form onSubmit={handleEdit} className="space-y-4">
+                {editError && (
+                  <div className="bg-coral-50 border border-coral-200 text-coral-600 rounded p-3 text-sm">
+                    {editError}
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-sm font-medium text-fg-muted mb-1">
+                    Starttijd
+                  </label>
+                  <input
+                    type="datetime-local"
+                    value={editStart}
+                    onChange={(e) => setEditStart(e.target.value)}
+                    required
+                    className="w-full border border-default rounded px-3 py-2 text-sm"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-fg-muted mb-1">
+                    Eindtijd
+                  </label>
+                  <input
+                    type="datetime-local"
+                    value={editEnd}
+                    onChange={(e) => setEditEnd(e.target.value)}
+                    required
+                    className="w-full border border-default rounded px-3 py-2 text-sm"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-fg-muted mb-1">
+                    Medewerker ID
+                  </label>
+                  <input
+                    type="text"
+                    value={editPractitioner}
+                    onChange={(e) => setEditPractitioner(e.target.value)}
+                    placeholder="Practitioner UUID"
+                    required
+                    className="w-full border border-default rounded px-3 py-2 text-sm"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-fg-muted mb-1">
+                    Status
+                  </label>
+                  <select
+                    value={editStatus}
+                    onChange={(e) => setEditStatus(e.target.value)}
+                    className="w-full border border-default rounded px-3 py-2 text-sm"
+                  >
+                    <option value="booked">Booked</option>
+                    <option value="arrived">Arrived</option>
+                    <option value="fulfilled">Fulfilled</option>
+                    <option value="noshow">No-show</option>
+                  </select>
+                </div>
+
+                <div className="flex justify-end gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditingId(null)}
+                    className="px-4 py-2 text-sm font-medium text-fg-muted border border-default rounded hover:bg-sunken btn-press"
+                  >
+                    Annuleren
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={editSubmitting}
+                    className="rounded-md bg-brand-700 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-800 btn-press disabled:opacity-50"
+                  >
+                    {editSubmitting ? "Opslaan..." : "Opslaan"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Annuleren bevestiging */}
+        {cancelId && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+            <div className="w-full max-w-md rounded-lg bg-raised p-6 shadow-xl">
+              <h3 className="text-lg font-semibold text-fg mb-2">
+                Afspraak annuleren
+              </h3>
+              <p className="text-sm text-fg-muted mb-6">
+                Weet u zeker dat u de afspraak van{" "}
+                <span className="font-medium">
+                  {getParticipant(
+                    appointments.find((a) => a.id === cancelId)?.participant ?? [],
+                    "Patient",
+                  )}
+                </span>{" "}
+                wilt annuleren? De status wordt op &apos;cancelled&apos; gezet.
+              </p>
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={() => setCancelId(null)}
+                  className="px-4 py-2 text-sm font-medium text-fg-muted border border-default rounded hover:bg-sunken btn-press"
+                >
+                  Terug
+                </button>
+                <button
+                  onClick={handleCancel}
+                  disabled={cancelSubmitting}
+                  className="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-red-700 btn-press disabled:opacity-50"
+                >
+                  {cancelSubmitting ? "Annuleren..." : "Afspraak annuleren"}
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </main>

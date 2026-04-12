@@ -126,6 +126,19 @@ medewerkerRoutes.post("/", async (c) => {
 });
 
 /**
+ * PUT /api/medewerkers/:id — Update a Practitioner resource.
+ */
+medewerkerRoutes.put("/:id", async (c) => {
+  const id = c.req.param("id");
+  const body = await c.req.json<Record<string, unknown>>();
+
+  return medplumProxy(c, `/fhir/R4/Practitioner/${id}`, {
+    method: "PUT",
+    body: JSON.stringify({ ...body, resourceType: "Practitioner", id }),
+  });
+});
+
+/**
  * DELETE /api/medewerkers/:id — Soft delete: sets Practitioner.active = false.
  */
 medewerkerRoutes.delete("/:id", async (c) => {

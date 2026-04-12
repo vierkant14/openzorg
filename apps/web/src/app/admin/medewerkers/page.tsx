@@ -91,6 +91,10 @@ function getEmail(p: Practitioner): string {
   return p.telecom?.find((t) => t.system === "email")?.value ?? "";
 }
 
+function getTelefoon(p: Practitioner): string {
+  return p.telecom?.find((t) => t.system === "phone")?.value ?? "";
+}
+
 function getFunctie(p: Practitioner): string {
   return p.qualification?.[0]?.code?.text ?? "";
 }
@@ -111,15 +115,27 @@ export default function MedewerkersPage() {
   const [functie, setFunctie] = useState<string>(FUNCTIES[0]);
   const [saving, setSaving] = useState(false);
 
+  // Edit state
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editVoornaam, setEditVoornaam] = useState("");
+  const [editAchternaam, setEditAchternaam] = useState("");
+  const [editEmail, setEditEmail] = useState("");
+  const [editTelefoon, setEditTelefoon] = useState("");
+  const [editFunctie, setEditFunctie] = useState("");
+  const [editSaving, setEditSaving] = useState(false);
+
+  // Delete confirmation
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
   async function loadMedewerkers() {
     setLoading(true);
-    const { data, error: err } = await ecdFetch<PractitionerBundle>(
+    const { data, error: err, status } = await ecdFetch<PractitionerBundle>(
       "/api/medewerkers?_count=100&_sort=-_lastUpdated",
     );
     setPractitioners(
       data?.entry?.map((e) => e.resource) ?? [],
     );
-    setError(err);
+    setError(status === 0 ? err : null);
     setLoading(false);
   }
 
@@ -162,10 +178,84 @@ export default function MedewerkersPage() {
     await loadMedewerkers();
   }
 
+  function startEdit(p: Practitioner) {
+    setEditingId(p.id);
+    setEditVoornaam(p.name?.[0]?.given?.join(" ") ?? "");
+    setEditAchternaam(p.name?.[0]?.family ?? "");
+    setEditEmail(getEmail(p));
+    setEditTelefoon(getTelefoon(p));
+    setEditFunctie(getFunctie(p));
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+  }
+
+  async function saveEdit(p: Practitioner) {
+    setEditSaving(true);
+    setError(null);
+
+    const telecom: Array<{ system: string; value: string; use?: string }> = [];
+    if (editEmail) {
+      telecom.push({ system: "email", value: editEmail, use: "work" });
+    }
+    if (editTelefoon) {
+      telecom.push({ system: "phone", value: editTelefoon, use: "work" });
+    }
+
+    const qualification: Array<{ code: { text: string } }> = [];
+    if (editFunctie) {
+      qualification.push({ code: { text: editFunctie } });
+    }
+
+    const updatedResource: Record<string, unknown> = {
+      resourceType: "Practitioner",
+      id: p.id,
+      active: p.active,
+      name: [
+        {
+          family: editAchternaam,
+          given: editVoornaam.split(" ").filter(Boolean),
+        },
+      ],
+      ...(p.identifier ? { identifier: p.identifier } : {}),
+      ...(telecom.length > 0 ? { telecom } : {}),
+      ...(qualification.length > 0 ? { qualification } : {}),
+    };
+
+    const { error: err } = await ecdFetch(`/api/medewerkers/${p.id}`, {
+      method: "PUT",
+      body: JSON.stringify(updatedResource),
+    });
+
+    setEditSaving(false);
+
+    if (err) {
+      setError(err);
+      return;
+    }
+
+    setEditingId(null);
+    await loadMedewerkers();
+  }
+
+  async function handleDelete(id: string) {
+    setError(null);
+    const { error: err } = await ecdFetch(`/api/medewerkers/${id}`, {
+      method: "DELETE",
+    });
+    setDeletingId(null);
+    if (err) {
+      setError(err);
+      return;
+    }
+    await loadMedewerkers();
+  }
+
   const inputClass =
     "w-full rounded-md border border-default px-3 py-2 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none";
   const btnPrimary =
-    "px-4 py-2 text-sm font-medium text-white bg-brand-700 rounded-md hover:bg-brand-800 disabled:opacity-50";
+    "rounded-md bg-brand-700 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-800 btn-press";
 
   return (
     <AppShell>
@@ -207,32 +297,149 @@ export default function MedewerkersPage() {
                     <th className="pb-2 pr-4 font-medium">AGB-code</th>
                     <th className="pb-2 pr-4 font-medium">E-mail</th>
                     <th className="pb-2 pr-4 font-medium">Status</th>
+                    <th className="pb-2 pr-4 font-medium">Acties</th>
                   </tr>
                 </thead>
                 <tbody>
                   {practitioners.map((p) => {
                     const isActive = p.active !== false;
+                    const isEditing = editingId === p.id;
+                    const isDeleting = deletingId === p.id;
+
+                    if (isEditing) {
+                      return (
+                        <tr key={p.id} className="border-b last:border-0 bg-surface-50 dark:bg-surface-900">
+                          <td className="py-2 pr-4">
+                            <div className="flex gap-1">
+                              <input
+                                type="text"
+                                value={editVoornaam}
+                                onChange={(e) => setEditVoornaam(e.target.value)}
+                                placeholder="Voornaam"
+                                className={`${inputClass} w-24`}
+                              />
+                              <input
+                                type="text"
+                                value={editAchternaam}
+                                onChange={(e) => setEditAchternaam(e.target.value)}
+                                placeholder="Achternaam"
+                                className={`${inputClass} w-24`}
+                              />
+                            </div>
+                          </td>
+                          <td className="py-2 pr-4">
+                            <select
+                              value={editFunctie}
+                              onChange={(e) => setEditFunctie(e.target.value)}
+                              className={`${inputClass} w-36`}
+                            >
+                              <option value="">Geen</option>
+                              {FUNCTIES.map((f) => (
+                                <option key={f} value={f}>
+                                  {f.charAt(0).toUpperCase() + f.slice(1)}
+                                </option>
+                              ))}
+                            </select>
+                          </td>
+                          <td className="py-2 pr-4 font-mono text-xs">
+                            {getAgb(p) || <span className="text-fg-subtle">&mdash;</span>}
+                          </td>
+                          <td className="py-2 pr-4">
+                            <input
+                              type="email"
+                              value={editEmail}
+                              onChange={(e) => setEditEmail(e.target.value)}
+                              placeholder="E-mail"
+                              className={`${inputClass} w-40`}
+                            />
+                          </td>
+                          <td className="py-2 pr-4">
+                            <span
+                              className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                                isActive
+                                  ? "bg-brand-50 text-brand-700"
+                                  : "bg-surface-100 dark:bg-surface-800 text-fg-subtle"
+                              }`}
+                            >
+                              {isActive ? "Actief" : "Inactief"}
+                            </span>
+                          </td>
+                          <td className="py-2 pr-4">
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => saveEdit(p)}
+                                disabled={editSaving}
+                                className="text-brand-700 hover:text-brand-900 text-xs font-medium btn-press-sm"
+                              >
+                                {editSaving ? "Opslaan..." : "Opslaan"}
+                              </button>
+                              <button
+                                onClick={cancelEdit}
+                                className="text-fg-muted hover:text-fg text-xs font-medium btn-press-sm"
+                              >
+                                Annuleren
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    }
+
                     return (
                       <tr
                         key={p.id}
                         className={`border-b last:border-0 ${!isActive ? "opacity-50" : ""}`}
                       >
                         <td className="py-2 pr-4 font-medium">{getNaam(p)}</td>
-                        <td className="py-2 pr-4">{getFunctie(p) || <span className="text-gray-300">&mdash;</span>}</td>
+                        <td className="py-2 pr-4">{getFunctie(p) || <span className="text-fg-subtle">&mdash;</span>}</td>
                         <td className="py-2 pr-4 font-mono text-xs">
-                          {getAgb(p) || <span className="text-gray-300">&mdash;</span>}
+                          {getAgb(p) || <span className="text-fg-subtle">&mdash;</span>}
                         </td>
-                        <td className="py-2 pr-4">{getEmail(p) || <span className="text-gray-300">&mdash;</span>}</td>
+                        <td className="py-2 pr-4">{getEmail(p) || <span className="text-fg-subtle">&mdash;</span>}</td>
                         <td className="py-2 pr-4">
                           <span
                             className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
                               isActive
                                 ? "bg-brand-50 text-brand-700"
-                                : "bg-gray-100 text-fg-subtle"
+                                : "bg-surface-100 dark:bg-surface-800 text-fg-subtle"
                             }`}
                           >
                             {isActive ? "Actief" : "Inactief"}
                           </span>
+                        </td>
+                        <td className="py-2 pr-4">
+                          {isDeleting ? (
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-fg-muted">Verwijderen?</span>
+                              <button
+                                onClick={() => handleDelete(p.id)}
+                                className="text-coral-600 hover:text-coral-800 text-xs font-medium btn-press-sm"
+                              >
+                                Ja
+                              </button>
+                              <button
+                                onClick={() => setDeletingId(null)}
+                                className="text-fg-muted hover:text-fg text-xs font-medium btn-press-sm"
+                              >
+                                Nee
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => startEdit(p)}
+                                className="text-brand-700 hover:text-brand-900 text-xs font-medium btn-press-sm"
+                              >
+                                Bewerken
+                              </button>
+                              <button
+                                onClick={() => setDeletingId(p.id)}
+                                className="text-coral-600 hover:text-coral-800 text-xs font-medium btn-press-sm"
+                              >
+                                Verwijderen
+                              </button>
+                            </div>
+                          )}
                         </td>
                       </tr>
                     );
@@ -360,7 +567,7 @@ export default function MedewerkersPage() {
               <button
                 type="submit"
                 disabled={saving}
-                className={btnPrimary}
+                className={`${btnPrimary} disabled:opacity-50`}
               >
                 {saving ? "Opslaan..." : "Medewerker toevoegen"}
               </button>

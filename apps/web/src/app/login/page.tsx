@@ -57,9 +57,9 @@ function LoginForm() {
       if (data.projectName) {
         localStorage.setItem("openzorg_project_name", data.projectName);
       }
-      if (data.profile?.display) {
-        localStorage.setItem("openzorg_user_name", data.profile.display);
-      }
+      // Store user name — fallback to email prefix if profile.display is missing
+      const displayName = data.profile?.display || email.split("@")[0] || "Gebruiker";
+      localStorage.setItem("openzorg_user_name", displayName);
 
       // Store role — in production this comes from Medplum PractitionerRole
       localStorage.setItem("openzorg_role", data.role || role);
@@ -105,7 +105,7 @@ function LoginForm() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              className="w-full border border-default bg-raised rounded-xl px-4 py-3 text-body-sm text-fg placeholder:text-fg-subtle focus:border-brand-400 focus:ring-2 focus:ring-brand-500/20 transition-all outline-none"
+              className="w-full border border-default bg-raised rounded-xl px-4 py-3 text-body-sm text-fg placeholder:text-fg-subtle focus:border-brand-400 focus:ring-2 focus:ring-brand-500/20 transition-[border-color,box-shadow] duration-200 ease-out outline-none"
               placeholder="naam@zorginstelling.nl"
             />
           </div>
@@ -121,28 +121,31 @@ function LoginForm() {
               onChange={(e) => setPassword(e.target.value)}
               required
               minLength={12}
-              className="w-full border border-default bg-raised rounded-xl px-4 py-3 text-body-sm text-fg placeholder:text-fg-subtle focus:border-brand-400 focus:ring-2 focus:ring-brand-500/20 transition-all outline-none"
+              className="w-full border border-default bg-raised rounded-xl px-4 py-3 text-body-sm text-fg placeholder:text-fg-subtle focus:border-brand-400 focus:ring-2 focus:ring-brand-500/20 transition-[border-color,box-shadow] duration-200 ease-out outline-none"
             />
           </div>
 
-          <div>
-            <label htmlFor="role" className="block text-body-sm font-medium text-fg mb-1.5">
-              Rol
-            </label>
-            <select
-              id="role"
-              value={role}
-              onChange={(e) => setRole(e.target.value)}
-              className="w-full border border-default bg-raised rounded-xl px-4 py-3 text-body-sm text-fg focus:border-brand-400 focus:ring-2 focus:ring-brand-500/20 transition-all outline-none"
-            >
-              {ROLES.map((r) => (
-                <option key={r.value} value={r.value}>{r.label}</option>
-              ))}
-            </select>
-            <p className="text-caption text-fg-subtle mt-1.5">
-              In productie wordt je rol automatisch bepaald door de beheerder.
-            </p>
-          </div>
+          {/* Role selector — only visible in development mode */}
+          {process.env.NODE_ENV === "development" && (
+            <div>
+              <label htmlFor="role" className="block text-body-sm font-medium text-fg mb-1.5">
+                Rol <span className="text-caption text-amber-600">(dev mode)</span>
+              </label>
+              <select
+                id="role"
+                value={role}
+                onChange={(e) => setRole(e.target.value)}
+                className="w-full border border-default bg-raised rounded-xl px-4 py-3 text-body-sm text-fg focus:border-brand-400 focus:ring-2 focus:ring-brand-500/20 transition-[border-color,box-shadow] duration-200 ease-out outline-none"
+              >
+                {ROLES.map((r) => (
+                  <option key={r.value} value={r.value}>{r.label}</option>
+                ))}
+              </select>
+              <p className="text-caption text-fg-subtle mt-1.5">
+                In productie wordt je rol automatisch bepaald door de beheerder.
+              </p>
+            </div>
+          )}
 
           {error && (
             <div className="rounded-xl bg-coral-50 dark:bg-coral-950/20 border border-coral-200 dark:border-coral-800 p-4 text-body-sm text-coral-700 dark:text-coral-300">

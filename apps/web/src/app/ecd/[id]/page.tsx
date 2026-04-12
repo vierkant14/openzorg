@@ -32,7 +32,7 @@ interface FhirRelatedPerson {
   id?: string;
   name?: Array<{ family?: string; given?: string[] }>;
   telecom?: Array<{ system?: string; value?: string }>;
-  relationship?: Array<{ coding?: Array<{ display?: string }> }>;
+  relationship?: Array<{ coding?: Array<{ system?: string; code?: string; display?: string }> }>;
 }
 
 interface FhirCarePlan {
@@ -209,20 +209,20 @@ export default function ClientDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabKey>("dashboard");
+  const [editing, setEditing] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
+  const loadClient = useCallback(() => {
     setLoading(true);
     ecdFetch<ClientResource>(`/api/clients/${id}`).then(({ data, error: err }) => {
-      if (cancelled) return;
       if (err) setError(err);
       else setClient(data);
       setLoading(false);
     });
-    return () => {
-      cancelled = true;
-    };
   }, [id]);
+
+  useEffect(() => {
+    loadClient();
+  }, [loadClient]);
 
   if (loading) {
     return (
@@ -330,6 +330,12 @@ export default function ClientDetailPage() {
                 </span>
               )}
               <button
+                onClick={() => setEditing(!editing)}
+                className="text-caption font-medium px-3 py-1.5 rounded-lg border border-default text-fg-muted hover:bg-sunken btn-press"
+              >
+                {editing ? "Annuleren" : "Bewerken"}
+              </button>
+              <button
                 onClick={async () => {
                   if (!confirm(client.active === false
                     ? "Weet je zeker dat je deze client wilt heractiveren?"
@@ -339,7 +345,7 @@ export default function ClientDetailPage() {
                     ? await ecdFetch(`/api/clients/${client.id}`, { method: "PUT", body: JSON.stringify({ ...client, active: true }) })
                     : await ecdFetch(`/api/clients/${client.id}`, { method: "DELETE" });
                   if (err) { alert(err); return; }
-                  window.location.reload();
+                  loadClient();
                 }}
                 className={`text-caption font-medium px-3 py-1.5 rounded-lg border btn-press ${
                   client.active === false
@@ -397,6 +403,11 @@ export default function ClientDetailPage() {
               );
             })()}
           </dl>
+
+          {/* Edit form */}
+          {editing && (
+            <ClientEditForm client={client} onSaved={() => { setEditing(false); loadClient(); }} onCancel={() => setEditing(false)} />
+          )}
         </div>
 
         {/* Tabs */}
@@ -453,6 +464,140 @@ function PageShell({ children }: { children: React.ReactNode }) {
     <AppShell>
       {children}
     </AppShell>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Client edit form                                                          */
+/* -------------------------------------------------------------------------- */
+
+function ClientEditForm({
+  client,
+  onSaved,
+  onCancel,
+}: {
+  client: ClientResource;
+  onSaved: () => void;
+  onCancel: () => void;
+}) {
+  const [voornaam, setVoornaam] = useState(client.name?.[0]?.given?.[0] ?? "");
+  const [achternaam, setAchternaam] = useState(client.name?.[0]?.family ?? "");
+  const [geboortedatum, setGeboortedatum] = useState(client.birthDate ?? "");
+  const [geslacht, setGeslacht] = useState(client.gender ?? "unknown");
+  const [telefoon, setTelefoon] = useState(client.telecom?.find((t) => t.system === "phone")?.value ?? "");
+  const [email, setEmail] = useState(client.telecom?.find((t) => t.system === "email")?.value ?? "");
+  const [straat, setStraat] = useState(client.address?.[0]?.line?.[0] ?? "");
+  const [postcode, setPostcode] = useState(client.address?.[0]?.postalCode ?? "");
+  const [woonplaats, setWoonplaats] = useState(client.address?.[0]?.city ?? "");
+  const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+
+  const inputCls = "w-full rounded-lg border border-default bg-raised px-3 py-2 text-sm text-fg focus:border-brand-400 focus:ring-2 focus:ring-brand-500/20 outline-none transition-[border-color,box-shadow] duration-200 ease-out";
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setFormError(null);
+
+    const telecom: Array<{ system: string; value: string; use?: string }> = [];
+    if (telefoon.trim()) telecom.push({ system: "phone", value: telefoon.trim(), use: "mobile" });
+    if (email.trim()) telecom.push({ system: "email", value: email.trim() });
+    // Preserve other telecom entries
+    client.telecom?.forEach((t) => {
+      if (t.system !== "phone" && t.system !== "email") telecom.push(t as { system: string; value: string });
+    });
+
+    const updated: ClientResource = {
+      ...client,
+      name: [{ given: [voornaam.trim()], family: achternaam.trim() }],
+      birthDate: geboortedatum || undefined,
+      gender: geslacht as ClientResource["gender"],
+      telecom: telecom.length > 0 ? telecom : undefined,
+      address: straat.trim() || postcode.trim() || woonplaats.trim()
+        ? [{ line: straat.trim() ? [straat.trim()] : undefined, postalCode: postcode.trim() || undefined, city: woonplaats.trim() || undefined }]
+        : client.address,
+    };
+
+    const { error: err } = await ecdFetch(`/api/clients/${client.id}`, {
+      method: "PUT",
+      body: JSON.stringify(updated),
+    });
+
+    if (err) {
+      setFormError(err);
+      setSaving(false);
+    } else {
+      onSaved();
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="mt-4 border-t border-default pt-4 animate-[fade-in_300ms_cubic-bezier(0.16,1,0.3,1)]">
+      {formError && (
+        <div className="mb-3 rounded-lg bg-coral-50 dark:bg-coral-950/20 border border-coral-200 dark:border-coral-800 px-3 py-2 text-sm text-coral-700 dark:text-coral-300">
+          {formError}
+        </div>
+      )}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div>
+          <label className="block text-xs font-medium text-fg-muted mb-1">Voornaam</label>
+          <input type="text" value={voornaam} onChange={(e) => setVoornaam(e.target.value)} className={inputCls} required />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-fg-muted mb-1">Achternaam</label>
+          <input type="text" value={achternaam} onChange={(e) => setAchternaam(e.target.value)} className={inputCls} required />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-fg-muted mb-1">Geboortedatum</label>
+          <input type="date" value={geboortedatum} onChange={(e) => setGeboortedatum(e.target.value)} className={inputCls} />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-fg-muted mb-1">Geslacht</label>
+          <select value={geslacht} onChange={(e) => setGeslacht(e.target.value)} className={inputCls}>
+            <option value="male">Man</option>
+            <option value="female">Vrouw</option>
+            <option value="other">Anders</option>
+            <option value="unknown">Onbekend</option>
+          </select>
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-fg-muted mb-1">Telefoon</label>
+          <input type="tel" value={telefoon} onChange={(e) => setTelefoon(e.target.value)} placeholder="06-12345678" className={inputCls} />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-fg-muted mb-1">E-mail</label>
+          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="client@voorbeeld.nl" className={inputCls} />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-fg-muted mb-1">Straat + huisnummer</label>
+          <input type="text" value={straat} onChange={(e) => setStraat(e.target.value)} className={inputCls} />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-fg-muted mb-1">Postcode</label>
+          <input type="text" value={postcode} onChange={(e) => setPostcode(e.target.value)} placeholder="1234 AB" className={inputCls} />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-fg-muted mb-1">Woonplaats</label>
+          <input type="text" value={woonplaats} onChange={(e) => setWoonplaats(e.target.value)} className={inputCls} />
+        </div>
+      </div>
+      <div className="mt-4 flex items-center gap-3">
+        <button
+          type="submit"
+          disabled={saving || !voornaam.trim() || !achternaam.trim()}
+          className="rounded-lg bg-brand-700 px-5 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-800 disabled:opacity-50 btn-press"
+        >
+          {saving ? "Opslaan..." : "Opslaan"}
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="text-sm font-medium text-fg-muted hover:text-fg btn-press"
+        >
+          Annuleren
+        </button>
+      </div>
+    </form>
   );
 }
 
@@ -1677,6 +1822,15 @@ function ContactpersonenTab({ clientId }: { clientId: string }) {
   const [contactEmail, setContactEmail] = useState("");
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editFamily, setEditFamily] = useState("");
+  const [editGiven, setEditGiven] = useState("");
+  const [editPhone, setEditPhone] = useState("");
+  const [editRelatie, setEditRelatie] = useState("FAMMEMB");
+  const [editEmail, setEditEmail] = useState("");
+  const [editSaving, setEditSaving] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -1735,6 +1889,63 @@ function ContactpersonenTab({ clientId }: { clientId: string }) {
       setRelatie("FAMMEMB");
       load();
     }
+  }
+
+  function startEdit(rp: FhirRelatedPerson) {
+    setEditingId(rp.id ?? null);
+    setEditGiven(rp.name?.[0]?.given?.[0] ?? "");
+    setEditFamily(rp.name?.[0]?.family ?? "");
+    setEditPhone(rp.telecom?.find((t) => t.system === "phone")?.value ?? "");
+    setEditEmail(rp.telecom?.find((t) => t.system === "email")?.value ?? "");
+    setEditRelatie(rp.relationship?.[0]?.coding?.[0]?.code ?? "FAMMEMB");
+    setEditError(null);
+  }
+
+  async function handleEditSave() {
+    if (!editingId) return;
+    setEditSaving(true);
+    setEditError(null);
+
+    const relatieInfo = RELATIE_TYPES.find((r) => r.code === editRelatie);
+    const body = {
+      name: [{ family: editFamily, given: [editGiven] }],
+      telecom: [
+        ...(editPhone ? [{ system: "phone", value: editPhone }] : []),
+        ...(editEmail ? [{ system: "email", value: editEmail }] : []),
+      ],
+      relationship: [
+        {
+          coding: [
+            {
+              system: "http://terminology.hl7.org/CodeSystem/v3-RoleCode",
+              code: editRelatie,
+              display: relatieInfo?.display ?? editRelatie,
+            },
+          ],
+        },
+      ],
+    };
+
+    const { error: err } = await ecdFetch(`/api/clients/${clientId}/contactpersonen/${editingId}`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    });
+
+    setEditSaving(false);
+    if (err) {
+      setEditError(err);
+    } else {
+      setEditingId(null);
+      load();
+    }
+  }
+
+  async function handleDelete(id: string) {
+    if (!confirm("Weet u zeker dat u deze contactpersoon wilt verwijderen?")) return;
+    setDeletingId(id);
+    await ecdFetch(`/api/clients/${clientId}/contactpersonen/${id}`, { method: "DELETE" });
+    setDeletingId(null);
+    load();
   }
 
   return (
@@ -1812,10 +2023,47 @@ function ContactpersonenTab({ clientId }: { clientId: string }) {
               <th className="px-4 py-3 text-left font-medium text-fg-muted">Relatie</th>
               <th className="px-4 py-3 text-left font-medium text-fg-muted">Telefoon</th>
               <th className="px-4 py-3 text-left font-medium text-fg-muted">E-mail</th>
+              <th className="px-4 py-3 text-right font-medium text-fg-muted">Acties</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-subtle">
             {items.map((rp, i) => {
+              const isEditing = rp.id === editingId;
+              if (isEditing) {
+                return (
+                  <tr key={rp.id ?? i}>
+                    <td className="px-4 py-2">
+                      <div className="flex gap-1">
+                        <input type="text" value={editGiven} onChange={(e) => setEditGiven(e.target.value)} placeholder="Voornaam" className="w-24 rounded-md border border-default px-2 py-1 text-sm shadow-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500" />
+                        <input type="text" value={editFamily} onChange={(e) => setEditFamily(e.target.value)} placeholder="Achternaam" className="w-24 rounded-md border border-default px-2 py-1 text-sm shadow-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500" />
+                      </div>
+                    </td>
+                    <td className="px-4 py-2">
+                      <select value={editRelatie} onChange={(e) => setEditRelatie(e.target.value)} className="rounded-md border border-default px-2 py-1 text-sm shadow-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500">
+                        {RELATIE_TYPES.map((r) => <option key={r.code} value={r.code}>{r.display}</option>)}
+                      </select>
+                    </td>
+                    <td className="px-4 py-2">
+                      <input type="tel" value={editPhone} onChange={(e) => setEditPhone(e.target.value)} placeholder="Telefoon" className="w-32 rounded-md border border-default px-2 py-1 text-sm shadow-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500" />
+                    </td>
+                    <td className="px-4 py-2">
+                      <input type="email" value={editEmail} onChange={(e) => setEditEmail(e.target.value)} placeholder="E-mail" className="w-40 rounded-md border border-default px-2 py-1 text-sm shadow-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500" />
+                    </td>
+                    <td className="px-4 py-2 text-right">
+                      <div className="flex justify-end gap-2">
+                        <button onClick={handleEditSave} disabled={editSaving} className="rounded-md bg-brand-700 px-3 py-1 text-xs font-medium text-white shadow-sm hover:bg-brand-800 disabled:opacity-50 btn-press">
+                          {editSaving ? "..." : "Opslaan"}
+                        </button>
+                        <button onClick={() => setEditingId(null)} className="rounded-md border border-default px-3 py-1 text-xs font-medium text-fg-muted hover:bg-page btn-press">
+                          Annuleren
+                        </button>
+                      </div>
+                      {editError && <p className="mt-1 text-xs text-coral-600">{editError}</p>}
+                    </td>
+                  </tr>
+                );
+              }
+
               const naam = [rp.name?.[0]?.given?.[0], rp.name?.[0]?.family]
                 .filter(Boolean)
                 .join(" ");
@@ -1829,6 +2077,16 @@ function ContactpersonenTab({ clientId }: { clientId: string }) {
                   </td>
                   <td className="px-4 py-3 text-fg-muted">{telefoon ?? "-"}</td>
                   <td className="px-4 py-3 text-fg-muted">{email ?? "-"}</td>
+                  <td className="px-4 py-3 text-right">
+                    <div className="flex justify-end gap-2">
+                      <button onClick={() => startEdit(rp)} className="text-sm text-brand-600 hover:text-brand-800 btn-press-sm">
+                        Bewerken
+                      </button>
+                      <button onClick={() => rp.id && handleDelete(rp.id)} disabled={deletingId === rp.id} className="text-sm text-coral-600 hover:text-coral-800 btn-press-sm disabled:opacity-50">
+                        {deletingId === rp.id ? "..." : "Verwijderen"}
+                      </button>
+                    </div>
+                  </td>
                 </tr>
               );
             })}
@@ -1850,6 +2108,8 @@ function MedicatieTab({ clientId }: { clientId: string }) {
   const [showForm, setShowForm] = useState(false);
   const [medCodelijst, setMedCodelijst] = useState<Array<{ code: string; display: string }>>([]);
   const [practitioners, setPractitioners] = useState<Array<{ id: string; name: string }>>([]);
+  const [editingMed, setEditingMed] = useState<FhirMedicationRequest | null>(null);
+  const [stoppingId, setStoppingId] = useState<string | null>(null);
 
   // Load medicatie codelijst + practitioners
   useEffect(() => {
@@ -1880,19 +2140,27 @@ function MedicatieTab({ clientId }: { clientId: string }) {
     load();
   }, [load]);
 
+  async function handleStop(medId: string) {
+    if (!confirm("Weet u zeker dat u deze medicatie wilt stoppen?")) return;
+    setStoppingId(medId);
+    await ecdFetch(`/api/clients/${clientId}/medicatie/${medId}`, { method: "DELETE" });
+    setStoppingId(null);
+    load();
+  }
+
   return (
     <section>
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-lg font-semibold text-fg">Medicatieoverzicht</h2>
         <button
-          onClick={() => setShowForm((v) => !v)}
+          onClick={() => { setShowForm((v) => !v); setEditingMed(null); }}
           className="rounded-md bg-brand-700 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-800 btn-press"
         >
           {showForm ? "Annuleren" : "Medicatie toevoegen"}
         </button>
       </div>
 
-      {showForm && (
+      {showForm && !editingMed && (
         <MedicatieForm
           clientId={clientId}
           medCodelijst={medCodelijst}
@@ -1901,6 +2169,20 @@ function MedicatieTab({ clientId }: { clientId: string }) {
             setShowForm(false);
             load();
           }}
+        />
+      )}
+
+      {editingMed && (
+        <MedicatieForm
+          clientId={clientId}
+          medCodelijst={medCodelijst}
+          practitioners={practitioners}
+          editItem={editingMed}
+          onSaved={() => {
+            setEditingMed(null);
+            load();
+          }}
+          onCancel={() => setEditingMed(null)}
         />
       )}
 
@@ -1925,6 +2207,7 @@ function MedicatieTab({ clientId }: { clientId: string }) {
                 <th className="px-4 py-3 text-left font-medium text-fg-muted">Startdatum</th>
                 <th className="px-4 py-3 text-left font-medium text-fg-muted">Einddatum</th>
                 <th className="px-4 py-3 text-left font-medium text-fg-muted">Status</th>
+                <th className="px-4 py-3 text-right font-medium text-fg-muted">Acties</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-subtle">
@@ -1961,6 +2244,18 @@ function MedicatieTab({ clientId }: { clientId: string }) {
                       >
                         {statusLabel}
                       </span>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="flex justify-end gap-2">
+                        <button onClick={() => { setEditingMed(med); setShowForm(false); }} className="text-sm text-brand-600 hover:text-brand-800 btn-press-sm">
+                          Bewerken
+                        </button>
+                        {isActive && (
+                          <button onClick={() => med.id && handleStop(med.id)} disabled={stoppingId === med.id} className="text-sm text-coral-600 hover:text-coral-800 btn-press-sm disabled:opacity-50">
+                            {stoppingId === med.id ? "..." : "Stoppen"}
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );
@@ -2012,21 +2307,27 @@ function medicatieStatusLabel(status?: string): string {
 function MedicatieForm({
   clientId,
   onSaved,
+  onCancel,
   medCodelijst = [],
   practitioners = [],
+  editItem,
 }: {
   clientId: string;
   onSaved: () => void;
+  onCancel?: () => void;
   medCodelijst?: Array<{ code: string; display: string }>;
   practitioners?: Array<{ id: string; name: string }>;
+  editItem?: FhirMedicationRequest;
 }) {
-  const [naam, setNaam] = useState("");
-  const [dosering, setDosering] = useState("");
-  const [frequentie, setFrequentie] = useState("1");
-  const [periodUnit, setPeriodUnit] = useState("d");
-  const [voorschrijver, setVoorschrijver] = useState("");
-  const [startdatum, setStartdatum] = useState(new Date().toISOString().slice(0, 10));
-  const [einddatum, setEinddatum] = useState("");
+  const [naam, setNaam] = useState(editItem?.medicationCodeableConcept?.text ?? "");
+  const [dosering, setDosering] = useState(editItem?.dosageInstruction?.[0]?.text ?? "");
+  const [frequentie, setFrequentie] = useState(String(editItem?.dosageInstruction?.[0]?.timing?.repeat?.frequency ?? "1"));
+  const [periodUnit, setPeriodUnit] = useState(editItem?.dosageInstruction?.[0]?.timing?.repeat?.periodUnit ?? "d");
+  const [voorschrijver, setVoorschrijver] = useState(editItem?.requester?.display ?? "");
+  const [startdatum, setStartdatum] = useState(editItem?.authoredOn?.slice(0, 10) ?? new Date().toISOString().slice(0, 10));
+  const [einddatum, setEinddatum] = useState(
+    editItem?.extension?.find((e) => e.url === "https://openzorg.nl/extensions/medicatie-einddatum")?.valueString ?? "",
+  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -2050,7 +2351,7 @@ function MedicatieForm({
         },
       ],
       authoredOn: startdatum || new Date().toISOString().slice(0, 10),
-      status: "active",
+      status: editItem?.status ?? "active",
       intent: "order",
     };
 
@@ -2067,8 +2368,13 @@ function MedicatieForm({
       ];
     }
 
-    const { error: err } = await ecdFetch(`/api/clients/${clientId}/medicatie`, {
-      method: "POST",
+    const url = editItem?.id
+      ? `/api/clients/${clientId}/medicatie/${editItem.id}`
+      : `/api/clients/${clientId}/medicatie`;
+    const method = editItem?.id ? "PUT" : "POST";
+
+    const { error: err } = await ecdFetch(url, {
+      method,
       body: JSON.stringify(body),
     });
 
@@ -2188,13 +2494,22 @@ function MedicatieForm({
 
       {error && <p className="mt-2 text-sm text-coral-600">{error}</p>}
 
-      <div className="mt-4 flex justify-end">
+      <div className="mt-4 flex justify-end gap-2">
+        {onCancel && (
+          <button
+            type="button"
+            onClick={onCancel}
+            className="rounded-md border border-default px-4 py-2 text-sm font-medium text-fg-muted hover:bg-page btn-press"
+          >
+            Annuleren
+          </button>
+        )}
         <button
           type="submit"
           disabled={saving}
           className="rounded-md bg-brand-700 px-5 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-800 disabled:opacity-50"
         >
-          {saving ? "Opslaan..." : "Medicatie opslaan"}
+          {saving ? "Opslaan..." : editItem ? "Wijzigingen opslaan" : "Medicatie opslaan"}
         </button>
       </div>
     </form>
@@ -2500,6 +2815,7 @@ function AllergieenTab({ clientId }: { clientId: string }) {
   const [ernst, setErnst] = useState("low");
   const [notitie, setNotitie] = useState("");
   const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -2527,6 +2843,14 @@ function AllergieenTab({ clientId }: { clientId: string }) {
     setSaving(false);
     setShowForm(false);
     setNaam(""); setNotitie("");
+    load();
+  }
+
+  async function handleDelete(id: string) {
+    if (!confirm("Weet u zeker dat u deze allergie/intolerantie wilt verwijderen?")) return;
+    setDeletingId(id);
+    await ecdFetch(`/api/clients/${clientId}/allergieen/${id}`, { method: "DELETE" });
+    setDeletingId(null);
     load();
   }
 
@@ -2587,14 +2911,19 @@ function AllergieenTab({ clientId }: { clientId: string }) {
               <div>
                 <p className="font-medium text-fg">{a.code?.text ?? a.code?.coding?.[0]?.display ?? "Onbekend"}</p>
                 <div className="flex gap-3 mt-1 text-caption text-fg-subtle">
-                  <span>{a.category?.[0] === "food" ? "Voedsel" : a.category?.[0] === "medication" ? "Medicatie" : a.category?.[0] ?? "—"}</span>
-                  <span>Ernst: {CRITICALITY_LABELS[a.criticality ?? ""] ?? a.criticality ?? "—"}</span>
+                  <span>{a.category?.[0] === "food" ? "Voedsel" : a.category?.[0] === "medication" ? "Medicatie" : a.category?.[0] ?? "---"}</span>
+                  <span>Ernst: {CRITICALITY_LABELS[a.criticality ?? ""] ?? a.criticality ?? "---"}</span>
                 </div>
                 {a.note?.[0]?.text && <p className="text-sm text-fg-muted mt-1">{a.note[0].text}</p>}
               </div>
-              {a.criticality === "high" && (
-                <span className="shrink-0 px-2 py-0.5 rounded text-caption font-medium bg-coral-50 text-coral-600">Hoog risico</span>
-              )}
+              <div className="flex items-center gap-2 shrink-0">
+                {a.criticality === "high" && (
+                  <span className="px-2 py-0.5 rounded text-caption font-medium bg-coral-50 text-coral-600">Hoog risico</span>
+                )}
+                <button onClick={() => a.id && handleDelete(a.id)} disabled={deletingId === a.id} className="text-sm text-coral-600 hover:text-coral-800 btn-press-sm disabled:opacity-50">
+                  {deletingId === a.id ? "..." : "Verwijderen"}
+                </button>
+              </div>
             </div>
           ))}
         </div>
@@ -2654,6 +2983,8 @@ function VaccinatiesTab({ clientId }: { clientId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   // Form fields
   const [vaccineCode, setVaccineCode] = useState("");
@@ -2703,9 +3034,66 @@ function VaccinatiesTab({ clientId }: { clientId: string }) {
     });
     setSaving(false);
     setShowForm(false);
+    setEditingId(null);
     setVaccineCode(""); setVaccineDisplay(""); setLotNummer(""); setOpmerking("");
     setDatum(new Date().toISOString().slice(0, 10));
     setHerhalend(false); setFrequentie("eenmalig"); setVolgendeDatum(""); setGeldigTot("");
+    load();
+  }
+
+  function startEdit(v: FhirImmunization) {
+    setEditingId(v.id ?? null);
+    setShowForm(true);
+    const vaccName = v.vaccineCode?.text ?? v.vaccineCode?.coding?.[0]?.display ?? "";
+    const vaccCode = v.vaccineCode?.coding?.[0]?.code ?? "";
+    setVaccineCode(vaccCode);
+    setVaccineDisplay(vaccName);
+    setDatum(v.occurrenceDateTime?.slice(0, 10) ?? new Date().toISOString().slice(0, 10));
+    setLotNummer(v.lotNumber ?? "");
+    setLocatie(v.site?.text ?? "Linker bovenarm");
+    setOpmerking(v.note?.[0]?.text ?? "");
+    const herhalendExt = getExtension(v, "herhalend");
+    const freqExt = getExtension(v, "frequentie");
+    const volgendeDatumExt = getExtension(v, "volgende-datum");
+    const geldigTotExt = getExtension(v, "geldig-tot");
+    setHerhalend(herhalendExt?.valueBoolean ?? false);
+    setFrequentie(freqExt?.valueString ?? "eenmalig");
+    setVolgendeDatum(volgendeDatumExt?.valueDate ?? "");
+    setGeldigTot(geldigTotExt?.valueDate ?? "");
+  }
+
+  async function handleEditSave() {
+    if (!editingId || !vaccineDisplay.trim() || !datum) return;
+    setSaving(true);
+    await ecdFetch(`/api/clients/${clientId}/vaccinaties/${editingId}`, {
+      method: "PUT",
+      body: JSON.stringify({
+        vaccineCode: vaccineCode || "unknown",
+        vaccineDisplay: vaccineDisplay.trim(),
+        datum: `${datum}T00:00:00Z`,
+        lotNummer: lotNummer || undefined,
+        locatie: locatie || undefined,
+        opmerking: opmerking || undefined,
+        herhalend,
+        frequentie,
+        volgendeDatum: volgendeDatum || undefined,
+        geldigTot: geldigTot || undefined,
+      }),
+    });
+    setSaving(false);
+    setShowForm(false);
+    setEditingId(null);
+    setVaccineCode(""); setVaccineDisplay(""); setLotNummer(""); setOpmerking("");
+    setDatum(new Date().toISOString().slice(0, 10));
+    setHerhalend(false); setFrequentie("eenmalig"); setVolgendeDatum(""); setGeldigTot("");
+    load();
+  }
+
+  async function handleDelete(id: string) {
+    if (!confirm("Weet u zeker dat u deze vaccinatie wilt verwijderen?")) return;
+    setDeletingId(id);
+    await ecdFetch(`/api/clients/${clientId}/vaccinaties/${id}`, { method: "DELETE" });
+    setDeletingId(null);
     load();
   }
 
@@ -2716,7 +3104,7 @@ function VaccinatiesTab({ clientId }: { clientId: string }) {
     <div>
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-lg font-semibold text-fg">Vaccinaties</h2>
-        <button onClick={() => setShowForm(!showForm)} className="text-sm font-medium text-brand-600 hover:text-brand-700">
+        <button onClick={() => { setShowForm(!showForm); setEditingId(null); }} className="text-sm font-medium text-brand-600 hover:text-brand-700">
           {showForm ? "Annuleren" : "+ Vaccinatie registreren"}
         </button>
       </div>
@@ -2828,13 +3216,24 @@ function VaccinatiesTab({ clientId }: { clientId: string }) {
             rows={2}
             className="w-full border border-default rounded-lg px-3 py-2 text-sm bg-raised text-fg"
           />
-          <button
-            onClick={handleAdd}
-            disabled={saving || !vaccineDisplay.trim()}
-            className="bg-brand-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-brand-700 disabled:opacity-50"
-          >
-            {saving ? "Opslaan..." : "Vaccinatie opslaan"}
-          </button>
+          <div className="flex gap-2">
+            {editingId && (
+              <button
+                onClick={() => { setShowForm(false); setEditingId(null); }}
+                type="button"
+                className="border border-default text-fg-muted px-4 py-2 rounded-lg text-sm font-medium hover:bg-page btn-press"
+              >
+                Annuleren
+              </button>
+            )}
+            <button
+              onClick={editingId ? handleEditSave : handleAdd}
+              disabled={saving || !vaccineDisplay.trim()}
+              className="bg-brand-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-brand-700 disabled:opacity-50 btn-press"
+            >
+              {saving ? "Opslaan..." : editingId ? "Wijzigingen opslaan" : "Vaccinatie opslaan"}
+            </button>
+          </div>
         </div>
       )}
 
@@ -2893,15 +3292,23 @@ function VaccinatiesTab({ clientId }: { clientId: string }) {
                     )}
                     {v.note?.[0]?.text && <p className="text-sm text-fg-muted mt-1">{v.note[0].text}</p>}
                   </div>
-                  <span className={`shrink-0 px-2 py-0.5 rounded text-caption font-medium ${
-                    v.status === "completed"
-                      ? "bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-300"
-                      : v.status === "not-done"
-                        ? "bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300"
-                        : "bg-surface-100 text-fg-subtle"
-                  }`}>
-                    {v.status === "completed" ? "Gegeven" : v.status === "not-done" ? "Niet gegeven" : v.status ?? "---"}
-                  </span>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className={`px-2 py-0.5 rounded text-caption font-medium ${
+                      v.status === "completed"
+                        ? "bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-300"
+                        : v.status === "not-done"
+                          ? "bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300"
+                          : "bg-surface-100 text-fg-subtle"
+                    }`}>
+                      {v.status === "completed" ? "Gegeven" : v.status === "not-done" ? "Niet gegeven" : v.status ?? "---"}
+                    </span>
+                    <button onClick={() => startEdit(v)} className="text-sm text-brand-600 hover:text-brand-800 btn-press-sm">
+                      Bewerken
+                    </button>
+                    <button onClick={() => v.id && handleDelete(v.id)} disabled={deletingId === v.id} className="text-sm text-coral-600 hover:text-coral-800 btn-press-sm disabled:opacity-50">
+                      {deletingId === v.id ? "..." : "Verwijderen"}
+                    </button>
+                  </div>
                 </div>
                 {v.status === "not-done" && v.statusReason?.text && (
                   <p className="text-sm text-amber-600 mt-2">Reden: {v.statusReason.text}</p>
@@ -2935,6 +3342,13 @@ function DiagnosesTab({ clientId }: { clientId: string }) {
   const [showForm, setShowForm] = useState(false);
   const [naam, setNaam] = useState("");
   const [codelijst, setCodelijst] = useState<Array<{ code: string; display: string }>>([]);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editNaam, setEditNaam] = useState("");
+  const [editStartdatum, setEditStartdatum] = useState("");
+  const [editNotitie, setEditNotitie] = useState("");
+  const [editStatus, setEditStatus] = useState("active");
+  const [editSaving, setEditSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   useEffect(() => {
     ecdFetch<{ items: Array<{ code: string; display: string }> }>("/api/admin/codelijsten/diagnoses")
@@ -2970,6 +3384,40 @@ function DiagnosesTab({ clientId }: { clientId: string }) {
     setSaving(false);
     setShowForm(false);
     setNaam(""); setStartdatum(""); setNotitie("");
+    load();
+  }
+
+  function startEdit(d: FhirCondition) {
+    setEditingId(d.id ?? null);
+    setEditNaam(d.code?.text ?? d.code?.coding?.[0]?.display ?? "");
+    setEditStartdatum(d.onsetDateTime?.slice(0, 10) ?? "");
+    setEditNotitie(d.note?.[0]?.text ?? "");
+    setEditStatus(d.clinicalStatus?.coding?.[0]?.code ?? "active");
+  }
+
+  async function handleEditSave() {
+    if (!editingId || !editNaam.trim()) return;
+    setEditSaving(true);
+    await ecdFetch(`/api/clients/${clientId}/diagnoses/${editingId}`, {
+      method: "PUT",
+      body: JSON.stringify({
+        code: { text: editNaam },
+        clinicalStatus: { coding: [{ system: "http://terminology.hl7.org/CodeSystem/condition-clinical", code: editStatus }] },
+        verificationStatus: { coding: [{ system: "http://terminology.hl7.org/CodeSystem/condition-ver-status", code: "confirmed" }] },
+        ...(editStartdatum ? { onsetDateTime: editStartdatum } : {}),
+        ...(editNotitie ? { note: [{ text: editNotitie }] } : {}),
+      }),
+    });
+    setEditSaving(false);
+    setEditingId(null);
+    load();
+  }
+
+  async function handleDelete(id: string) {
+    if (!confirm("Weet u zeker dat u deze diagnose wilt verwijderen?")) return;
+    setDeletingId(id);
+    await ecdFetch(`/api/clients/${clientId}/diagnoses/${id}`, { method: "DELETE" });
+    setDeletingId(null);
     load();
   }
 
@@ -3012,20 +3460,69 @@ function DiagnosesTab({ clientId }: { clientId: string }) {
         <p className="text-sm text-fg-subtle py-4">Geen diagnoses of aandoeningen geregistreerd.</p>
       ) : (
         <div className="space-y-2">
-          {items.map((d) => (
-            <div key={d.id} className="bg-raised rounded-xl border border-default p-4">
-              <div className="flex items-start justify-between">
-                <p className="font-medium text-fg">{d.code?.text ?? d.code?.coding?.[0]?.display ?? "Onbekend"}</p>
-                <span className={`text-caption font-medium px-2 py-0.5 rounded ${
-                  d.clinicalStatus?.coding?.[0]?.code === "active" ? "bg-brand-50 text-brand-700" : "bg-surface-100 text-fg-subtle"
-                }`}>
-                  {d.clinicalStatus?.coding?.[0]?.code === "active" ? "Actief" : d.clinicalStatus?.coding?.[0]?.code ?? "—"}
-                </span>
+          {items.map((d) => {
+            const isEditing = d.id === editingId;
+            if (isEditing) {
+              return (
+                <div key={d.id} className="bg-raised rounded-xl border border-default p-4 space-y-3">
+                  {codelijst.length > 0 ? (
+                    <select value={editNaam} onChange={(e) => setEditNaam(e.target.value)}
+                      className="w-full border border-default rounded-lg px-3 py-2 text-sm bg-raised text-fg">
+                      <option value="">Selecteer diagnose / aandoening</option>
+                      {codelijst.map((c) => <option key={c.code} value={c.display}>{c.display}</option>)}
+                    </select>
+                  ) : (
+                    <input value={editNaam} onChange={(e) => setEditNaam(e.target.value)} placeholder="Naam diagnose"
+                      className="w-full border border-default rounded-lg px-3 py-2 text-sm bg-raised text-fg" />
+                  )}
+                  <div className="grid grid-cols-2 gap-3">
+                    <input type="date" value={editStartdatum} onChange={(e) => setEditStartdatum(e.target.value)}
+                      className="border border-default rounded-lg px-3 py-2 text-sm bg-raised text-fg" />
+                    <select value={editStatus} onChange={(e) => setEditStatus(e.target.value)}
+                      className="border border-default rounded-lg px-3 py-2 text-sm bg-raised text-fg">
+                      <option value="active">Actief</option>
+                      <option value="resolved">Hersteld</option>
+                      <option value="inactive">Inactief</option>
+                    </select>
+                  </div>
+                  <textarea value={editNotitie} onChange={(e) => setEditNotitie(e.target.value)} placeholder="Notitie (optioneel)" rows={2}
+                    className="w-full border border-default rounded-lg px-3 py-2 text-sm bg-raised text-fg" />
+                  <div className="flex gap-2">
+                    <button onClick={() => setEditingId(null)}
+                      className="border border-default text-fg-muted px-4 py-2 rounded-lg text-sm font-medium hover:bg-page btn-press">
+                      Annuleren
+                    </button>
+                    <button onClick={handleEditSave} disabled={editSaving || !editNaam.trim()}
+                      className="bg-brand-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-brand-700 disabled:opacity-50 btn-press">
+                      {editSaving ? "Opslaan..." : "Wijzigingen opslaan"}
+                    </button>
+                  </div>
+                </div>
+              );
+            }
+            return (
+              <div key={d.id} className="bg-raised rounded-xl border border-default p-4">
+                <div className="flex items-start justify-between">
+                  <p className="font-medium text-fg">{d.code?.text ?? d.code?.coding?.[0]?.display ?? "Onbekend"}</p>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className={`text-caption font-medium px-2 py-0.5 rounded ${
+                      d.clinicalStatus?.coding?.[0]?.code === "active" ? "bg-brand-50 text-brand-700" : "bg-surface-100 text-fg-subtle"
+                    }`}>
+                      {d.clinicalStatus?.coding?.[0]?.code === "active" ? "Actief" : d.clinicalStatus?.coding?.[0]?.code ?? "---"}
+                    </span>
+                    <button onClick={() => startEdit(d)} className="text-sm text-brand-600 hover:text-brand-800 btn-press-sm">
+                      Bewerken
+                    </button>
+                    <button onClick={() => d.id && handleDelete(d.id)} disabled={deletingId === d.id} className="text-sm text-coral-600 hover:text-coral-800 btn-press-sm disabled:opacity-50">
+                      {deletingId === d.id ? "..." : "Verwijderen"}
+                    </button>
+                  </div>
+                </div>
+                {d.onsetDateTime && <p className="text-caption text-fg-subtle mt-1">Sinds {new Date(d.onsetDateTime).toLocaleDateString("nl-NL")}</p>}
+                {d.note?.[0]?.text && <p className="text-sm text-fg-muted mt-1">{d.note[0].text}</p>}
               </div>
-              {d.onsetDateTime && <p className="text-caption text-fg-subtle mt-1">Sinds {new Date(d.onsetDateTime).toLocaleDateString("nl-NL")}</p>}
-              {d.note?.[0]?.text && <p className="text-sm text-fg-muted mt-1">{d.note[0].text}</p>}
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
@@ -4126,6 +4623,7 @@ function MedicatieOverzichtTab({ clientId }: { clientId: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [editingItem, setEditingItem] = useState<MedicatieOverzichtItem | null>(null);
 
   const [medicijnNaam, setMedicijnNaam] = useState("");
   const [dosering, setDosering] = useState("");
@@ -4136,6 +4634,7 @@ function MedicatieOverzichtTab({ clientId }: { clientId: string }) {
   const [opmerking, setOpmerking] = useState("");
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -4150,12 +4649,42 @@ function MedicatieOverzichtTab({ clientId }: { clientId: string }) {
 
   useEffect(() => { load(); }, [load]);
 
+  function resetForm() {
+    setMedicijnNaam("");
+    setDosering("");
+    setFrequentie("");
+    setRoute("oraal");
+    setStartdatum(new Date().toISOString().slice(0, 10));
+    setStatus("actief");
+    setOpmerking("");
+    setFormError(null);
+  }
+
+  function startEdit(med: MedicatieOverzichtItem) {
+    setEditingItem(med);
+    setShowForm(true);
+    setMedicijnNaam(med.medicijnNaam ?? "");
+    setDosering(med.dosering ?? "");
+    setFrequentie(med.frequentie ?? "");
+    setRoute(med.route ?? "oraal");
+    setStartdatum(med.startdatum?.slice(0, 10) ?? new Date().toISOString().slice(0, 10));
+    setStatus(med.status ?? "actief");
+    setOpmerking(med.opmerking ?? "");
+    setFormError(null);
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
     setFormError(null);
-    const { error: err } = await ecdFetch(`/api/clients/${clientId}/medicatie-overzicht`, {
-      method: "POST",
+
+    const url = editingItem?.id
+      ? `/api/clients/${clientId}/medicatie-overzicht/${editingItem.id}`
+      : `/api/clients/${clientId}/medicatie-overzicht`;
+    const method = editingItem?.id ? "PUT" : "POST";
+
+    const { error: err } = await ecdFetch(url, {
+      method,
       body: JSON.stringify({
         medicijnNaam,
         dosering,
@@ -4171,13 +4700,18 @@ function MedicatieOverzichtTab({ clientId }: { clientId: string }) {
       setFormError(err);
     } else {
       setShowForm(false);
-      setMedicijnNaam("");
-      setDosering("");
-      setFrequentie("");
-      setRoute("oraal");
-      setOpmerking("");
+      setEditingItem(null);
+      resetForm();
       load();
     }
+  }
+
+  async function handleDelete(id: string) {
+    if (!confirm("Weet u zeker dat u deze medicatie wilt verwijderen?")) return;
+    setDeletingId(id);
+    await ecdFetch(`/api/clients/${clientId}/medicatie-overzicht/${id}`, { method: "DELETE" });
+    setDeletingId(null);
+    load();
   }
 
   const inputCls = "w-full rounded-md border border-default px-3 py-2 text-sm shadow-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 bg-page text-fg";
@@ -4187,16 +4721,16 @@ function MedicatieOverzichtTab({ clientId }: { clientId: string }) {
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-lg font-semibold text-fg">Medicatieoverzicht</h2>
         <button
-          onClick={() => setShowForm((v) => !v)}
+          onClick={() => { setShowForm((v) => !v); setEditingItem(null); resetForm(); }}
           className="rounded-md bg-brand-700 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-800 btn-press"
         >
-          {showForm ? "Annuleren" : "Medicatie toevoegen"}
+          {showForm && !editingItem ? "Annuleren" : "Medicatie toevoegen"}
         </button>
       </div>
 
       {showForm && (
         <form onSubmit={handleSubmit} className="mb-5 rounded-lg border border-default bg-raised p-5 shadow-sm">
-          <h3 className="mb-4 font-semibold text-fg">Nieuwe medicatie</h3>
+          <h3 className="mb-4 font-semibold text-fg">{editingItem ? "Medicatie bewerken" : "Nieuwe medicatie"}</h3>
           {formError && <ErrorMsg msg={formError} />}
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
@@ -4232,9 +4766,15 @@ function MedicatieOverzichtTab({ clientId }: { clientId: string }) {
               <textarea rows={2} value={opmerking} onChange={(e) => setOpmerking(e.target.value)} placeholder="Aanvullende opmerkingen" className={inputCls} />
             </div>
           </div>
-          <div className="mt-4 flex justify-end">
+          <div className="mt-4 flex justify-end gap-2">
+            {editingItem && (
+              <button type="button" onClick={() => { setShowForm(false); setEditingItem(null); resetForm(); }}
+                className="rounded-md border border-default px-4 py-2 text-sm font-medium text-fg-muted hover:bg-page btn-press">
+                Annuleren
+              </button>
+            )}
             <button type="submit" disabled={saving} className="rounded-md bg-brand-700 px-5 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-800 disabled:opacity-50">
-              {saving ? "Opslaan..." : "Medicatie opslaan"}
+              {saving ? "Opslaan..." : editingItem ? "Wijzigingen opslaan" : "Medicatie opslaan"}
             </button>
           </div>
         </form>
@@ -4258,6 +4798,7 @@ function MedicatieOverzichtTab({ clientId }: { clientId: string }) {
                 <th className="px-4 py-3 text-left font-medium text-fg-muted">Toedieningsweg</th>
                 <th className="px-4 py-3 text-left font-medium text-fg-muted">Startdatum</th>
                 <th className="px-4 py-3 text-left font-medium text-fg-muted">Status</th>
+                <th className="px-4 py-3 text-right font-medium text-fg-muted">Acties</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-subtle">
@@ -4282,6 +4823,16 @@ function MedicatieOverzichtTab({ clientId }: { clientId: string }) {
                       }`}>
                         {MEDICATIE_STATUSSEN.find((s) => s.value === med.status)?.label ?? med.status ?? "-"}
                       </span>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="flex justify-end gap-2">
+                        <button onClick={() => startEdit(med)} className="text-sm text-brand-600 hover:text-brand-800 btn-press-sm">
+                          Bewerken
+                        </button>
+                        <button onClick={() => med.id && handleDelete(med.id)} disabled={deletingId === med.id} className="text-sm text-coral-600 hover:text-coral-800 btn-press-sm disabled:opacity-50">
+                          {deletingId === med.id ? "..." : "Verwijderen"}
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );
