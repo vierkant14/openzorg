@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import AppShell from "../../../components/AppShell";
 import { ecdFetch } from "../../../lib/api";
+import { loadWidgetConfig } from "../../../lib/widget-config";
 
 /* -------------------------------------------------------------------------- */
 /*  FHIR type helpers                                                         */
@@ -113,9 +114,10 @@ interface FhirMedicationRequest {
   extension?: Array<{ url?: string; valueString?: string }>;
 }
 
-type TabKey = "rapportages" | "zorgplan" | "contactpersonen" | "medicatie" | "allergieen" | "vaccinaties" | "diagnoses" | "risicoscreenings" | "toediening" | "vragenlijsten" | "mdo" | "vbm" | "wilsverklaringen" | "medicatie-overzicht" | "documenten" | "extra";
+type TabKey = "dashboard" | "rapportages" | "zorgplan" | "contactpersonen" | "medicatie" | "allergieen" | "vaccinaties" | "diagnoses" | "risicoscreenings" | "toediening" | "vragenlijsten" | "mdo" | "vbm" | "wilsverklaringen" | "medicatie-overzicht" | "documenten" | "extra";
 
 const TABS: { key: TabKey; label: string }[] = [
+  { key: "dashboard", label: "Overzicht" },
   { key: "rapportages", label: "Rapportages" },
   { key: "zorgplan", label: "Zorgplan" },
   { key: "contactpersonen", label: "Contactpersonen" },
@@ -206,7 +208,7 @@ export default function ClientDetailPage() {
   const [client, setClient] = useState<ClientResource | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<TabKey>("rapportages");
+  const [activeTab, setActiveTab] = useState<TabKey>("dashboard");
 
   useEffect(() => {
     let cancelled = false;
@@ -418,6 +420,7 @@ export default function ClientDetailPage() {
 
         {/* Tab content */}
         <div className="mt-6">
+          {activeTab === "dashboard" && <DashboardTab clientId={id} client={client} onNavigate={setActiveTab} />}
           {activeTab === "rapportages" && <RapportagesTab clientId={id} />}
           {activeTab === "zorgplan" && <ZorgplanTab clientId={id} />}
           {activeTab === "contactpersonen" && <ContactpersonenTab clientId={id} />}
@@ -449,6 +452,414 @@ function PageShell({ children }: { children: React.ReactNode }) {
     <AppShell>
       {children}
     </AppShell>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Dashboard / overview tab                                                  */
+/* -------------------------------------------------------------------------- */
+
+interface DashboardTabProps {
+  clientId: string;
+  client: ClientResource;
+  onNavigate: (tab: TabKey) => void;
+}
+
+function DashboardTab({ clientId, client, onNavigate }: DashboardTabProps) {
+  const [widgetCfg] = useState(() => loadWidgetConfig());
+  const enabledWidgets = widgetCfg.filter((w) => w.enabled);
+
+  return (
+    <div className="grid gap-4 sm:grid-cols-2">
+      {enabledWidgets.map((widget) => {
+        switch (widget.id) {
+          case "persoonlijke-gegevens":
+            return <PersoonlijkeGegevensWidget key={widget.id} client={client} />;
+          case "zorgplan-samenvatting":
+            return <ZorgplanWidget key={widget.id} clientId={clientId} onNavigate={() => onNavigate("zorgplan")} />;
+          case "laatste-rapportages":
+            return <RapportagesWidget key={widget.id} clientId={clientId} onNavigate={() => onNavigate("rapportages")} />;
+          case "medicatie":
+            return <MedicatieWidget key={widget.id} clientId={clientId} onNavigate={() => onNavigate("medicatie")} />;
+          case "allergieen":
+            return <AllergieenWidget key={widget.id} clientId={clientId} onNavigate={() => onNavigate("allergieen")} />;
+          case "vaccinaties":
+            return <VaccinatiesWidget key={widget.id} clientId={clientId} onNavigate={() => onNavigate("vaccinaties")} />;
+          case "contactpersonen":
+            return <ContactpersonenWidget key={widget.id} clientId={clientId} onNavigate={() => onNavigate("contactpersonen")} />;
+          case "afspraken":
+            return <AfsprakenWidget key={widget.id} clientId={clientId} />;
+          default:
+            return null;
+        }
+      })}
+    </div>
+  );
+}
+
+/* ── Dashboard widget wrapper ── */
+
+function WidgetCard({
+  title,
+  onViewAll,
+  children,
+}: {
+  title: string;
+  onViewAll?: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-lg border border-default bg-raised p-4 shadow-sm">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-sm font-semibold text-fg">{title}</h3>
+        {onViewAll && (
+          <button
+            type="button"
+            onClick={onViewAll}
+            className="text-xs font-medium text-brand-600 hover:text-brand-800 transition-colors"
+          >
+            Bekijk alles &rarr;
+          </button>
+        )}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+/* ── Persoonlijke gegevens widget ── */
+
+function PersoonlijkeGegevensWidget({ client }: { client: ClientResource }) {
+  const rows: Array<{ label: string; value: string }> = [
+    { label: "BSN", value: clientBsn(client) },
+    { label: "Geboortedatum", value: formatDate(client.birthDate) },
+    { label: "Geslacht", value: geslachtLabel(client.gender) },
+  ];
+
+  const phone = client.telecom?.find((t) => t.system === "phone")?.value;
+  if (phone) rows.push({ label: "Telefoon", value: phone });
+
+  const addr = client.address?.[0];
+  if (addr) {
+    const line = [addr.line?.[0], [addr.postalCode, addr.city].filter(Boolean).join(" ")]
+      .filter(Boolean)
+      .join(", ");
+    if (line) rows.push({ label: "Adres", value: line });
+  }
+
+  return (
+    <WidgetCard title="Persoonlijke gegevens">
+      <dl className="space-y-1.5">
+        {rows.map((r) => (
+          <div key={r.label} className="flex items-baseline gap-2 text-sm">
+            <dt className="w-28 shrink-0 text-fg-subtle">{r.label}</dt>
+            <dd className="text-fg">{r.value}</dd>
+          </div>
+        ))}
+      </dl>
+    </WidgetCard>
+  );
+}
+
+/* ── Zorgplan widget ── */
+
+function ZorgplanWidget({ clientId, onNavigate }: { clientId: string; onNavigate: () => void }) {
+  const [plans, setPlans] = useState<FhirCarePlan[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    ecdFetch<FhirBundle<FhirCarePlan>>(`/api/clients/${clientId}/zorgplan`).then(({ data }) => {
+      setPlans(data?.entry?.map((e) => e.resource) ?? []);
+      setLoading(false);
+    });
+  }, [clientId]);
+
+  return (
+    <WidgetCard title="Zorgplan samenvatting" onViewAll={onNavigate}>
+      {loading ? (
+        <p className="text-sm text-fg-subtle">Laden...</p>
+      ) : plans.length === 0 ? (
+        <p className="text-sm text-fg-subtle">Geen zorgplannen gevonden</p>
+      ) : (
+        <ul className="space-y-2">
+          {plans.slice(0, 2).map((plan) => (
+            <li key={plan.id} className="text-sm">
+              <p className="font-medium text-fg">{plan.title || "Zorgplan"}</p>
+              <p className="text-fg-subtle">
+                {plan.status === "active" ? "Actief" : plan.status ?? "-"}
+                {plan.period?.start ? ` \u00b7 Vanaf ${formatDate(plan.period.start)}` : ""}
+              </p>
+            </li>
+          ))}
+        </ul>
+      )}
+    </WidgetCard>
+  );
+}
+
+/* ── Rapportages widget (3 most recent) ── */
+
+function RapportagesWidget({ clientId, onNavigate }: { clientId: string; onNavigate: () => void }) {
+  const [items, setItems] = useState<FhirObservation[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    ecdFetch<FhirBundle<FhirObservation>>(`/api/clients/${clientId}/rapportages`).then(({ data }) => {
+      const all = data?.entry?.map((e) => e.resource) ?? [];
+      all.sort((a, b) => (b.effectiveDateTime ?? "").localeCompare(a.effectiveDateTime ?? ""));
+      setItems(all.slice(0, 3));
+      setLoading(false);
+    });
+  }, [clientId]);
+
+  return (
+    <WidgetCard title="Laatste rapportages" onViewAll={onNavigate}>
+      {loading ? (
+        <p className="text-sm text-fg-subtle">Laden...</p>
+      ) : items.length === 0 ? (
+        <p className="text-sm text-fg-subtle">Geen rapportages gevonden</p>
+      ) : (
+        <ul className="space-y-2">
+          {items.map((obs) => (
+            <li key={obs.id} className="text-sm">
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="font-medium text-fg">{obs.code?.text || "Rapportage"}</span>
+                <span className="shrink-0 text-xs text-fg-subtle">{formatDate(obs.effectiveDateTime)}</span>
+              </div>
+              {obs.valueString && (
+                <p className="mt-0.5 text-fg-muted line-clamp-2">{obs.valueString}</p>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </WidgetCard>
+  );
+}
+
+/* ── Medicatie widget ── */
+
+function MedicatieWidget({ clientId, onNavigate }: { clientId: string; onNavigate: () => void }) {
+  const [items, setItems] = useState<FhirMedicationRequest[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    ecdFetch<FhirBundle<FhirMedicationRequest>>(`/api/clients/${clientId}/medicatie`).then(({ data }) => {
+      setItems((data?.entry?.map((e) => e.resource) ?? []).slice(0, 4));
+      setLoading(false);
+    });
+  }, [clientId]);
+
+  return (
+    <WidgetCard title="Medicatie" onViewAll={onNavigate}>
+      {loading ? (
+        <p className="text-sm text-fg-subtle">Laden...</p>
+      ) : items.length === 0 ? (
+        <p className="text-sm text-fg-subtle">Geen medicatie gevonden</p>
+      ) : (
+        <ul className="space-y-1.5">
+          {items.map((med) => (
+            <li key={med.id} className="text-sm">
+              <span className="font-medium text-fg">{med.medicationCodeableConcept?.text || "-"}</span>
+              {med.dosageInstruction?.[0]?.text && (
+                <span className="ml-2 text-fg-subtle">{med.dosageInstruction[0].text}</span>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </WidgetCard>
+  );
+}
+
+/* ── Allergieen widget ── */
+
+interface WidgetAllergyIntolerance {
+  id?: string;
+  code?: { text?: string; coding?: Array<{ display?: string }> };
+  clinicalStatus?: { coding?: Array<{ code?: string }> };
+  criticality?: string;
+}
+
+function AllergieenWidget({ clientId, onNavigate }: { clientId: string; onNavigate: () => void }) {
+  const [items, setItems] = useState<WidgetAllergyIntolerance[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    ecdFetch<FhirBundle<WidgetAllergyIntolerance>>(`/api/clients/${clientId}/allergieen`).then(({ data }) => {
+      setItems(data?.entry?.map((e) => e.resource) ?? []);
+      setLoading(false);
+    });
+  }, [clientId]);
+
+  const critLabel = (c?: string) => {
+    switch (c) {
+      case "high": return "Hoog";
+      case "low": return "Laag";
+      default: return null;
+    }
+  };
+
+  return (
+    <WidgetCard title="Allergie\u00ebn" onViewAll={onNavigate}>
+      {loading ? (
+        <p className="text-sm text-fg-subtle">Laden...</p>
+      ) : items.length === 0 ? (
+        <p className="text-sm text-fg-subtle">Geen allergie\u00ebn gevonden</p>
+      ) : (
+        <ul className="space-y-1.5">
+          {items.map((a) => {
+            const name = a.code?.text || a.code?.coding?.[0]?.display || "-";
+            const crit = critLabel(a.criticality);
+            return (
+              <li key={a.id} className="flex items-center gap-2 text-sm">
+                <span className="font-medium text-fg">{name}</span>
+                {crit && (
+                  <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${
+                    a.criticality === "high"
+                      ? "bg-coral-50 text-coral-700 dark:bg-coral-950/30 dark:text-coral-400"
+                      : "bg-surface-100 text-fg-muted dark:bg-surface-800"
+                  }`}>
+                    {crit}
+                  </span>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </WidgetCard>
+  );
+}
+
+/* ── Vaccinaties widget ── */
+
+interface WidgetImmunization {
+  id?: string;
+  vaccineCode?: { text?: string; coding?: Array<{ display?: string }> };
+  occurrenceDateTime?: string;
+  status?: string;
+}
+
+function VaccinatiesWidget({ clientId, onNavigate }: { clientId: string; onNavigate: () => void }) {
+  const [items, setItems] = useState<WidgetImmunization[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    ecdFetch<FhirBundle<WidgetImmunization>>(`/api/clients/${clientId}/vaccinaties`).then(({ data }) => {
+      setItems((data?.entry?.map((e) => e.resource) ?? []).slice(0, 4));
+      setLoading(false);
+    });
+  }, [clientId]);
+
+  return (
+    <WidgetCard title="Vaccinaties" onViewAll={onNavigate}>
+      {loading ? (
+        <p className="text-sm text-fg-subtle">Laden...</p>
+      ) : items.length === 0 ? (
+        <p className="text-sm text-fg-subtle">Geen vaccinaties gevonden</p>
+      ) : (
+        <ul className="space-y-1.5">
+          {items.map((v) => (
+            <li key={v.id} className="flex items-baseline justify-between gap-2 text-sm">
+              <span className="font-medium text-fg">
+                {v.vaccineCode?.text || v.vaccineCode?.coding?.[0]?.display || "-"}
+              </span>
+              <span className="shrink-0 text-xs text-fg-subtle">{formatDate(v.occurrenceDateTime)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </WidgetCard>
+  );
+}
+
+/* ── Contactpersonen widget ── */
+
+function ContactpersonenWidget({ clientId, onNavigate }: { clientId: string; onNavigate: () => void }) {
+  const [items, setItems] = useState<FhirRelatedPerson[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    ecdFetch<FhirBundle<FhirRelatedPerson>>(`/api/clients/${clientId}/contactpersonen`).then(({ data }) => {
+      setItems((data?.entry?.map((e) => e.resource) ?? []).slice(0, 3));
+      setLoading(false);
+    });
+  }, [clientId]);
+
+  return (
+    <WidgetCard title="Contactpersonen" onViewAll={onNavigate}>
+      {loading ? (
+        <p className="text-sm text-fg-subtle">Laden...</p>
+      ) : items.length === 0 ? (
+        <p className="text-sm text-fg-subtle">Geen contactpersonen gevonden</p>
+      ) : (
+        <ul className="space-y-2">
+          {items.map((cp) => {
+            const name = [cp.name?.[0]?.given?.join(" "), cp.name?.[0]?.family].filter(Boolean).join(" ") || "-";
+            const rel = cp.relationship?.[0]?.coding?.[0]?.display;
+            const phone = cp.telecom?.find((t) => t.system === "phone")?.value;
+            return (
+              <li key={cp.id} className="text-sm">
+                <span className="font-medium text-fg">{name}</span>
+                {rel && <span className="ml-2 text-fg-subtle">({rel})</span>}
+                {phone && <p className="text-fg-muted">{phone}</p>}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </WidgetCard>
+  );
+}
+
+/* ── Afspraken widget ── */
+
+interface WidgetAppointment {
+  id?: string;
+  status?: string;
+  start?: string;
+  end?: string;
+  description?: string;
+  serviceType?: Array<{ text?: string }>;
+}
+
+function AfsprakenWidget({ clientId }: { clientId: string }) {
+  const [items, setItems] = useState<WidgetAppointment[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    ecdFetch<FhirBundle<WidgetAppointment>>(`/api/afspraken?patient=${clientId}`).then(({ data }) => {
+      const all = data?.entry?.map((e) => e.resource) ?? [];
+      // Show upcoming appointments
+      const now = new Date().toISOString();
+      const upcoming = all.filter((a) => (a.start ?? "") >= now).slice(0, 3);
+      setItems(upcoming.length > 0 ? upcoming : all.slice(0, 3));
+      setLoading(false);
+    });
+  }, [clientId]);
+
+  return (
+    <WidgetCard title="Afspraken">
+      {loading ? (
+        <p className="text-sm text-fg-subtle">Laden...</p>
+      ) : items.length === 0 ? (
+        <p className="text-sm text-fg-subtle">Geen afspraken gevonden</p>
+      ) : (
+        <ul className="space-y-2">
+          {items.map((a) => (
+            <li key={a.id} className="text-sm">
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="font-medium text-fg">
+                  {a.serviceType?.[0]?.text || a.description || "Afspraak"}
+                </span>
+                <span className="shrink-0 text-xs text-fg-subtle">{formatDateTime(a.start)}</span>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </WidgetCard>
   );
 }
 
@@ -2195,6 +2606,13 @@ function AllergieenTab({ clientId }: { clientId: string }) {
 /*  Vaccinaties Tab                                                           */
 /* -------------------------------------------------------------------------- */
 
+interface FhirExtension {
+  url: string;
+  valueBoolean?: boolean;
+  valueString?: string;
+  valueDate?: string;
+}
+
 interface FhirImmunization {
   id?: string;
   status?: string;
@@ -2206,7 +2624,18 @@ interface FhirImmunization {
   route?: { text?: string };
   note?: Array<{ text?: string }>;
   statusReason?: { text?: string };
+  extension?: FhirExtension[];
 }
+
+function getExtension(resource: FhirImmunization, name: string): FhirExtension | undefined {
+  return resource.extension?.find((e) => e.url === `https://openzorg.nl/extensions/${name}`);
+}
+
+const FREQUENTIE_LABELS: Record<string, string> = {
+  jaarlijks: "Jaarlijks",
+  halfjaarlijks: "Halfjaarlijks",
+  eenmalig: "Eenmalig",
+};
 
 const VEELGEBRUIKTE_VACCINS = [
   { code: "J07AL02", display: "Tetanus vaccin" },
@@ -2232,6 +2661,10 @@ function VaccinatiesTab({ clientId }: { clientId: string }) {
   const [lotNummer, setLotNummer] = useState("");
   const [locatie, setLocatie] = useState("Linker bovenarm");
   const [opmerking, setOpmerking] = useState("");
+  const [herhalend, setHerhalend] = useState(false);
+  const [frequentie, setFrequentie] = useState("eenmalig");
+  const [volgendeDatum, setVolgendeDatum] = useState("");
+  const [geldigTot, setGeldigTot] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -2261,12 +2694,17 @@ function VaccinatiesTab({ clientId }: { clientId: string }) {
         lotNummer: lotNummer || undefined,
         locatie: locatie || undefined,
         opmerking: opmerking || undefined,
+        herhalend,
+        frequentie,
+        volgendeDatum: volgendeDatum || undefined,
+        geldigTot: geldigTot || undefined,
       }),
     });
     setSaving(false);
     setShowForm(false);
     setVaccineCode(""); setVaccineDisplay(""); setLotNummer(""); setOpmerking("");
     setDatum(new Date().toISOString().slice(0, 10));
+    setHerhalend(false); setFrequentie("eenmalig"); setVolgendeDatum(""); setGeldigTot("");
     load();
   }
 
@@ -2336,6 +2774,52 @@ function VaccinatiesTab({ clientId }: { clientId: string }) {
               <option value="Rechter bovenbeen">Rechter bovenbeen</option>
             </select>
           </div>
+          <div className="flex items-center gap-3">
+            <label className="flex items-center gap-2 text-sm text-fg">
+              <input
+                type="checkbox"
+                checked={herhalend}
+                onChange={(e) => setHerhalend(e.target.checked)}
+                className="rounded border-default"
+              />
+              Herhalende vaccinatie
+            </label>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-caption font-medium text-fg-muted mb-1">Frequentie</label>
+              <select
+                value={frequentie}
+                onChange={(e) => setFrequentie(e.target.value)}
+                className="w-full border border-default rounded-lg px-3 py-2 text-sm bg-raised text-fg"
+              >
+                <option value="eenmalig">Eenmalig</option>
+                <option value="jaarlijks">Jaarlijks</option>
+                <option value="halfjaarlijks">Halfjaarlijks</option>
+              </select>
+            </div>
+            {herhalend && (
+              <div>
+                <label className="block text-caption font-medium text-fg-muted mb-1">Volgende datum</label>
+                <input
+                  type="date"
+                  value={volgendeDatum}
+                  onChange={(e) => setVolgendeDatum(e.target.value)}
+                  className="w-full border border-default rounded-lg px-3 py-2 text-sm bg-raised text-fg"
+                />
+              </div>
+            )}
+          </div>
+          <div>
+            <label className="block text-caption font-medium text-fg-muted mb-1">Geldig tot (einddatum bescherming)</label>
+            <input
+              type="date"
+              value={geldigTot}
+              onChange={(e) => setGeldigTot(e.target.value)}
+              className="w-full border border-default rounded-lg px-3 py-2 text-sm bg-raised text-fg"
+            />
+            <p className="text-[10px] text-fg-subtle mt-1">Wanneer de vaccinatiebescherming verloopt (bijv. griepprik: 1 jaar, tetanus: 10 jaar)</p>
+          </div>
           <textarea
             placeholder="Opmerking (optioneel)"
             value={opmerking}
@@ -2357,40 +2841,73 @@ function VaccinatiesTab({ clientId }: { clientId: string }) {
         <p className="text-sm text-fg-subtle py-4">Geen vaccinaties geregistreerd.</p>
       ) : (
         <div className="space-y-2">
-          {items.map((v) => (
-            <div key={v.id} className="bg-raised rounded-xl border border-default p-4">
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="font-medium text-fg">
-                    {v.vaccineCode?.text ?? v.vaccineCode?.coding?.[0]?.display ?? "Onbekend vaccin"}
-                  </p>
-                  <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1 text-caption text-fg-subtle">
-                    {v.occurrenceDateTime && (
-                      <span>{new Date(v.occurrenceDateTime).toLocaleDateString("nl-NL")}</span>
+          {items.map((v) => {
+            const freqExt = getExtension(v, "frequentie");
+            const freqLabel = freqExt?.valueString ? (FREQUENTIE_LABELS[freqExt.valueString] ?? freqExt.valueString) : null;
+            const herhalendExt = getExtension(v, "herhalend");
+            const volgendeDatumExt = getExtension(v, "volgende-datum");
+            const geldigTotExt = getExtension(v, "geldig-tot");
+            return (
+              <div key={v.id} className="bg-raised rounded-xl border border-default p-4">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <p className="font-medium text-fg">
+                        {v.vaccineCode?.text ?? v.vaccineCode?.coding?.[0]?.display ?? "Onbekend vaccin"}
+                      </p>
+                      {freqLabel && (
+                        <span className={`px-2 py-0.5 rounded text-caption font-medium ${
+                          freqExt?.valueString === "eenmalig"
+                            ? "bg-surface-100 text-fg-subtle"
+                            : "bg-brand-50 text-brand-700 dark:bg-brand-950 dark:text-brand-300"
+                        }`}>
+                          {freqLabel}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1 text-caption text-fg-subtle">
+                      {v.occurrenceDateTime && (
+                        <span>{new Date(v.occurrenceDateTime).toLocaleDateString("nl-NL")}</span>
+                      )}
+                      {v.lotNumber && <span>Lot: {v.lotNumber}</span>}
+                      {v.site?.text && <span>{v.site.text}</span>}
+                      {v.performer?.[0]?.actor?.display && (
+                        <span>Door: {v.performer[0].actor.display}</span>
+                      )}
+                    </div>
+                    {herhalendExt?.valueBoolean && volgendeDatumExt?.valueDate && (
+                      <p className="text-sm text-brand-600 mt-1">
+                        Volgende vaccinatie: {new Date(volgendeDatumExt.valueDate).toLocaleDateString("nl-NL")}
+                      </p>
                     )}
-                    {v.lotNumber && <span>Lot: {v.lotNumber}</span>}
-                    {v.site?.text && <span>{v.site.text}</span>}
-                    {v.performer?.[0]?.actor?.display && (
-                      <span>Door: {v.performer[0].actor.display}</span>
+                    {geldigTotExt?.valueDate && (
+                      <p className={`text-sm mt-1 ${
+                        new Date(geldigTotExt.valueDate) < new Date()
+                          ? "text-coral-600 font-medium"
+                          : "text-fg-muted"
+                      }`}>
+                        Geldig tot: {new Date(geldigTotExt.valueDate).toLocaleDateString("nl-NL")}
+                        {new Date(geldigTotExt.valueDate) < new Date() && " (verlopen)"}
+                      </p>
                     )}
+                    {v.note?.[0]?.text && <p className="text-sm text-fg-muted mt-1">{v.note[0].text}</p>}
                   </div>
-                  {v.note?.[0]?.text && <p className="text-sm text-fg-muted mt-1">{v.note[0].text}</p>}
+                  <span className={`shrink-0 px-2 py-0.5 rounded text-caption font-medium ${
+                    v.status === "completed"
+                      ? "bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-300"
+                      : v.status === "not-done"
+                        ? "bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300"
+                        : "bg-surface-100 text-fg-subtle"
+                  }`}>
+                    {v.status === "completed" ? "Gegeven" : v.status === "not-done" ? "Niet gegeven" : v.status ?? "---"}
+                  </span>
                 </div>
-                <span className={`shrink-0 px-2 py-0.5 rounded text-caption font-medium ${
-                  v.status === "completed"
-                    ? "bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-300"
-                    : v.status === "not-done"
-                      ? "bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300"
-                      : "bg-surface-100 text-fg-subtle"
-                }`}>
-                  {v.status === "completed" ? "Gegeven" : v.status === "not-done" ? "Niet gegeven" : v.status ?? "—"}
-                </span>
+                {v.status === "not-done" && v.statusReason?.text && (
+                  <p className="text-sm text-amber-600 mt-2">Reden: {v.statusReason.text}</p>
+                )}
               </div>
-              {v.status === "not-done" && v.statusReason?.text && (
-                <p className="text-sm text-amber-600 mt-2">Reden: {v.statusReason.text}</p>
-              )}
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

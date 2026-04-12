@@ -50,10 +50,30 @@ function generateBpmn(def: ProcessDefinition): string {
   const processId = def.processKey || slugify(def.name);
   const lines: string[] = [];
 
+  // Helper: resolve the BPMN element ID for step at index i.
+  // Tasks use "step{n}", decisions use "gateway{n}".
+  function elementId(idx: number): string {
+    const s = def.steps[idx];
+    if (!s) return "end";
+    return s.type === "decision" ? `gateway${idx + 1}` : `step${idx + 1}`;
+  }
+
+  // Track which element IDs already have an incoming flow (from a gateway "ja" branch)
+  const hasIncomingFlow = new Set<string>();
+
+  // Pre-scan: find elements that are targets of gateway "ja" branches
+  for (let i = 0; i < def.steps.length; i++) {
+    if (def.steps[i]!.type === "decision" && i + 1 < def.steps.length) {
+      hasIncomingFlow.add(elementId(i + 1));
+    }
+  }
+
   lines.push(`<?xml version="1.0" encoding="UTF-8"?>`);
   lines.push(`<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"`);
   lines.push(`             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"`);
   lines.push(`             xmlns:flowable="http://flowable.org/bpmn"`);
+  lines.push(`             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"`);
+  lines.push(`             xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"`);
   lines.push(`             targetNamespace="http://openzorg.nl/bpmn"`);
   lines.push(`             id="${processId}Definitions">`);
   lines.push(``);
@@ -66,66 +86,63 @@ function generateBpmn(def: ProcessDefinition): string {
 
   for (let i = 0; i < def.steps.length; i++) {
     const step = def.steps[i]!;
-    const stepId = `step${i + 1}`;
-    const flowId = `flow${flowIndex++}`;
+    const elId = elementId(i);
 
     if (step.type === "task") {
+      // Only create incoming flow if this step doesn't already have one from a gateway
+      if (!hasIncomingFlow.has(elId)) {
+        const flowId = `flow${flowIndex++}`;
+        lines.push(``);
+        lines.push(`    <sequenceFlow id="${flowId}" sourceRef="${prevId}" targetRef="${elId}" />`);
+      }
       lines.push(``);
-      lines.push(`    <sequenceFlow id="${flowId}" sourceRef="${prevId}" targetRef="${stepId}" />`);
-      lines.push(``);
-      lines.push(`    <userTask id="${stepId}"`);
+      lines.push(`    <userTask id="${elId}"`);
       lines.push(`              name="${escXml(step.name)}"`);
       lines.push(`              flowable:candidateGroups="${step.assignedRole}">`);
       if (step.description) {
         lines.push(`      <documentation>${escXml(step.description)}</documentation>`);
       }
       lines.push(`    </userTask>`);
-      prevId = stepId;
-    } else if (step.type === "decision") {
-      const gatewayId = `gateway${i + 1}`;
-      const varName = step.conditionVariable || `beslissing${i + 1}`;
-      const _yesId = `step${i + 1}Ja`;
-      const _noId = `step${i + 1}Nee`;
+      prevId = elId;
 
-      // Connect previous to gateway
-      lines.push(``);
-      lines.push(`    <sequenceFlow id="${flowId}" sourceRef="${prevId}" targetRef="${gatewayId}" />`);
+    } else if (step.type === "decision") {
+      const gatewayId = elId;
+      const varName = step.conditionVariable || `beslissing${i + 1}`;
+
+      // Connect previous element to this gateway (unless a prior gateway "ja" already connects)
+      if (!hasIncomingFlow.has(gatewayId)) {
+        const flowId = `flow${flowIndex++}`;
+        lines.push(``);
+        lines.push(`    <sequenceFlow id="${flowId}" sourceRef="${prevId}" targetRef="${gatewayId}" />`);
+      }
       lines.push(``);
       lines.push(`    <exclusiveGateway id="${gatewayId}" name="${escXml(step.conditionLabel || step.name)}" />`);
 
-      // "Ja" branch — continues to next step
+      // "Ja" branch — continues to the correct next element or end
       const flowYesId = `flow${flowIndex++}`;
-      const nextStepId = i + 1 < def.steps.length ? `step${i + 2}` : "end";
+      const nextTarget = i + 1 < def.steps.length ? elementId(i + 1) : "end";
       lines.push(``);
-      lines.push(`    <sequenceFlow id="${flowYesId}" sourceRef="${gatewayId}" targetRef="${nextStepId}">`);
+      lines.push(`    <sequenceFlow id="${flowYesId}" sourceRef="${gatewayId}" targetRef="${nextTarget}">`);
       lines.push(`      <conditionExpression xsi:type="tFormalExpression">\${${varName} == true}</conditionExpression>`);
       lines.push(`    </sequenceFlow>`);
 
-      // "Nee" branch — goes to end
+      // "Nee" branch — goes to separate end event
       const flowNoId = `flow${flowIndex++}`;
+      const neeEndId = `endNee${i + 1}`;
       lines.push(``);
-      lines.push(`    <sequenceFlow id="${flowNoId}" sourceRef="${gatewayId}" targetRef="endNee${i + 1}">`);
+      lines.push(`    <sequenceFlow id="${flowNoId}" sourceRef="${gatewayId}" targetRef="${neeEndId}">`);
       lines.push(`      <conditionExpression xsi:type="tFormalExpression">\${${varName} == false}</conditionExpression>`);
       lines.push(`    </sequenceFlow>`);
-
       lines.push(``);
-      lines.push(`    <endEvent id="endNee${i + 1}" name="${escXml(step.name)} — Nee" />`);
+      lines.push(`    <endEvent id="${neeEndId}" name="${escXml(step.name)} — Nee" />`);
 
       prevId = gatewayId;
-      // Skip prevId update — next step connects from nextStepId route
-      // Actually we need to continue from the "ja" branch
-      // The next step already has its flowId handled, so we skip prevId
-      // But we need the next task to have its own connection
-      // Let me restructure: gateway → next task via "ja" flow, so prevId stays as gateway
-      // But we already created the sequenceFlow above. So prevId should be set such that
-      // the next iteration doesn't create a duplicate flow.
-      // Solution: set prevId to a sentinel that the next iteration skips
-      prevId = "__skip__";
     }
   }
 
-  // Final flow to end
-  if (prevId !== "__skip__") {
+  // Final flow to end — only if last step was a task (decisions handle their own end flows)
+  const lastStep = def.steps[def.steps.length - 1];
+  if (!lastStep || lastStep.type === "task") {
     const endFlowId = `flow${flowIndex++}`;
     lines.push(``);
     lines.push(`    <sequenceFlow id="${endFlowId}" sourceRef="${prevId}" targetRef="end" />`);
@@ -135,6 +152,12 @@ function generateBpmn(def: ProcessDefinition): string {
   lines.push(`    <endEvent id="end" name="Proces voltooid" />`);
   lines.push(``);
   lines.push(`  </process>`);
+  lines.push(``);
+  lines.push(`  <bpmndi:BPMNDiagram id="BPMNDiagram_${processId}">`);
+  lines.push(`    <bpmndi:BPMNPlane bpmnElement="${processId}" id="BPMNPlane_${processId}">`);
+  lines.push(`      <bpmndi:BPMNShape bpmnElement="start" id="BPMNShape_start"><omgdc:Bounds x="100" y="200" width="36" height="36" /></bpmndi:BPMNShape>`);
+  lines.push(`    </bpmndi:BPMNPlane>`);
+  lines.push(`  </bpmndi:BPMNDiagram>`);
   lines.push(``);
   lines.push(`</definitions>`);
 

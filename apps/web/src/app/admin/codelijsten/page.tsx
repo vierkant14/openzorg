@@ -36,6 +36,11 @@ export default function CodelijstenPage() {
   const [removing, setRemoving] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
+  // Custom entry (vrije invoer)
+  const [customCode, setCustomCode] = useState("");
+  const [customDisplay, setCustomDisplay] = useState("");
+  const [addingCustom, setAddingCustom] = useState(false);
+
   // Load types
   useEffect(() => {
     ecdFetch<{ types: CodelijstType[] }>("/api/admin/codelijsten/types")
@@ -87,6 +92,30 @@ export default function CodelijstenPage() {
     await ecdFetch(`/api/admin/codelijsten/${activeType}/${code}`, { method: "DELETE" });
     setRemoving(null);
     loadItems();
+  }
+
+  async function handleAddCustom() {
+    if (!customDisplay.trim()) return;
+    setAddingCustom(true);
+    setMessage(null);
+    const code = customCode.trim() || `OZ-${Date.now()}`;
+    const { error } = await ecdFetch(`/api/admin/codelijsten/${activeType}`, {
+      method: "POST",
+      body: JSON.stringify({
+        code,
+        display: customDisplay.trim(),
+        system: "https://openzorg.nl/CodeSystem/custom",
+      }),
+    });
+    if (error) {
+      setMessage(error);
+    } else {
+      setMessage(`"${customDisplay.trim()}" toegevoegd (eigen code)`);
+      setCustomCode("");
+      setCustomDisplay("");
+      loadItems();
+    }
+    setAddingCustom(false);
   }
 
   const alreadyAdded = new Set(items.map((i) => i.code));
@@ -190,6 +219,37 @@ export default function CodelijstenPage() {
                 </p>
               </div>
             )}
+
+            {/* Vrije invoer — for items not in SNOMED CT */}
+            <div className="mt-6 bg-raised rounded-2xl border border-default p-5">
+              <h3 className="text-body-sm font-semibold text-fg mb-1">Eigen term toevoegen</h3>
+              <p className="text-caption text-fg-subtle mb-3">
+                Niet alles staat in SNOMED CT (bijv. voeding, specifieke hulpmiddelen). Voeg hier eigen termen toe.
+              </p>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={customDisplay}
+                  onChange={(e) => setCustomDisplay(e.target.value)}
+                  placeholder="Naam (bijv. Glutenvrij dieet)"
+                  className="flex-1 border border-default bg-raised rounded-lg px-3 py-2 text-body-sm text-fg placeholder:text-fg-subtle focus:border-brand-400 focus:ring-2 focus:ring-brand-500/20 outline-none"
+                />
+                <input
+                  type="text"
+                  value={customCode}
+                  onChange={(e) => setCustomCode(e.target.value)}
+                  placeholder="Code (optioneel)"
+                  className="w-32 border border-default bg-raised rounded-lg px-3 py-2 text-body-sm text-fg placeholder:text-fg-subtle focus:border-brand-400 focus:ring-2 focus:ring-brand-500/20 outline-none font-mono"
+                />
+                <button
+                  onClick={handleAddCustom}
+                  disabled={!customDisplay.trim() || addingCustom}
+                  className="shrink-0 px-4 py-2 bg-navy-600 text-white rounded-lg text-caption font-medium hover:bg-navy-700 disabled:opacity-50"
+                >
+                  {addingCustom ? "..." : "Toevoegen"}
+                </button>
+              </div>
+            </div>
           </div>
 
           {/* Right: Current org list */}

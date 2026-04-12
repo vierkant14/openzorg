@@ -26,10 +26,10 @@ export default function TenantSwitcher() {
     : "Tenant";
 
   useEffect(() => {
-    masterFetch<Tenant[]>("/tenants").then(({ data }) => {
-      if (data && Array.isArray(data)) {
-        setTenants(data.filter((t) => t.status === "active"));
-      }
+    masterFetch<{ tenants: Tenant[] } | Tenant[]>("/tenants").then(({ data }) => {
+      // API returns { tenants: [...] } wrapper
+      const list = Array.isArray(data) ? data : (data as { tenants: Tenant[] } | null)?.tenants ?? [];
+      setTenants(list.filter((t) => t.status === "active"));
     });
   }, []);
 
@@ -45,11 +45,14 @@ export default function TenantSwitcher() {
   }, [open]);
 
   function switchTenant(tenant: Tenant) {
-    localStorage.setItem("openzorg_tenant_id", tenant.medplum_project_id || tenant.id);
+    const targetId = tenant.medplum_project_id || tenant.id;
+    localStorage.setItem("openzorg_tenant_id", targetId);
     localStorage.setItem("openzorg_project_name", tenant.name);
     setOpen(false);
-    // Reload to apply new tenant context everywhere
-    window.location.href = "/dashboard";
+    // Clear the existing auth token — the user needs to re-login for the new tenant
+    // because Medplum tokens are project-scoped
+    localStorage.removeItem("openzorg_token");
+    window.location.href = "/login?tenant=" + encodeURIComponent(tenant.name);
   }
 
   const filtered = tenants.filter((t) =>

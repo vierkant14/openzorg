@@ -41,6 +41,12 @@ const TEMPLATES: BpmnTemplate[] = [
     description: "MIC-melding afhandeling: analyse, maatregelen bepalen, uitvoeren, evalueren",
     getBpmn: getMicAfhandelingBpmn,
   },
+  {
+    id: "vaccinatie-campagne",
+    name: "Vaccinatie Campagne",
+    description: "Vaccinatiecampagne: doelgroep selecteren, inventariseren, afspraken plannen, toedienen, registreren",
+    getBpmn: getVaccinatieCampagneBpmn,
+  },
 ];
 
 /* -------------------------------------------------------------------------- */
@@ -55,6 +61,8 @@ export function getIntakeProcessBpmn(): string {
 <definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
              xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
              xmlns:flowable="http://flowable.org/bpmn"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
              targetNamespace="http://openzorg.nl/bpmn"
              id="intakeDefinitions">
 
@@ -98,6 +106,12 @@ export function getIntakeProcessBpmn(): string {
 
   </process>
 
+  <bpmndi:BPMNDiagram id="BPMNDiagram_intake">
+    <bpmndi:BPMNPlane bpmnElement="intake-proces" id="BPMNPlane_intake">
+      <bpmndi:BPMNShape bpmnElement="start" id="BPMNShape_start"><omgdc:Bounds x="100" y="200" width="36" height="36" /></bpmndi:BPMNShape>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+
 </definitions>`;
 }
 
@@ -112,6 +126,8 @@ function getZorgplanEvaluatieBpmn(): string {
 <definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
              xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
              xmlns:flowable="http://flowable.org/bpmn"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
              targetNamespace="http://openzorg.nl/bpmn"
              id="zorgplanEvaluatieDefinitions">
 
@@ -176,6 +192,12 @@ function getZorgplanEvaluatieBpmn(): string {
 
   </process>
 
+  <bpmndi:BPMNDiagram id="BPMNDiagram_zorgplanEval">
+    <bpmndi:BPMNPlane bpmnElement="zorgplan-evaluatie" id="BPMNPlane_zorgplanEval">
+      <bpmndi:BPMNShape bpmnElement="start" id="BPMNShape_start"><omgdc:Bounds x="100" y="200" width="36" height="36" /></bpmndi:BPMNShape>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+
 </definitions>`;
 }
 
@@ -191,6 +213,8 @@ function getHerindicatieBpmn(): string {
 <definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
              xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
              xmlns:flowable="http://flowable.org/bpmn"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
              targetNamespace="http://openzorg.nl/bpmn"
              id="herindicatieDefinitions">
 
@@ -247,6 +271,12 @@ function getHerindicatieBpmn(): string {
 
   </process>
 
+  <bpmndi:BPMNDiagram id="BPMNDiagram_herindicatie">
+    <bpmndi:BPMNPlane bpmnElement="herindicatie" id="BPMNPlane_herindicatie">
+      <bpmndi:BPMNShape bpmnElement="start" id="BPMNShape_start"><omgdc:Bounds x="100" y="200" width="36" height="36" /></bpmndi:BPMNShape>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+
 </definitions>`;
 }
 
@@ -261,6 +291,8 @@ function getMicAfhandelingBpmn(): string {
 <definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
              xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
              xmlns:flowable="http://flowable.org/bpmn"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
              targetNamespace="http://openzorg.nl/bpmn"
              id="micAfhandelingDefinitions">
 
@@ -325,6 +357,84 @@ function getMicAfhandelingBpmn(): string {
     <endEvent id="endHoog" name="MIC afgehandeld (hoog)" />
 
   </process>
+
+  <bpmndi:BPMNDiagram id="BPMNDiagram_mic">
+    <bpmndi:BPMNPlane bpmnElement="mic-afhandeling" id="BPMNPlane_mic">
+      <bpmndi:BPMNShape bpmnElement="start" id="BPMNShape_start"><omgdc:Bounds x="100" y="200" width="36" height="36" /></bpmndi:BPMNShape>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+
+</definitions>`;
+}
+
+/**
+ * Vaccinatie Campagne:
+ * Start (admin selecteert doelgroep + vaccin) →
+ * Clienten inventariseren (zorgmedewerker) →
+ * Afspraken inplannen (planner) →
+ * Vaccinatie toedienen (zorgmedewerker) →
+ * Registratie in dossier (zorgmedewerker) →
+ * Eind: Campagne compleet
+ */
+function getVaccinatieCampagneBpmn(): string {
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             xmlns:flowable="http://flowable.org/bpmn"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
+             targetNamespace="http://openzorg.nl/bpmn"
+             id="vaccinatieCampagneDefinitions">
+
+  <process id="vaccinatie-campagne" name="Vaccinatie Campagne" isExecutable="true">
+
+    <startEvent id="start" name="Campagne gestart">
+      <documentation>Admin selecteert de doelgroep (categorie clienten) en het vaccin voor de campagne.</documentation>
+    </startEvent>
+
+    <sequenceFlow id="f1" sourceRef="start" targetRef="clientenInventariseren" />
+
+    <userTask id="clientenInventariseren"
+              name="Clienten inventariseren"
+              flowable:candidateGroups="zorgmedewerker">
+      <documentation>Controleer welke clienten uit de doelgroep vaccinatie nodig hebben. Verifieer contra-indicaties en allergieën. Stel de definitieve lijst samen.</documentation>
+    </userTask>
+
+    <sequenceFlow id="f2" sourceRef="clientenInventariseren" targetRef="afsprakenInplannen" />
+
+    <userTask id="afsprakenInplannen"
+              name="Afspraken inplannen"
+              flowable:candidateGroups="planner">
+      <documentation>Plan vaccinatieafspraken in voor alle clienten op de lijst. Houd rekening met beschikbaarheid van clienten en vaccinatiemedewerkers.</documentation>
+    </userTask>
+
+    <sequenceFlow id="f3" sourceRef="afsprakenInplannen" targetRef="vaccinatieToedienen" />
+
+    <userTask id="vaccinatieToedienen"
+              name="Vaccinatie toedienen"
+              flowable:candidateGroups="zorgmedewerker">
+      <documentation>Dien het vaccin toe aan de client volgens protocol. Controleer identiteit, allergieën en contra-indicaties. Observeer de client na toediening.</documentation>
+    </userTask>
+
+    <sequenceFlow id="f4" sourceRef="vaccinatieToedienen" targetRef="registratieInDossier" />
+
+    <userTask id="registratieInDossier"
+              name="Registratie in dossier"
+              flowable:candidateGroups="zorgmedewerker">
+      <documentation>Registreer de vaccinatie in het clientdossier. Noteer batchnummer, datum, toediener en eventuele bijwerkingen. Werk de vaccinatiestatus bij.</documentation>
+    </userTask>
+
+    <sequenceFlow id="f5" sourceRef="registratieInDossier" targetRef="end" />
+
+    <endEvent id="end" name="Campagne compleet" />
+
+  </process>
+
+  <bpmndi:BPMNDiagram id="BPMNDiagram_vaccinatie">
+    <bpmndi:BPMNPlane bpmnElement="vaccinatie-campagne" id="BPMNPlane_vaccinatie">
+      <bpmndi:BPMNShape bpmnElement="start" id="BPMNShape_start"><omgdc:Bounds x="100" y="200" width="36" height="36" /></bpmndi:BPMNShape>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
 
 </definitions>`;
 }

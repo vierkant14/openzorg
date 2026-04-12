@@ -251,14 +251,14 @@ export default function WorkflowsAdminPage() {
                 htmlFor="userId"
                 className="block text-sm font-medium text-fg-muted mb-1"
               >
-                Gebruiker ID
+                Gebruiker ID of rol
               </label>
               <input
                 id="userId"
                 type="text"
                 value={userId}
                 onChange={(e) => setUserId(e.target.value)}
-                placeholder="bijv. admin"
+                placeholder="bijv. teamleider, beheerder, planner"
                 className="border rounded px-3 py-2 text-sm"
               />
             </div>
@@ -308,14 +308,20 @@ export default function WorkflowsAdminPage() {
                         {taskFormOpen === task.id && (
                           <div className="mt-3 p-3 bg-sunken rounded-lg space-y-2">
                             <p className="text-xs font-semibold text-fg-muted">Taakvariabelen (optioneel)</p>
-                            {["resultaat", "opmerking", "goedgekeurd"].map((varName) => (
+                            {["resultaat", "opmerking", "goedgekeurd", "ernstNiveau", "bijstellingNodig", "herindicatieNodig"].map((varName) => (
                               <div key={varName} className="flex items-center gap-2">
                                 <label className="text-xs text-fg-subtle w-24">{varName}</label>
                                 <input
                                   type="text"
                                   value={taskFormVars[`${task.id}_${varName}`] ?? ""}
                                   onChange={(e) => updateFormVar(task.id, varName, e.target.value)}
-                                  placeholder={varName === "goedgekeurd" ? "true / false" : `Waarde voor ${varName}`}
+                                  placeholder={
+                                    varName === "goedgekeurd" || varName === "bijstellingNodig" || varName === "herindicatieNodig"
+                                      ? "true / false"
+                                      : varName === "ernstNiveau"
+                                        ? "laag / hoog"
+                                        : `Waarde voor ${varName}`
+                                  }
                                   className="flex-1 rounded border border-default px-2 py-1 text-xs"
                                 />
                               </div>

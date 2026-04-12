@@ -93,26 +93,33 @@ codelijstenRoutes.get("/:type", async (c) => {
     return c.json({ items: [], valueSetId: null });
   }
 
-  const items = valueSet.compose?.include?.[0]?.concept?.map((c) => ({
-    code: c.code,
-    display: c.display,
-  })) ?? [];
+  // Collect concepts from all include blocks (supports multiple code systems)
+  const items = (valueSet.compose?.include ?? []).flatMap((inc) =>
+    (inc.concept ?? []).map((concept) => ({
+      code: concept.code,
+      display: concept.display,
+    })),
+  );
 
   return c.json({ items, valueSetId: valueSet.id });
 });
 
 /**
- * POST /api/admin/codelijsten/:type — Add a SNOMED concept to the tenant's list.
- * Body: { code: "12345678", display: "Diabetes mellitus" }
+ * POST /api/admin/codelijsten/:type — Add a concept to the tenant's list.
+ * Body: { code: "12345678", display: "Diabetes mellitus", system?: string }
+ * system defaults to SNOMED CT but supports custom codes for non-SNOMED concepts
+ * (e.g. voeding, hulpmiddelen).
  */
 codelijstenRoutes.post("/:type", async (c) => {
   const type = c.req.param("type");
   const tenantId = c.get("tenantId");
-  const body = await c.req.json<{ code: string; display: string }>();
+  const body = await c.req.json<{ code: string; display: string; system?: string }>();
 
   if (!body.code || !body.display) {
     return c.json(operationOutcome("error", "invalid", "Code en display zijn verplicht"), 400);
   }
+
+  const codeSystem = body.system || "http://snomed.info/sct";
 
   // Find or create the ValueSet
   const searchRes = await medplumFetch(
@@ -127,12 +134,21 @@ codelijstenRoutes.post("/:type", async (c) => {
     const existing = searchBundle.entry?.[0]?.resource;
 
     if (existing) {
-      // Add to existing ValueSet
+      // Add to existing ValueSet — support multiple code systems in includes
       const compose = (existing["compose"] as {
         include?: Array<{ system?: string; concept?: Array<{ code: string; display: string }> }>;
       }) ?? { include: [] };
 
-      const concepts = compose.include?.[0]?.concept ?? [];
+      const includes = compose.include ?? [];
+
+      // Find the include block for this code system, or create one
+      let targetInclude = includes.find((inc) => inc.system === codeSystem);
+      if (!targetInclude) {
+        targetInclude = { system: codeSystem, concept: [] };
+        includes.push(targetInclude);
+      }
+
+      const concepts = targetInclude.concept ?? [];
 
       // Check for duplicates
       if (concepts.some((c) => c.code === body.code)) {
@@ -140,15 +156,11 @@ codelijstenRoutes.post("/:type", async (c) => {
       }
 
       concepts.push({ code: body.code, display: body.display });
+      targetInclude.concept = concepts;
 
       valueSet = {
         ...existing,
-        compose: {
-          include: [{
-            system: "http://snomed.info/sct",
-            concept: concepts,
-          }],
-        },
+        compose: { include: includes },
       };
 
       return medplumProxy(c, `/fhir/R4/ValueSet/${existing["id"] as string}`, {
@@ -169,7 +181,7 @@ codelijstenRoutes.post("/:type", async (c) => {
     },
     compose: {
       include: [{
-        system: "http://snomed.info/sct",
+        system: codeSystem,
         concept: [{ code: body.code, display: body.display }],
       }],
     },
@@ -209,16 +221,16 @@ codelijstenRoutes.delete("/:type/:code", async (c) => {
     include?: Array<{ system?: string; concept?: Array<{ code: string; display: string }> }>;
   }) ?? { include: [] };
 
-  const concepts = compose.include?.[0]?.concept ?? [];
-  const filtered = concepts.filter((c) => c.code !== code);
+  // Remove the code from whichever include block contains it
+  const updatedIncludes = (compose.include ?? []).map((inc) => ({
+    ...inc,
+    concept: (inc.concept ?? []).filter((c) => c.code !== code),
+  })).filter((inc) => (inc.concept?.length ?? 0) > 0);
 
   const updated = {
     ...existing,
     compose: {
-      include: [{
-        system: "http://snomed.info/sct",
-        concept: filtered,
-      }],
+      include: updatedIncludes.length > 0 ? updatedIncludes : [{ system: "http://snomed.info/sct", concept: [] }],
     },
   };
 

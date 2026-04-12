@@ -236,8 +236,15 @@ services:
     depends_on:
       medplum:
         condition: service_healthy
+      postgres:
+        condition: service_healthy
     environment:
       MEDPLUM_BASE_URL: http://medplum:8103
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: openzorg
+      POSTGRES_USER: openzorg
+      POSTGRES_PASSWORD: openzorg_dev_password
     volumes:
       - ./infra/scripts/seed.sh:/seed.sh
     command: sh /seed.sh

@@ -83,11 +83,13 @@ export default function BerichtenPage() {
 
   async function loadBerichten() {
     setLoading(true);
-    const { data, error: err } = await ecdFetch<CommunicationBundle>(
+    const { data, error: err, status } = await ecdFetch<CommunicationBundle>(
       "/api/berichten",
     );
-    setBerichten(data?.entry?.map((e) => e.resource) ?? []);
-    setError(err);
+    const msgs = data?.entry?.map((e) => e.resource) ?? [];
+    setBerichten(msgs);
+    // Only show error on real failures (not empty results or 404 = no resources yet)
+    setError(status === 0 ? err : null);
     setLoading(false);
   }
 

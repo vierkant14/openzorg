@@ -21,6 +21,7 @@ export default function LoginPage() {
 function LoginForm() {
   const searchParams = useSearchParams();
   const expired = searchParams.get("expired") === "1";
+  const tenantHint = searchParams.get("tenant");
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -89,7 +90,9 @@ function LoginForm() {
         </div>
 
         <h1 className="text-heading text-fg text-center mb-1">Welkom terug</h1>
-        <p className="text-body-sm text-fg-muted text-center mb-8">Log in om verder te gaan</p>
+        <p className="text-body-sm text-fg-muted text-center mb-8">
+          {tenantHint ? `Log in voor omgeving: ${tenantHint}` : "Log in om verder te gaan"}
+        </p>
 
         <form onSubmit={handleLogin} className="space-y-5">
           <div>

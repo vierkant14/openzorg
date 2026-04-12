@@ -38,6 +38,7 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { href: "/dashboard", label: "Dashboard", icon: IconGrid, permission: null },
       { href: "/berichten", label: "Berichten", icon: IconInbox, permission: "berichten:read" },
+      { href: "/wiki", label: "Wiki", icon: IconBook, permission: null },
     ],
   },
   {
@@ -67,6 +68,7 @@ const NAV_SECTIONS: NavSection[] = [
       { href: "/admin/codelijsten", label: "Codelijsten", icon: IconList, permission: "configuratie:read" },
       { href: "/admin/workflows", label: "Workflows", icon: IconFlow, permission: "workflows:read" },
       { href: "/admin/rollen", label: "Rollen", icon: IconShield, permission: "rollen:read" },
+      { href: "/admin/client-dashboard-config", label: "Client dashboard", icon: IconGrid, permission: "configuratie:read" },
     ],
   },
   {

@@ -55,6 +55,10 @@ vaccinatieRoutes.get("/:patientId/vaccinaties/:id", async (c) => {
  *   dosis?: { waarde: number, eenheid: string },
  *   opmerking?: string,
  *   redenNietGegeven?: string,    // Reason if status = not-done
+ *   herhalend?: boolean,          // Is this a recurring vaccination?
+ *   frequentie?: string,          // "jaarlijks" | "halfjaarlijks" | "eenmalig"
+ *   volgendeDatum?: string,       // ISO date — next due date
+ *   geldigTot?: string,           // ISO date — expiration / protection end date
  * }
  */
 vaccinatieRoutes.post("/:patientId/vaccinaties", async (c) => {
@@ -71,6 +75,10 @@ vaccinatieRoutes.post("/:patientId/vaccinaties", async (c) => {
     dosis?: { waarde: number; eenheid: string };
     opmerking?: string;
     redenNietGegeven?: string;
+    herhalend?: boolean;
+    frequentie?: string;
+    volgendeDatum?: string;
+    geldigTot?: string;
   }>();
 
   if (!body.vaccineCode || !body.vaccineDisplay || !body.datum) {
@@ -162,6 +170,36 @@ vaccinatieRoutes.post("/:patientId/vaccinaties", async (c) => {
     resource.statusReason = {
       text: body.redenNietGegeven,
     };
+  }
+
+  // Recurring vaccination extensions
+  const extensions: Array<{ url: string; valueBoolean?: boolean; valueString?: string; valueDate?: string }> = [];
+  if (body.herhalend !== undefined) {
+    extensions.push({
+      url: "https://openzorg.nl/extensions/herhalend",
+      valueBoolean: body.herhalend,
+    });
+  }
+  if (body.frequentie) {
+    extensions.push({
+      url: "https://openzorg.nl/extensions/frequentie",
+      valueString: body.frequentie,
+    });
+  }
+  if (body.volgendeDatum) {
+    extensions.push({
+      url: "https://openzorg.nl/extensions/volgende-datum",
+      valueDate: body.volgendeDatum,
+    });
+  }
+  if (body.geldigTot) {
+    extensions.push({
+      url: "https://openzorg.nl/extensions/geldig-tot",
+      valueDate: body.geldigTot,
+    });
+  }
+  if (extensions.length > 0) {
+    resource.extension = extensions;
   }
 
   return medplumProxy(c, "/fhir/R4/Immunization", {

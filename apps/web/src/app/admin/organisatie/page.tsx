@@ -105,10 +105,11 @@ export default function OrganisatiePage() {
 
   async function loadOrganisaties() {
     setLoading(true);
-    const { data, error: err } = await ecdFetch<OrganizationBundle>("/api/organisatie");
+    const { data, error: err, status } = await ecdFetch<OrganizationBundle>("/api/organisatie");
     const orgs = data?.entry?.map((e) => e.resource) ?? [];
     setOrganizations(orgs);
-    setError(err);
+    // Only show error on real failures (not empty results or 404 = no resources yet)
+    setError(status === 0 ? err : null);
     setLoading(false);
   }
 

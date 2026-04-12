@@ -69,6 +69,9 @@ export async function proxyMedplumResponse(
 
 /**
  * Convenience wrapper: fetch from Medplum and proxy the response.
+ * For FHIR search queries (GET with query params), a 404 is treated as
+ * an empty Bundle instead of an error — Medplum returns 404 when no
+ * resources of a given type exist yet in a project.
  */
 export async function medplumProxy(
   c: Context<AppEnv>,
@@ -76,5 +79,15 @@ export async function medplumProxy(
   options: RequestInit = {},
 ): Promise<Response> {
   const response = await medplumFetch(c, path, options);
+
+  // FHIR search returning 404 means "no resources of this type yet" — return empty Bundle
+  const method = (options.method ?? "GET").toUpperCase();
+  if (response.status === 404 && method === "GET" && path.includes("?")) {
+    return c.json(
+      { resourceType: "Bundle", type: "searchset", total: 0, entry: [] },
+      200,
+    );
+  }
+
   return proxyMedplumResponse(c, response);
 }

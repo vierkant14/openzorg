@@ -101,35 +101,58 @@ export async function startProcess(
 }
 
 /**
- * Gets tasks assigned to or available for a specific user, optionally filtered by tenant.
+ * Gets tasks assigned to or available for a specific user/role, optionally filtered by tenant.
+ * Searches both directly assigned tasks AND unclaimed tasks for candidate groups.
  * Uses includeProcessVariables to retrieve the tenantId variable from the parent process,
  * then filters results to only include tasks belonging to the specified tenant.
  */
 export async function getTasksForUser(userId: string, tenantId?: string): Promise<unknown> {
-  const response = await flowableFetch(
+  // Fetch directly assigned tasks
+  const assignedResponse = await flowableFetch(
     `/service/runtime/tasks?assignee=${encodeURIComponent(userId)}&includeProcessVariables=true`,
   );
-
-  const data = (await response.json()) as {
-    data: Array<{
-      variables?: Array<{ name: string; value: unknown; scope?: string }>;
-      [key: string]: unknown;
-    }>;
+  const assignedData = (await assignedResponse.json()) as {
+    data: Array<{ variables?: Array<{ name: string; value: unknown; scope?: string }>; [key: string]: unknown }>;
     [key: string]: unknown;
   };
 
-  if (!tenantId) {
-    return data;
+  // Also fetch unclaimed tasks for this user's role (candidateGroup)
+  // The userId is treated as a potential candidate group name (e.g. "teamleider", "beheerder")
+  let candidateData: typeof assignedData = { data: [] };
+  try {
+    const candidateResponse = await flowableFetch(
+      `/service/runtime/tasks?candidateGroup=${encodeURIComponent(userId)}&includeProcessVariables=true`,
+    );
+    candidateData = (await candidateResponse.json()) as typeof assignedData;
+  } catch {
+    // candidateGroup query failed — continue with only assigned tasks
   }
 
-  const filtered = data.data.filter((task) => {
-    const tenantVar = task.variables?.find(
+  // Merge results, avoiding duplicates
+  const seenIds = new Set<string>();
+  const allTasks: Array<Record<string, unknown>> = [];
+
+  for (const task of [...assignedData.data, ...candidateData.data]) {
+    const taskId = task["id"] as string;
+    if (taskId && !seenIds.has(taskId)) {
+      seenIds.add(taskId);
+      allTasks.push(task);
+    }
+  }
+
+  if (!tenantId) {
+    return { ...assignedData, data: allTasks, total: allTasks.length, size: allTasks.length };
+  }
+
+  const filtered = allTasks.filter((task) => {
+    const vars = task["variables"] as Array<{ name: string; value: unknown; scope?: string }> | undefined;
+    const tenantVar = vars?.find(
       (v) => v.name === "tenantId" && v.scope === "global",
     );
     return tenantVar?.value === tenantId;
   });
 
-  return { ...data, data: filtered, total: filtered.length, size: filtered.length };
+  return { ...assignedData, data: filtered, total: filtered.length, size: filtered.length };
 }
 
 /**

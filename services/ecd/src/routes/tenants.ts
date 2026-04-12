@@ -261,13 +261,18 @@ tenantRoutes.post("/:id/provision", async (c) => {
     });
 
     if (!newuserRes.ok) {
-      const err = await newuserRes.text();
-      return c.json({ error: `Medplum gebruiker aanmaken mislukt: ${err}` }, 502);
+      const errText = await newuserRes.text();
+      let detail = errText;
+      try {
+        const errJson = JSON.parse(errText) as { issue?: Array<{ diagnostics?: string }> };
+        detail = errJson.issue?.[0]?.diagnostics ?? errText;
+      } catch { /* keep raw text */ }
+      return c.json({ error: `Medplum gebruiker aanmaken mislukt (${newuserRes.status}): ${detail}` }, 502);
     }
 
     const newuserData = await newuserRes.json() as { login?: string };
     if (!newuserData.login) {
-      return c.json({ error: "Medplum registratie mislukt (geen login ID)" }, 502);
+      return c.json({ error: "Medplum registratie mislukt: e-mailadres bestaat mogelijk al in Medplum" }, 502);
     }
 
     // Step 2: Create Medplum project
@@ -281,8 +286,13 @@ tenantRoutes.post("/:id/provision", async (c) => {
     });
 
     if (!newprojectRes.ok) {
-      const err = await newprojectRes.text();
-      return c.json({ error: `Medplum project aanmaken mislukt: ${err}` }, 502);
+      const errText = await newprojectRes.text();
+      let detail = errText;
+      try {
+        const errJson = JSON.parse(errText) as { issue?: Array<{ diagnostics?: string }> };
+        detail = errJson.issue?.[0]?.diagnostics ?? errText;
+      } catch { /* keep raw text */ }
+      return c.json({ error: `Medplum project aanmaken mislukt (${newprojectRes.status}): ${detail}` }, 502);
     }
 
     const projectData = await newprojectRes.json() as { code?: string };
@@ -298,7 +308,8 @@ tenantRoutes.post("/:id/provision", async (c) => {
     });
 
     if (!tokenRes.ok) {
-      return c.json({ error: "Medplum token uitwisseling mislukt" }, 502);
+      const errText = await tokenRes.text();
+      return c.json({ error: `Medplum token uitwisseling mislukt (${tokenRes.status}): ${errText}` }, 502);
     }
 
     const tokenData = await tokenRes.json() as {
@@ -326,7 +337,11 @@ tenantRoutes.post("/:id/provision", async (c) => {
     }, 201);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    return c.json({ error: `Provisioning mislukt: ${msg}` }, 502);
+    const isConnectionError = msg.includes("ECONNREFUSED") || msg.includes("fetch failed") || msg.includes("ENOTFOUND");
+    const detail = isConnectionError
+      ? `Kan geen verbinding maken met Medplum (${MEDPLUM_BASE_URL}). Controleer of Medplum draait en bereikbaar is.`
+      : `Provisioning mislukt: ${msg}`;
+    return c.json({ error: detail }, 502);
   }
 });
 
