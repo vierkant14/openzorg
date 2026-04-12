@@ -228,7 +228,7 @@ export default function ClientDetailPage() {
     return (
       <PageShell>
         <div className="flex items-center justify-center py-24">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-brand-300 border-t-brand-700" />
+          <div className="h-8 w-8 rounded-full border-4 border-brand-300 border-t-brand-700" style={{ animation: "spin 0.7s linear infinite" }} />
         </div>
       </PageShell>
     );
@@ -256,7 +256,7 @@ export default function ClientDetailPage() {
         {/* Back link */}
         <button
           onClick={() => router.push("/ecd")}
-          className="mb-4 inline-flex items-center gap-1 text-sm text-brand-700 hover:text-brand-900"
+          className="mb-4 inline-flex items-center gap-1 text-sm text-brand-700 hover:text-brand-900 btn-press"
         >
           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -265,7 +265,7 @@ export default function ClientDetailPage() {
         </button>
 
         {/* Profile header */}
-        <div className="rounded-lg border border-default bg-raised p-6 shadow-sm">
+        <div className="rounded-lg border border-default bg-raised p-6">
           <div className="flex items-start justify-between">
             <div className="flex items-start gap-4">
               {/* Client photo */}
@@ -341,7 +341,7 @@ export default function ClientDetailPage() {
                   if (err) { alert(err); return; }
                   window.location.reload();
                 }}
-                className={`text-caption font-medium px-3 py-1.5 rounded-lg border transition-colors ${
+                className={`text-caption font-medium px-3 py-1.5 rounded-lg border btn-press ${
                   client.active === false
                     ? "text-brand-600 border-brand-200 hover:bg-brand-50"
                     : "text-coral-600 border-coral-200 hover:bg-coral-50"
@@ -400,17 +400,18 @@ export default function ClientDetailPage() {
         </div>
 
         {/* Tabs */}
-        <div className="mt-6 border-b border-default">
+        <div className="mt-6 border-b border-default overflow-x-auto scrollbar-hide">
           <nav className="-mb-px flex gap-6" aria-label="Tabs">
             {TABS.map((tab) => (
               <button
                 key={tab.key}
                 onClick={() => setActiveTab(tab.key)}
-                className={`whitespace-nowrap border-b-2 pb-3 text-sm font-medium transition-colors ${
+                className={`whitespace-nowrap border-b-2 pb-3 text-sm font-medium transition-[color,border-color] duration-200 ${
                   activeTab === tab.key
                     ? "border-brand-700 text-brand-700"
                     : "border-transparent text-fg-subtle hover:border-default hover:text-fg-muted"
                 }`}
+                style={{ transitionTimingFunction: "cubic-bezier(0.23, 1, 0.32, 1)" }}
               >
                 {tab.label}
               </button>
@@ -470,7 +471,7 @@ function DashboardTab({ clientId, client, onNavigate }: DashboardTabProps) {
   const enabledWidgets = widgetCfg.filter((w) => w.enabled);
 
   return (
-    <div className="grid gap-4 sm:grid-cols-2">
+    <div className="grid gap-4 sm:grid-cols-2 stagger">
       {enabledWidgets.map((widget) => {
         switch (widget.id) {
           case "persoonlijke-gegevens":
@@ -509,14 +510,14 @@ function WidgetCard({
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-lg border border-default bg-raised p-4 shadow-sm">
+    <div className="rounded-lg border border-default bg-raised p-4 transition-shadow duration-200 ease-out hover:shadow-md">
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-sm font-semibold text-fg">{title}</h3>
         {onViewAll && (
           <button
             type="button"
             onClick={onViewAll}
-            className="text-xs font-medium text-brand-600 hover:text-brand-800 transition-colors"
+            className="text-xs font-medium text-brand-600 hover:text-brand-800 hover:translate-x-0.5 transition-[color,transform] duration-200 ease-out"
           >
             Bekijk alles &rarr;
           </button>
@@ -894,7 +895,7 @@ function RapportagesTab({ clientId }: { clientId: string }) {
         <h2 className="text-lg font-semibold text-fg">Rapportages</h2>
         <button
           onClick={() => setShowForm((v) => !v)}
-          className="rounded-md bg-brand-700 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-800"
+          className="rounded-md bg-brand-700 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-800 btn-press"
         >
           {showForm ? "Annuleren" : "Nieuwe rapportage"}
         </button>
@@ -922,7 +923,7 @@ function RapportagesTab({ clientId }: { clientId: string }) {
           const type = obs.code?.text ?? "vrij";
           const isSoep = type.toLowerCase() === "soep";
           return (
-            <li key={obs.id ?? i} className="rounded-lg border border-default bg-raised p-4 shadow-sm">
+            <li key={obs.id ?? i} className="rounded-lg border border-default bg-raised p-4">
               <div className="mb-2 flex items-center gap-3">
                 <span className="text-xs font-medium text-fg-subtle">
                   {formatDateTime(obs.effectiveDateTime)}
@@ -930,8 +931,8 @@ function RapportagesTab({ clientId }: { clientId: string }) {
                 <span
                   className={`inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${
                     isSoep
-                      ? "bg-blue-100 text-blue-800"
-                      : "bg-gray-100 text-fg-muted"
+                      ? "bg-brand-50 dark:bg-brand-950/20 text-brand-700 dark:text-brand-300"
+                      : "bg-surface-100 dark:bg-surface-800 text-fg-muted"
                   }`}
                 >
                   {isSoep ? "SOEP" : "Vrij"}
@@ -1311,7 +1312,7 @@ function ZorgplanTab({ clientId }: { clientId: string }) {
         <h2 className="text-lg font-semibold text-fg">Zorgplan</h2>
         <button
           onClick={() => setShowForm((v) => !v)}
-          className="rounded-md bg-brand-700 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-800"
+          className="rounded-md bg-brand-700 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-800 btn-press"
         >
           {showForm ? "Annuleren" : "Nieuw zorgplan"}
         </button>
@@ -1374,7 +1375,7 @@ function ZorgplanTab({ clientId }: { clientId: string }) {
                 <div>
                   <div className="mb-1 flex items-center gap-3">
                     <h3 className="font-semibold text-fg">{cp.title ?? "Zorgplan"}</h3>
-                    <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${isActive ? "bg-green-100 text-green-800" : "bg-gray-100 text-fg-muted"}`}>
+                    <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${isActive ? "bg-green-100 text-green-800" : "bg-surface-100 dark:bg-surface-800 text-fg-muted"}`}>
                       {isActive ? "Actief" : cp.status ?? "-"}
                     </span>
                   </div>
@@ -1500,7 +1501,7 @@ function ZorgplanTab({ clientId }: { clientId: string }) {
                                             ev.status === "Verbeterd" ? "bg-blue-100 text-blue-800" :
                                             ev.status === "Verslechterd" ? "bg-coral-50 text-coral-700" :
                                             ev.status === "Niet bereikt" ? "bg-coral-50 text-coral-700" :
-                                            "bg-gray-100 text-fg-muted"
+                                            "bg-surface-100 dark:bg-surface-800 text-fg-muted"
                                           }`}>{ev.status}</span>
                                           {ev.voortgang !== undefined && <span className="text-fg-muted">{ev.voortgang}%</span>}
                                           {ev.opmerking && <span className="text-fg-muted truncate">{ev.opmerking}</span>}
@@ -1742,7 +1743,7 @@ function ContactpersonenTab({ clientId }: { clientId: string }) {
         <h2 className="text-lg font-semibold text-fg">Contactpersonen</h2>
         <button
           onClick={() => setShowForm((v) => !v)}
-          className="rounded-md bg-brand-700 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-800"
+          className="rounded-md bg-brand-700 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-800 btn-press"
         >
           {showForm ? "Annuleren" : "Toevoegen"}
         </button>
@@ -1885,7 +1886,7 @@ function MedicatieTab({ clientId }: { clientId: string }) {
         <h2 className="text-lg font-semibold text-fg">Medicatieoverzicht</h2>
         <button
           onClick={() => setShowForm((v) => !v)}
-          className="rounded-md bg-brand-700 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-800"
+          className="rounded-md bg-brand-700 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-800 btn-press"
         >
           {showForm ? "Annuleren" : "Medicatie toevoegen"}
         </button>
@@ -1955,7 +1956,7 @@ function MedicatieTab({ clientId }: { clientId: string }) {
                         className={`inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${
                           isActive
                             ? "bg-green-100 text-green-800"
-                            : "bg-gray-100 text-fg-muted"
+                            : "bg-surface-100 dark:bg-surface-800 text-fg-muted"
                         }`}
                       >
                         {statusLabel}
@@ -3216,7 +3217,7 @@ function ToedieningTab({ clientId }: { clientId: string }) {
         <h2 className="text-lg font-semibold text-fg">Toedienregistratie</h2>
         <button
           onClick={() => setShowForm((v) => !v)}
-          className="rounded-md bg-brand-700 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-800"
+          className="rounded-md bg-brand-700 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-800 btn-press"
         >
           {showForm ? "Annuleren" : "Registreer toediening"}
         </button>
@@ -3262,7 +3263,7 @@ function ToedieningTab({ clientId }: { clientId: string }) {
                   )}
                 </div>
                 <div className="text-right shrink-0">
-                  <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${statusCls[st] ?? "bg-gray-100 text-fg-muted"}`}>
+                  <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${statusCls[st] ?? "bg-surface-100 dark:bg-surface-800 text-fg-muted"}`}>
                     {statusLabel[st] ?? st}
                   </span>
                   <p className="mt-1 text-xs text-fg-subtle">{formatDateTime(item.effectiveDateTime)}</p>
@@ -3414,7 +3415,7 @@ function VragenlijstenTab({ clientId }: { clientId: string }) {
         <h2 className="text-lg font-semibold text-fg">Vragenlijsten</h2>
         <button
           onClick={() => setShowForm((v) => !v)}
-          className="rounded-md bg-brand-700 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-800"
+          className="rounded-md bg-brand-700 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-800 btn-press"
         >
           {showForm ? "Annuleren" : "Invullen"}
         </button>
@@ -3611,7 +3612,7 @@ function MdoTab({ clientId }: { clientId: string }) {
     planned: "bg-blue-100 text-blue-800",
     "in-progress": "bg-yellow-100 text-yellow-800",
     finished: "bg-green-100 text-green-800",
-    cancelled: "bg-gray-100 text-fg-muted",
+    cancelled: "bg-surface-100 dark:bg-surface-800 text-fg-muted",
   };
 
   return (
@@ -3620,7 +3621,7 @@ function MdoTab({ clientId }: { clientId: string }) {
         <h2 className="text-lg font-semibold text-fg">Multidisciplinair Overleg</h2>
         <button
           onClick={() => setShowForm((v) => !v)}
-          className="rounded-md bg-brand-700 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-800"
+          className="rounded-md bg-brand-700 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-800 btn-press"
         >
           {showForm ? "Annuleren" : "MDO plannen"}
         </button>
@@ -3656,7 +3657,7 @@ function MdoTab({ clientId }: { clientId: string }) {
                     {formatDate(enc.period?.start)}
                   </p>
                 </div>
-                <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${statusCls[st] ?? "bg-gray-100 text-fg-muted"}`}>
+                <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${statusCls[st] ?? "bg-surface-100 dark:bg-surface-800 text-fg-muted"}`}>
                   {statusLabel[st] ?? st}
                 </span>
               </div>
@@ -3770,7 +3771,7 @@ function VbmTab({ clientId }: { clientId: string }) {
         <h2 className="text-lg font-semibold text-fg">Vrijheidsbeperkende Maatregelen</h2>
         <button
           onClick={() => setShowForm((v) => !v)}
-          className="rounded-md bg-brand-700 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-800"
+          className="rounded-md bg-brand-700 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-800 btn-press"
         >
           {showForm ? "Annuleren" : "Maatregel registreren"}
         </button>
@@ -3811,7 +3812,7 @@ function VbmTab({ clientId }: { clientId: string }) {
                     {proc.performedPeriod?.end ? ` t/m ${formatDate(proc.performedPeriod.end)}` : " (actief)"}
                   </p>
                 </div>
-                <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${statusCls[st] ?? "bg-gray-100 text-fg-muted"}`}>
+                <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${statusCls[st] ?? "bg-surface-100 dark:bg-surface-800 text-fg-muted"}`}>
                   {st === "in-progress" ? "Actief" : "Beëindigd"}
                 </span>
               </div>
@@ -4003,7 +4004,7 @@ function WilsverklaringenTab({ clientId }: { clientId: string }) {
         <h2 className="text-lg font-semibold text-fg">Wilsverklaringen</h2>
         <button
           onClick={() => setShowForm((v) => !v)}
-          className="rounded-md bg-brand-700 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-800"
+          className="rounded-md bg-brand-700 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-800 btn-press"
         >
           {showForm ? "Annuleren" : "Wilsverklaring toevoegen"}
         </button>
@@ -4187,7 +4188,7 @@ function MedicatieOverzichtTab({ clientId }: { clientId: string }) {
         <h2 className="text-lg font-semibold text-fg">Medicatieoverzicht</h2>
         <button
           onClick={() => setShowForm((v) => !v)}
-          className="rounded-md bg-brand-700 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-800"
+          className="rounded-md bg-brand-700 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-800 btn-press"
         >
           {showForm ? "Annuleren" : "Medicatie toevoegen"}
         </button>
@@ -4277,7 +4278,7 @@ function MedicatieOverzichtTab({ clientId }: { clientId: string }) {
                       <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${
                         isActive ? "bg-green-100 text-green-800" :
                         med.status === "gepauzeerd" ? "bg-yellow-100 text-yellow-800" :
-                        "bg-gray-100 text-fg-muted"
+                        "bg-surface-100 dark:bg-surface-800 text-fg-muted"
                       }`}>
                         {MEDICATIE_STATUSSEN.find((s) => s.value === med.status)?.label ?? med.status ?? "-"}
                       </span>

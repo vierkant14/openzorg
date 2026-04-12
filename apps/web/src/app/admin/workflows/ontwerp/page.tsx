@@ -251,7 +251,7 @@ export default function WorkflowDesignerPage() {
   const canDeploy = process.name.trim() && process.steps.length > 0 &&
     process.steps.every((s) => s.name.trim());
 
-  const inputClass = "w-full rounded-xl border border-default bg-raised px-3 py-2 text-body-sm text-fg focus:border-brand-400 focus:ring-2 focus:ring-brand-500/20 outline-none transition-all";
+  const inputClass = "w-full rounded-xl border border-default bg-raised px-3 py-2 text-body-sm text-fg focus:border-brand-400 focus:ring-2 focus:ring-brand-500/20 outline-none transition-[border-color,box-shadow] duration-200 ease-out";
 
   return (
     <AppShell>
@@ -260,7 +260,7 @@ export default function WorkflowDesignerPage() {
         <div className="flex items-center justify-between mb-8">
           <div>
             <div className="flex items-center gap-3 mb-1">
-              <a href="/admin/workflows" className="text-sm text-brand-700 hover:text-brand-900">
+              <a href="/admin/workflows" className="text-sm text-brand-700 hover:text-brand-900 transition-colors duration-150">
                 &larr; Workflows
               </a>
             </div>
@@ -272,11 +272,13 @@ export default function WorkflowDesignerPage() {
         </div>
 
         {deployResult && (
-          <div className={`rounded-xl p-4 mb-6 text-body-sm ${
-            deployResult.success
-              ? "bg-brand-50 dark:bg-brand-950/20 border border-brand-200 dark:border-brand-800 text-brand-700 dark:text-brand-300"
-              : "bg-coral-50 dark:bg-coral-950/20 border border-coral-200 dark:border-coral-800 text-coral-700 dark:text-coral-300"
-          }`}>
+          <div
+            className={`rounded-xl p-4 mb-6 text-body-sm animate-[fade-in_300ms_cubic-bezier(0.16,1,0.3,1)] ${
+              deployResult.success
+                ? "bg-brand-50 dark:bg-brand-950/20 border border-brand-200 dark:border-brand-800 text-brand-700 dark:text-brand-300"
+                : "bg-coral-50 dark:bg-coral-950/20 border border-coral-200 dark:border-coral-800 text-coral-700 dark:text-coral-300"
+            }`}
+          >
             {deployResult.message}
           </div>
         )}
@@ -324,14 +326,14 @@ export default function WorkflowDesignerPage() {
             <div className="flex gap-2">
               <button
                 onClick={() => addStep("task")}
-                className="inline-flex items-center gap-1.5 px-4 py-2 bg-brand-600 text-white text-caption font-semibold rounded-xl hover:bg-brand-700 transition-colors"
+                className="inline-flex items-center gap-1.5 px-4 py-2 bg-brand-600 text-white text-caption font-semibold rounded-xl hover:bg-brand-700 btn-press"
               >
                 <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
                 Taak
               </button>
               <button
                 onClick={() => addStep("decision")}
-                className="inline-flex items-center gap-1.5 px-4 py-2 bg-navy-600 text-white text-caption font-semibold rounded-xl hover:bg-navy-700 transition-colors"
+                className="inline-flex items-center gap-1.5 px-4 py-2 bg-navy-600 text-white text-caption font-semibold rounded-xl hover:bg-navy-700 btn-press"
               >
                 <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 3l9 9-9 9-9-9z" /></svg>
                 Beslismoment
@@ -414,14 +416,14 @@ export default function WorkflowDesignerPage() {
               <div className="flex gap-3">
                 <button
                   onClick={() => setShowXml(!showXml)}
-                  className="px-4 py-2 text-caption font-medium text-fg-muted border border-default rounded-xl hover:bg-sunken transition-colors"
+                  className="px-4 py-2 text-caption font-medium text-fg-muted border border-default rounded-xl hover:bg-sunken btn-press"
                 >
                   {showXml ? "Verberg BPMN" : "Bekijk BPMN"}
                 </button>
                 <button
                   onClick={handleDeploy}
                   disabled={!canDeploy || deploying}
-                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-brand-600 text-white text-body-sm font-semibold rounded-xl hover:bg-brand-700 disabled:opacity-50 transition-colors"
+                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-brand-600 text-white text-body-sm font-semibold rounded-xl hover:bg-brand-700 disabled:opacity-50 btn-press"
                 >
                   {deploying ? "Deployen..." : "Deployen naar Flowable"}
                 </button>
@@ -466,7 +468,7 @@ function StepCard({
   const isTask = step.type === "task";
 
   return (
-    <div className={`rounded-2xl border p-5 transition-all ${
+    <div className={`rounded-2xl border p-5 transition-[border-color,background-color] duration-200 ease-out ${
       isTask
         ? "bg-raised border-default"
         : "bg-navy-50/50 dark:bg-navy-950/20 border-navy-200 dark:border-navy-800"
@@ -491,7 +493,7 @@ function StepCard({
           <button
             onClick={onMoveUp}
             disabled={index === 0}
-            className="p-1.5 rounded-lg hover:bg-sunken text-fg-subtle disabled:opacity-30 transition-colors"
+            className="p-1.5 rounded-lg hover:bg-sunken text-fg-subtle disabled:opacity-30 btn-press-sm"
             title="Omhoog"
           >
             <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 15l-6-6-6 6" /></svg>
@@ -499,14 +501,14 @@ function StepCard({
           <button
             onClick={onMoveDown}
             disabled={index === total - 1}
-            className="p-1.5 rounded-lg hover:bg-sunken text-fg-subtle disabled:opacity-30 transition-colors"
+            className="p-1.5 rounded-lg hover:bg-sunken text-fg-subtle disabled:opacity-30 btn-press-sm"
             title="Omlaag"
           >
             <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 9l6 6 6-6" /></svg>
           </button>
           <button
             onClick={onRemove}
-            className="p-1.5 rounded-lg hover:bg-coral-50 dark:hover:bg-coral-950/20 text-fg-subtle hover:text-coral-600 transition-colors"
+            className="p-1.5 rounded-lg hover:bg-coral-50 dark:hover:bg-coral-950/20 text-fg-subtle hover:text-coral-600 btn-press-sm"
             title="Verwijderen"
           >
             <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
