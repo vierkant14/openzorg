@@ -215,9 +215,9 @@ services:
       MASTER_ADMIN_KEY: ${MASTER_ADMIN_KEY:-dev-master-key}
       NEXT_PUBLIC_MEDPLUM_BASE_URL: http://localhost:8103
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/health || exit 1"]
-      interval: 10s
-      timeout: 5s
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/api/health').then(r=>{if(!r.ok)throw 1}).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 10s
       retries: 5
 
   # ── Seed (runs once, creates users) ───────────────────────────

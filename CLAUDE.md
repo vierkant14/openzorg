@@ -5,13 +5,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Build, Test, and Lint Commands
 
 ```bash
-# Full stack (Docker) — first time or after schema changes
-docker compose -f infra/compose/docker-compose.yml down -v
-docker compose -f infra/compose/docker-compose.yml up -d --build
-docker compose -f infra/compose/docker-compose.yml up -d seed  # Create test users
+# Full stack — local development (standard ports)
+docker compose up -d --build
+
+# Full stack — Unraid deployment (conflict-free ports 1xxxx)
+docker compose -f docker-compose.unraid.yml up -d --build
 
 # Rebuild specific services (faster, keeps data)
-docker compose -f infra/compose/docker-compose.yml up -d --build ecd web
+docker compose up -d --build ecd web
 
 # Dev without Docker (run in separate terminals)
 pnpm --filter "@openzorg/shared-*" build           # Build shared packages FIRST
@@ -22,6 +23,7 @@ pnpm --filter @openzorg/service-planning dev        # Planning service (port 400
 # Tests
 pnpm test                                           # All tests (Vitest)
 pnpm --filter @openzorg/service-ecd test            # Single package tests
+pnpm --filter @openzorg/service-ecd test -- --run src/__tests__/client.test.ts  # Single test file
 
 # Quality checks
 pnpm lint                                           # ESLint (strict: no-explicit-any, import/order)
@@ -32,74 +34,63 @@ pnpm check-all                                      # All of the above + build
 
 ## Architecture
 
-OpenZorg is an open-source modular healthcare platform for Dutch VVT (Verpleging, Verzorging, Thuiszorg) care institutions, designed to support the entire Dutch healthcare landscape (VVT, GGZ, GHZ, Ziekenhuis, Jeugdzorg). The business model is hosting environments per care organization.
+OpenZorg is an open-source (EUPL 1.2) modular healthcare platform for Dutch VVT care institutions. Legal structure: Stichting OpenZorg (non-profit, open-source core) + B.V. (commercial hosting/consulting). See ADR-006 for details.
 
 ### Monorepo Structure
 
 ```
 apps/web/              → Next.js 15 App Router + Tailwind (port 3000)
 services/
-  ecd/                 → Hono backend, ECD module (port 4001)
-  planning/            → Hono backend, planning module (port 4002)
+  ecd/                 → Hono backend, ECD module (port 4001) — 30 route files
+  planning/            → Hono backend, planning module (port 4002) — 6 route files
   workflow-bridge/     → Hono backend, Flowable BPMN bridge (port 4003)
+  facturatie/          → Hono backend, billing module (port 4004)
 packages/
   shared-domain/       → Roles, permissions, FHIR types, BSN/AGB validation
   shared-config/       → Three-layer validation engine, tenant configuration types
   shared-ui/           → React UI components (shadcn)
+  shared-test/         → Vitest shared test utilities
+adapters/
+  ons-import/          → ONS (competitor) data import adapter (stub)
 infra/
-  compose/             → docker-compose.yml (9 services including seed)
+  compose/             → docker-compose.yml (10 services)
   docker/              → Dockerfile.service (parameterized), Dockerfile.web
-  postgres/            → init.sql (tenants, audit_log, tenant_configurations tables with RLS)
-  scripts/             → seed.sh (creates test users via Medplum PKCE flow)
+  postgres/            → init.sql (tenants, audit_log, prestaties, declaraties with RLS)
+  scripts/             → seed.sh (creates test users + rich test data via Medplum PKCE)
+  medplum/             → medplum.config.json
+docs/architecture/     → ADR-005 (OTAP deployment), ADR-006 (open-source business model)
 ```
 
 ### Data Flow
 
-Frontend → Hono service (ECD/Planning/Workflow) → Medplum FHIR R4 server → PostgreSQL
+```
+Frontend (Next.js) → /api/{ecd,planning,workflow,facturatie}/* (proxy routes)
+    → Hono service → Medplum FHIR R4 server → PostgreSQL
+```
 
+- **Frontend proxy**: `apps/web/src/app/api/{ecd,planning,workflow,facturatie}/[...path]/route.ts` — Server-side reverse proxy that forwards requests to backend services. The browser never talks to Hono directly.
 - **Auth**: Medplum PKCE → token + projectId + role stored in localStorage → sent as `Authorization: Bearer` + `X-Tenant-ID` + `X-User-Role` headers
-- **FHIR proxy pattern**: Each Hono service forwards the user's auth token to Medplum via `medplumFetch()` (see `services/ecd/src/lib/medplum-client.ts`). Services never store credentials.
+- **FHIR proxy pattern**: Each Hono service forwards the user's auth token to Medplum via `medplumFetch()` / `medplumProxy()` (see `services/ecd/src/lib/medplum-client.ts`). Services never store credentials.
 - **Tenant isolation**: Middleware chain on `/api/*`: tenant → rbac → audit. PostgreSQL RLS + Medplum Projects enforce data isolation.
-- **Master admin**: Separate routes at `/api/master/*` protected by `X-Master-Key` header (bypasses tenant middleware). Connects directly to PostgreSQL `openzorg.tenants` table.
+- **Master admin**: Routes at `/api/master/*` protected by `X-Master-Key` header. Multiple master admins stored in `openzorg.master_admins` table.
 
 ### Backend Middleware Chain (services/ecd/src/app.ts)
 
 All `/api/*` routes pass through three middlewares in order:
 
 1. **tenant.ts** — Extracts `X-Tenant-ID` header (400 if missing). Skips `/api/master/*` routes.
-2. **rbac.ts** — Reads `X-User-Role` header, checks against `ROUTE_PERMISSIONS` matrix from shared-domain. Returns 403 on insufficient permissions. Backwards compatible: allows through if no role header.
-3. **audit.ts** — NEN 7513 compliant logging. Async fire-and-forget to `openzorg.audit_log`. Logs user, action, resource type, path, duration for all patient-data routes.
+2. **rbac.ts** — Reads `X-User-Role` header, checks against `ROUTE_PERMISSIONS` matrix from shared-domain. Returns 403 on insufficient permissions.
+3. **audit.ts** — NEN 7513 compliant logging. Async fire-and-forget to `openzorg.audit_log`. Logs user, action, resource type, path, duration.
+
+### Route Ordering (important)
+
+In `services/ecd/src/app.ts`, `micMeldingRoutes` must be mounted BEFORE `vragenlijstenRoutes` because vragenlijsten has a `/:id` catch-all that would intercept `/api/mic-meldingen`.
 
 ### RBAC System (packages/shared-domain/src/roles.ts)
 
-Four roles: `beheerder`, `zorgmedewerker`, `planner`, `teamleider`. Each mapped to a set of 27 permissions (e.g. `clients:read`, `zorgplan:write`, `configuratie:read`). The `ROUTE_PERMISSIONS` array maps API route patterns + HTTP methods to required permissions. The `NAV_PERMISSIONS` object controls frontend sidebar visibility.
+Four roles: `beheerder`, `zorgmedewerker`, `planner`, `teamleider`. Each mapped to permissions (e.g. `clients:read`, `zorgplan:write`). `ROUTE_PERMISSIONS` maps API route patterns + HTTP methods to required permissions. `NAV_PERMISSIONS` controls frontend sidebar visibility.
 
-Frontend: `AppShell.tsx` filters sidebar items based on `getUserRole()` from localStorage. The `ecdFetch()` client auto-redirects to `/geen-toegang` on 403 responses.
-
-### Multi-Tenant Architecture
-
-- **PostgreSQL** (`openzorg` schema): `tenants` table stores org config (name, slug, sectors, enabled_modules, settings JSONB). RLS policies on `tenant_configurations` and `audit_log`.
-- **Medplum Projects**: Each tenant gets a Medplum Project. Auth tokens are project-scoped.
-- **Tenant settings**: Per-tenant JSONB with `bsnRequired`, `clientnummerPrefix`. Accessible via `/api/tenant-settings`.
-- **Multi-sector**: Organizations can operate in multiple sectors (e.g. VVT + GGZ). Stored as `sectors TEXT[]`.
-- **Master admin** (`/master-admin`): Super-admin dashboard for managing all tenants. Onboarding wizard creates new organizations.
-
-### Design System
-
-OKLCH-based color tokens defined in `tailwind.config.ts` and `globals.css`:
-- Semantic tokens: `bg-page`, `bg-raised`, `bg-sunken`, `text-fg`, `text-fg-muted`, `text-fg-subtle`, `border-default`, `border-subtle`
-- Brand: teal (hue 178), Navy (hue 258), Coral (hue 16-25), Surface (warm neutrals)
-- Dark mode via `class` strategy, auto-detected from system preference, toggle in sidebar
-- Font stack: Nunito (display), Source Sans 3 (body), JetBrains Mono (mono)
-- All pages use `AppShell` wrapper (sidebar + topbar with user role/name)
-
-### Three-Layer Validation
-
-All validation runs through `packages/shared-config/src/validation-engine.ts`:
-
-1. **Kern (Layer 1)** — Immutable, legally mandated. BSN elfproef, AGB validation, required Zib fields. Cannot be disabled by tenants.
-2. **Uitbreiding (Layer 2)** — Tenant-configurable rules via `/api/admin/validation-rules`. Operators: `required`, `min`, `max`, `minLength`, `maxLength`, `pattern`, `in`.
-3. **Plugin (Layer 3)** — Reserved for future custom validation plugins.
+Frontend: `AppShell.tsx` filters sidebar items based on `getUserRole()`. The `ecdFetch()` client auto-redirects to `/geen-toegang` on 403.
 
 ### FHIR Resource Mapping
 
@@ -108,31 +99,68 @@ All validation runs through `packages/shared-config/src/validation-engine.ts`:
 | Client | Patient | /api/clients |
 | Contactpersoon | RelatedPerson | /api/clients/:id/contactpersonen |
 | Zorgplan | CarePlan + Goal + ServiceRequest | /api/clients/:id/zorgplan |
+| Zorgplan evaluatie | Observation (goal-evaluatie) | /api/zorgplan/:id/doelen/:goalId/evaluaties |
+| Zorgplan handtekening | Consent | /api/zorgplan/:id/handtekeningen |
 | Rapportage | Observation (SOEP/vrij) | /api/clients/:id/rapportages |
+| Medicatie (voorschrift) | MedicationRequest | /api/clients/:id/medicatie |
+| Medicatieoverzicht | MedicationStatement | /api/clients/:id/medicatie-overzicht |
+| Vaccinatie | Immunization | /api/clients/:id/vaccinaties |
+| Allergie | AllergyIntolerance | /api/clients/:id/allergieen |
+| Diagnose | Condition | /api/clients/:id/diagnoses |
+| Risicoscreening | RiskAssessment | /api/clients/:id/risicoscreenings |
+| Wilsverklaring/BOPZ | Consent | /api/clients/:id/wilsverklaringen |
+| VBM | Procedure | /api/clients/:id/vbm |
+| MDO | Encounter + Observation | /api/clients/:id/mdo |
+| Toediening | MedicationAdministration | /api/clients/:id/toediening |
+| Vragenlijst | Questionnaire/Response | /api/vragenlijsten |
 | Document | Binary + DocumentReference | /api/clients/:id/documenten |
 | MIC-melding | AuditEvent | /api/mic-meldingen |
 | Afspraak | Appointment | /api/afspraken |
 | Beschikbaarheid | Schedule + Slot | /api/beschikbaarheid |
 | Wachtlijst | ServiceRequest (draft) | /api/wachtlijst |
-| Medicatie | MedicationRequest | /api/clients/:id/medicatie |
 | Medewerker | Practitioner | /api/medewerkers |
 | Organisatie | Organization | /api/organisatie |
 | Bericht | Communication | /api/berichten |
+| Declaratie | — (PostgreSQL) | /api/declaraties (facturatie service) |
+| Prestatie | — (PostgreSQL) | /api/prestaties (facturatie service) |
 
-Custom FHIR extensions use base URL `https://openzorg.nl/extensions/`. Client identifiers use `https://openzorg.nl/NamingSystem/clientnummer` (auto-generated C-00001 format).
+Custom FHIR extensions: `https://openzorg.nl/extensions/`. Client identifiers: `https://openzorg.nl/NamingSystem/clientnummer` (auto-generated C-00001).
+
+### Multi-Tenant Architecture
+
+- **PostgreSQL** (`openzorg` schema): `tenants`, `tenant_configurations`, `master_admins`, `prestaties`, `declaraties`, `audit_log`, `webhooks`, `api_keys` — all with RLS.
+- **Medplum Projects**: Each tenant gets a Medplum Project. Auth tokens are project-scoped.
+- **Tenant settings**: Per-tenant JSONB with `bsnRequired`, `clientnummerPrefix`. Accessible via `/api/tenant-settings`.
+- **Multi-sector**: Organizations can operate in multiple sectors (VVT, GGZ, GHZ). Stored as `sectors TEXT[]`.
+- **Master admins**: Multiple admins stored in `openzorg.master_admins`. Frontend checks `isMasterAdmin()` for Platform section visibility.
+
+### Frontend Navigation Structure
+
+Defined in `apps/web/src/components/AppShell.tsx`:
+- **Overzicht** (Dashboard, Berichten) — everyone
+- **Zorg** (Clienten) — zorgmedewerker/beheerder/teamleider
+- **Planning** (Overzicht, Dagplanning, Rooster, Herhalingen, Wachtlijst) — planner/beheerder/teamleider
+- **Beheer** (Medewerkers, Organisatie, Facturatie, etc.) — beheerder only
+- **Platform** (Tenants, Onboarding, Wiki) — master admin only (`masterOnly: true`)
+
+### Design System
+
+OKLCH-based color tokens in `tailwind.config.ts` and `globals.css`:
+- Semantic: `bg-page`, `bg-raised`, `bg-sunken`, `text-fg`, `text-fg-muted`, `text-fg-subtle`, `border-default`
+- Brand: teal (178), Navy (258), Coral (16-25), Surface (warm neutrals)
+- Dark mode via `class` strategy, system preference auto-detect
+- Fonts: Nunito (display), Source Sans 3 (body), JetBrains Mono (mono)
 
 ### Workflow System
 
-Flowable Community (BPMN 2.0) on port 8080, accessed via workflow-bridge service. BPMN templates in `services/workflow-bridge/src/routes/bpmn-templates.ts`. Tasks managed via `/api/taken` (werkbak).
+Flowable Community (BPMN 2.0) accessed via workflow-bridge. Templates: intake-proces, zorgplan-evaluatie, herindicatie, mic-afhandeling. Tasks managed via `/api/taken` (werkbak).
 
-### Medplum User Registration
+### Three-Layer Validation
 
-Medplum requires a 3-step PKCE flow to register users (see `infra/scripts/seed.sh`):
-1. `POST /auth/newuser` → returns `{ login: "<id>" }`
-2. `POST /auth/newproject` with `{ login, projectName }` → returns `{ code }`
-3. `POST /oauth2/token` with `grant_type=authorization_code&code=<code>&code_verifier=<verifier>`
-
-Just calling `newuser` alone leaves the user in a half-registered state (can't login). The seed container handles this automatically.
+Via `packages/shared-config/src/validation-engine.ts`:
+1. **Kern** — Immutable, legally mandated. BSN elfproef, AGB, required Zib fields.
+2. **Uitbreiding** — Tenant-configurable rules via `/api/admin/validation-rules`.
+3. **Plugin** — Reserved for future custom validation plugins.
 
 ## Hard Rules
 
@@ -143,21 +171,35 @@ Just calling `newuser` alone leaves the user in a half-registered state (can't l
 - **TypeScript strict** — `noUncheckedIndexedAccess`, `noUnusedLocals`, `noUnusedParameters` (prefix unused with `_`), `no-explicit-any`
 - **Docker symlink workaround** — With `node-linker=hoisted`, pnpm does NOT create workspace symlinks. Dockerfiles must manually `ln -s` workspace packages after `pnpm install` (see `infra/docker/Dockerfile.service`)
 - **Design system tokens** — Use `bg-page`/`bg-raised`/`text-fg` etc., never raw `bg-gray-*`/`text-gray-*`. All pages wrapped in `AppShell`.
+- **Route mount order matters** — Routes with `/:id` catch-alls must be mounted AFTER more specific routes in app.ts.
 
-## Service URLs (Docker stack)
+## Deployment
 
-| Service | URL | Auth |
-|---------|-----|------|
-| Web | http://localhost:3000 | Medplum PKCE login |
-| Master Admin | http://localhost:3000/master-admin | Same login |
-| Medplum FHIR | http://localhost:8103 | API only (no UI) |
-| ECD API | http://localhost:4001 | X-Tenant-ID + Bearer token |
-| Planning API | http://localhost:4002 | X-Tenant-ID + Bearer token |
-| Workflow API | http://localhost:4003 | X-Tenant-ID + Bearer token |
-| Facturatie API | http://localhost:4004 | X-Tenant-ID + Bearer token |
-| Flowable REST | http://localhost:8080 | admin / admin (Basic auth) |
-| PostgreSQL | localhost:5432 | openzorg / openzorg_dev_password |
-| Master API | http://localhost:4001/api/master/* | X-Master-Key: dev-master-key |
+### Local Development (default ports)
+
+```
+docker compose up -d --build    # Uses infra/compose/docker-compose.yml
+```
+
+### Unraid (192.168.1.10, conflict-free ports)
+
+```
+docker compose -f docker-compose.unraid.yml up -d --build
+```
+
+All ports shifted to 1xxxx range to avoid conflicts with existing Unraid services.
+
+| Service | Local | Unraid |
+|---------|-------|--------|
+| Web UI | :3000 | :13000 |
+| Medplum | :8103 | :18103 |
+| ECD API | :4001 | :14001 |
+| Planning | :4002 | :14002 |
+| Workflow | :4003 | :14003 |
+| Facturatie | :4004 | :14004 |
+| Flowable | :8080 | :18080 |
+| PostgreSQL | :5432 | :15432 |
+| Redis | :6379 | :16379 |
 
 ### Test Accounts (created by seed container)
 
@@ -169,16 +211,13 @@ Just calling `newuser` alone leaves the user in a half-registered state (can't l
 | Zorggroep Horizon | jan@horizon.nl | Hz!J4n#2026pKw8 | Tenant admin |
 | Thuiszorg De Linde | maria@delinde.nl | Ld!M4r1a#2026nRt5 | Tenant admin |
 
-### Test Data per Tenant (seeded)
+### Test Data (seeded per tenant)
 
-Per tenant worden aangemaakt: 6 medewerkers, 8 clienten (met BSN, adres, indicatie),
-4 zorgplannen met doelen, 10 rapportages (SOEP + vrij), 7 medicatievoorschriften,
-4 allergieen, 6 vaccinaties, 5 contactpersonen, 6 afspraken.
+6 medewerkers, 8 clienten (BSN, adres, indicatie), 4 zorgplannen met doelen, 10 rapportages (SOEP + vrij), 7 medicatievoorschriften, 4 allergieen, 6 vaccinaties, 5 contactpersonen, 6 afspraken.
 
-## Sprint Status
+### Medplum User Registration
 
-- Sprint 1 (Fundament): COMPLETE
-- Sprint 2 (ECD + Configuratie): COMPLETE
-- Sprint 3 (Planning + Workflows): COMPLETE
-- Sprint 3+ (RBAC, Design System, Multi-tenant Admin, Clientnummer): COMPLETE
-- Sprint 4 (Facturatie + E2E): FACTURATIE COMPLETE, E2E NOT STARTED — see BACKLOG.md
+Medplum requires a 3-step PKCE flow (see `infra/scripts/seed.sh`):
+1. `POST /auth/newuser` → `{ login }` 2. `POST /auth/newproject` → `{ code }` 3. `POST /oauth2/token` with code_verifier
+
+Just calling `newuser` alone leaves the user half-registered. The seed container handles this.
