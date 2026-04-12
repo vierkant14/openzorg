@@ -69,6 +69,22 @@ const VALID_HANDTEKENING_ROLLEN: ReadonlySet<string> = new Set([
   "zorgverlener",
 ]);
 
+/** The 12 leefgebieden (life domains) per Dutch VVT Zorgleefplan methodology. */
+const VALID_LEEFGEBIEDEN: ReadonlyMap<string, string> = new Map([
+  ["lichamelijke-gezondheid", "Lichamelijke gezondheid"],
+  ["geestelijke-gezondheid", "Geestelijke gezondheid"],
+  ["mobiliteit", "Mobiliteit"],
+  ["voeding", "Voeding"],
+  ["huid-en-wondverzorging", "Huid en wondverzorging"],
+  ["uitscheiding", "Uitscheiding"],
+  ["slaap-en-rust", "Slaap en rust"],
+  ["persoonlijke-verzorging", "Persoonlijke verzorging"],
+  ["huishouden", "Huishouden"],
+  ["sociale-participatie", "Sociale participatie"],
+  ["regie-en-autonomie", "Regie en autonomie"],
+  ["zingeving-en-spiritualiteit", "Zingeving en spiritualiteit"],
+]);
+
 export const zorgplanRoutes = new Hono<AppEnv>();
 
 /**
@@ -135,11 +151,62 @@ zorgplanRoutes.post("/zorgplan/:id/doelen", async (c) => {
     );
   }
 
-  // Expect body.subject to be passed, or we look it up from the CarePlan
+  // Validate leefgebied if provided
+  const leefgebied = body["leefgebied"] as string | undefined;
+  if (leefgebied && !VALID_LEEFGEBIEDEN.has(leefgebied)) {
+    return c.json(
+      operationOutcome(
+        "error",
+        "value",
+        `Ongeldig leefgebied: '${leefgebied}'. Geldige waarden: ${[...VALID_LEEFGEBIEDEN.keys()].join(", ")}`,
+      ),
+      400,
+    );
+  }
+
+  // Build FHIR extension + category for leefgebied
+  const extensions: Array<Record<string, unknown>> = [
+    ...(Array.isArray(body["extension"]) ? (body["extension"] as Array<Record<string, unknown>>) : []),
+  ];
+  const categories: Array<Record<string, unknown>> = [
+    ...(Array.isArray(body["category"]) ? (body["category"] as Array<Record<string, unknown>>) : []),
+  ];
+
+  if (leefgebied) {
+    const display = VALID_LEEFGEBIEDEN.get(leefgebied)!;
+    extensions.push({
+      url: "https://openzorg.nl/extensions/leefgebied",
+      valueString: leefgebied,
+    });
+    categories.push({
+      coding: [
+        {
+          system: "https://openzorg.nl/CodeSystem/leefgebieden",
+          code: leefgebied,
+          display,
+        },
+      ],
+    });
+  }
+
+  // Add situatieschets extension if provided
+  const situatieschets = body["situatieschets"] as string | undefined;
+  if (situatieschets) {
+    extensions.push({
+      url: "https://openzorg.nl/extensions/situatieschets",
+      valueString: situatieschets,
+    });
+  }
+
+  // Remove frontend-only fields before spreading
+  const { leefgebied: _lg, situatieschets: _ss, ...restBody } = body;
+
   const goalResource = {
     resourceType: "Goal",
     lifecycleStatus: "active",
-    ...body,
+    ...restBody,
+    ...(extensions.length > 0 ? { extension: extensions } : {}),
+    ...(categories.length > 0 ? { category: categories } : {}),
     addresses: [{ reference: `CarePlan/${carePlanId}` }],
   };
 

@@ -3,9 +3,11 @@ import { Hono } from "hono";
 
 import type { AppEnv } from "../app.js";
 import {
+  medplumFetch,
   medplumProxy,
   operationOutcome,
 } from "../lib/medplum-client.js";
+import { fireWorkflowTriggers } from "../lib/workflow-trigger-engine.js";
 
 export const micMeldingRoutes = new Hono<AppEnv>();
 
@@ -123,8 +125,26 @@ micMeldingRoutes.post("/", async (c) => {
     ],
   };
 
-  return medplumProxy(c, "/fhir/R4/AuditEvent", {
+  const result = await medplumFetch(c, "/fhir/R4/AuditEvent", {
     method: "POST",
+    headers: { "Content-Type": "application/fhir+json" },
     body: JSON.stringify(resource),
   });
+
+  const resultBody = (await result.json()) as Record<string, unknown>;
+
+  // Fire-and-forget: evaluate workflow triggers for the new MIC melding
+  if (result.ok && resultBody.id) {
+    const tenantId = c.get("tenantId");
+    fireWorkflowTriggers(
+      "resource.created",
+      "AuditEvent",
+      resultBody,
+      tenantId,
+    ).catch(() => {
+      // Workflow failure should never block MIC melding creation
+    });
+  }
+
+  return c.json(resultBody, result.ok ? 201 : (result.status as 400));
 });

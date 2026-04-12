@@ -76,6 +76,8 @@ interface FhirGoal {
   description?: { text?: string };
   target?: Array<{ dueDate?: string }>;
   addresses?: Array<{ reference?: string }>;
+  category?: Array<{ coding?: Array<{ system?: string; code?: string; display?: string }> }>;
+  extension?: Array<{ url?: string; valueString?: string }>;
 }
 
 interface FhirServiceRequest {
@@ -1014,17 +1016,26 @@ function AfsprakenWidget({ clientId }: { clientId: string }) {
 /* -------------------------------------------------------------------------- */
 
 function RapportagesTab({ clientId }: { clientId: string }) {
-  const [items, setItems] = useState<FhirObservation[]>([]);
+  const [allItems, setAllItems] = useState<FhirObservation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [filterType, setFilterType] = useState<"alle" | "soep" | "vrij">("alle");
+  const [filterDateFrom, setFilterDateFrom] = useState("");
+  const [filterDateTo, setFilterDateTo] = useState("");
+  const [searchText, setSearchText] = useState("");
+  const [showFilters, setShowFilters] = useState(false);
 
   const load = useCallback(() => {
     setLoading(true);
     ecdFetch<FhirBundle<FhirObservation>>(`/api/clients/${clientId}/rapportages`).then(
       ({ data, error: err }) => {
         if (err) setError(err);
-        else setItems(data?.entry?.map((e) => e.resource) ?? []);
+        else {
+          const sorted = (data?.entry?.map((e) => e.resource) ?? [])
+            .sort((a, b) => (b.effectiveDateTime ?? "").localeCompare(a.effectiveDateTime ?? ""));
+          setAllItems(sorted);
+        }
         setLoading(false);
       },
     );
@@ -1034,17 +1045,74 @@ function RapportagesTab({ clientId }: { clientId: string }) {
     load();
   }, [load]);
 
+  const filteredItems = allItems.filter((obs) => {
+    const type = obs.code?.text?.toLowerCase() ?? "vrij";
+    const isSoep = type === "soep";
+    if (filterType === "soep" && !isSoep) return false;
+    if (filterType === "vrij" && isSoep) return false;
+    const dt = obs.effectiveDateTime ?? "";
+    if (filterDateFrom && dt < filterDateFrom) return false;
+    if (filterDateTo && dt > filterDateTo + "T23:59:59") return false;
+    if (searchText.trim()) {
+      const q = searchText.toLowerCase();
+      const allText = [obs.valueString ?? "", ...(obs.extension?.map((e) => e.valueString ?? "") ?? [])].join(" ").toLowerCase();
+      if (!allText.includes(q)) return false;
+    }
+    return true;
+  });
+
+  const filterCls = "rounded-lg border border-default bg-raised px-3 py-1.5 text-sm text-fg focus:border-brand-400 focus:ring-2 focus:ring-brand-500/20 outline-none transition-[border-color,box-shadow] duration-200 ease-out";
+
   return (
     <section>
-      <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-fg">Rapportages</h2>
-        <button
-          onClick={() => setShowForm((v) => !v)}
-          className="rounded-md bg-brand-700 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-800 btn-press"
-        >
-          {showForm ? "Annuleren" : "Nieuwe rapportage"}
-        </button>
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <h2 className="text-lg font-semibold text-fg">
+          Rapportages
+          <span className="ml-2 text-sm font-normal text-fg-subtle">({filteredItems.length}{filteredItems.length !== allItems.length ? ` van ${allItems.length}` : ""})</span>
+        </h2>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowFilters(!showFilters)}
+            className={`rounded-lg border px-3 py-1.5 text-sm font-medium btn-press ${showFilters || filterType !== "alle" || filterDateFrom || filterDateTo || searchText ? "border-brand-300 bg-brand-50 dark:bg-brand-950/20 text-brand-700" : "border-default text-fg-muted hover:bg-sunken"}`}
+          >
+            Filteren
+          </button>
+          <button
+            onClick={() => setShowForm((v) => !v)}
+            className="rounded-md bg-brand-700 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-800 btn-press"
+          >
+            {showForm ? "Annuleren" : "Nieuwe rapportage"}
+          </button>
+        </div>
       </div>
+
+      {showFilters && (
+        <div className="mb-4 flex flex-wrap items-end gap-3 rounded-lg border border-default bg-sunken p-3 animate-[fade-in_200ms_ease-out]">
+          <div>
+            <label className="block text-xs font-medium text-fg-muted mb-1">Type</label>
+            <select value={filterType} onChange={(e) => setFilterType(e.target.value as "alle" | "soep" | "vrij")} className={filterCls}>
+              <option value="alle">Alle</option>
+              <option value="soep">SOEP</option>
+              <option value="vrij">Vrij</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-fg-muted mb-1">Van</label>
+            <input type="date" value={filterDateFrom} onChange={(e) => setFilterDateFrom(e.target.value)} className={filterCls} />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-fg-muted mb-1">Tot</label>
+            <input type="date" value={filterDateTo} onChange={(e) => setFilterDateTo(e.target.value)} className={filterCls} />
+          </div>
+          <div className="flex-1 min-w-[200px]">
+            <label className="block text-xs font-medium text-fg-muted mb-1">Zoeken</label>
+            <input type="text" value={searchText} onChange={(e) => setSearchText(e.target.value)} placeholder="Zoek in rapportages..." className={`${filterCls} w-full`} />
+          </div>
+          {(filterType !== "alle" || filterDateFrom || filterDateTo || searchText) && (
+            <button onClick={() => { setFilterType("alle"); setFilterDateFrom(""); setFilterDateTo(""); setSearchText(""); }} className="text-xs font-medium text-coral-600 hover:text-coral-800 btn-press pb-1.5">Wissen</button>
+          )}
+        </div>
+      )}
 
       {showForm && (
         <RapportageForm
@@ -1059,12 +1127,14 @@ function RapportagesTab({ clientId }: { clientId: string }) {
       {loading && <Spinner />}
       {error && <ErrorMsg msg={error} />}
 
-      {!loading && !error && items.length === 0 && (
-        <p className="py-8 text-center text-sm text-fg-subtle">Nog geen rapportages.</p>
+      {!loading && !error && filteredItems.length === 0 && (
+        <p className="py-8 text-center text-sm text-fg-subtle">
+          {allItems.length === 0 ? "Nog geen rapportages." : "Geen rapportages gevonden met deze filters."}
+        </p>
       )}
 
       <ul className="space-y-3">
-        {items.map((obs, i) => {
+        {filteredItems.map((obs, i) => {
           const type = obs.code?.text ?? "vrij";
           const isSoep = type.toLowerCase() === "soep";
           return (
@@ -1229,19 +1299,20 @@ function RapportageForm({
 /*  Zorgplan tab                                                              */
 /* -------------------------------------------------------------------------- */
 
-const LEEFGEBIEDEN = [
-  "Lichamelijk welbevinden",
-  "Psychisch welbevinden",
-  "Sociaal functioneren",
-  "Dagbesteding en activiteiten",
-  "Wonen en huishouden",
-  "Financien en administratie",
-  "Veiligheid",
-  "Mobiliteit",
-  "Voeding",
-  "Persoonlijke verzorging",
-  "Communicatie",
-  "Overig",
+/** The 12 leefgebieden (life domains) conform Dutch VVT Zorgleefplan/Omaha methodology. */
+const LEEFGEBIEDEN: ReadonlyArray<{ key: string; label: string; emoji: string; description: string }> = [
+  { key: "lichamelijke-gezondheid", label: "Lichamelijke gezondheid", emoji: "\u2764\uFE0F", description: "Diagnoses, chronische aandoeningen, pijn" },
+  { key: "geestelijke-gezondheid", label: "Geestelijke gezondheid", emoji: "\uD83E\uDDE0", description: "Stemming, cognitie, dementie, angst" },
+  { key: "mobiliteit", label: "Mobiliteit", emoji: "\uD83D\uDEB6", description: "Transfers, lopen, balans, valrisico" },
+  { key: "voeding", label: "Voeding", emoji: "\uD83C\uDF7D\uFE0F", description: "Eetpatroon, gewicht, dieet, slikproblemen" },
+  { key: "huid-en-wondverzorging", label: "Huid en wondverzorging", emoji: "\uD83E\uDE79", description: "Decubitus, wonden, huidverzorging" },
+  { key: "uitscheiding", label: "Uitscheiding", emoji: "\uD83D\uDCA7", description: "Incontinentie, obstipatie, katheter" },
+  { key: "slaap-en-rust", label: "Slaap en rust", emoji: "\uD83D\uDE34", description: "Slaappatroon, onrust, nachtrust" },
+  { key: "persoonlijke-verzorging", label: "Persoonlijke verzorging", emoji: "\uD83D\uDEC1", description: "Wassen, aankleden, eten (ADL)" },
+  { key: "huishouden", label: "Huishouden", emoji: "\uD83C\uDFE0", description: "Huishoudelijke taken, woonomgeving" },
+  { key: "sociale-participatie", label: "Sociale participatie", emoji: "\uD83E\uDDD1\u200D\uD83E\uDD1D\u200D\uD83E\uDDD1", description: "Sociaal netwerk, activiteiten, eenzaamheid" },
+  { key: "regie-en-autonomie", label: "Regie en autonomie", emoji: "\uD83C\uDFAF", description: "Eigen regie, competentie, wensen" },
+  { key: "zingeving-en-spiritualiteit", label: "Zingeving en spiritualiteit", emoji: "\u2728", description: "Levensbeschouwing, rituelen, zingeving" },
 ];
 
 function ZorgplanTab({ clientId }: { clientId: string }) {
@@ -1264,10 +1335,14 @@ function ZorgplanTab({ clientId }: { clientId: string }) {
 
   // Goal form
   const [showGoalForm, setShowGoalForm] = useState<string | null>(null);
-  const [goalLeefgebied, setGoalLeefgebied] = useState(LEEFGEBIEDEN[0]);
+  const [goalLeefgebied, setGoalLeefgebied] = useState(LEEFGEBIEDEN[0]!.key);
   const [goalDescription, setGoalDescription] = useState("");
+  const [goalSituatieschets, setGoalSituatieschets] = useState("");
   const [goalDueDate, setGoalDueDate] = useState("");
   const [goalSaving, setGoalSaving] = useState(false);
+
+  // Leefgebied sections collapse state (track which are expanded)
+  const [expandedLeefgebieden, setExpandedLeefgebieden] = useState<Set<string>>(new Set());
 
   // Interventie form
   const [showInterventieForm, setShowInterventieForm] = useState<string | null>(null);
@@ -1356,10 +1431,39 @@ function ZorgplanTab({ clientId }: { clientId: string }) {
     }
   }
 
+  function toggleLeefgebied(key: string) {
+    setExpandedLeefgebieden((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+
+  /** Extract leefgebied key from a Goal resource. Falls back to empty string. */
+  function getGoalLeefgebied(goal: FhirGoal): string {
+    // First try the extension
+    const ext = goal.extension?.find((e) => e.url === "https://openzorg.nl/extensions/leefgebied");
+    if (ext?.valueString) return ext.valueString;
+    // Fallback: try category coding
+    const cat = goal.category?.find((c) =>
+      c.coding?.some((cd) => cd.system === "https://openzorg.nl/CodeSystem/leefgebieden"),
+    );
+    const coding = cat?.coding?.find((cd) => cd.system === "https://openzorg.nl/CodeSystem/leefgebieden");
+    return coding?.code ?? "";
+  }
+
+  /** Extract situatieschets from a Goal resource. */
+  function getGoalSituatieschets(goal: FhirGoal): string | undefined {
+    return goal.extension?.find((e) => e.url === "https://openzorg.nl/extensions/situatieschets")?.valueString;
+  }
+
   async function handleAddGoal(planId: string) {
     setGoalSaving(true);
-    const body = {
-      description: `[${goalLeefgebied}] ${goalDescription}`,
+    const body: Record<string, unknown> = {
+      description: { text: goalDescription },
+      leefgebied: goalLeefgebied,
+      ...(goalSituatieschets ? { situatieschets: goalSituatieschets } : {}),
       ...(goalDueDate ? { target: [{ dueDate: goalDueDate }] } : {}),
     };
 
@@ -1372,7 +1476,9 @@ function ZorgplanTab({ clientId }: { clientId: string }) {
     if (!err) {
       setShowGoalForm(null);
       setGoalDescription("");
+      setGoalSituatieschets("");
       setGoalDueDate("");
+      setGoalLeefgebied(LEEFGEBIEDEN[0]!.key);
       loadPlanDetails(planId);
     }
   }
@@ -1534,27 +1640,48 @@ function ZorgplanTab({ clientId }: { clientId: string }) {
                 </svg>
               </div>
 
-              {isExpanded && cp.id && (
+              {isExpanded && cp.id && (() => {
+                // Group goals by leefgebied
+                const goalsByLg = new Map<string, FhirGoal[]>();
+                for (const g of goals) {
+                  const lgKey = getGoalLeefgebied(g);
+                  const arr = goalsByLg.get(lgKey) ?? [];
+                  arr.push(g);
+                  goalsByLg.set(lgKey, arr);
+                }
+                const domainsWithGoals = LEEFGEBIEDEN.filter((lg) => (goalsByLg.get(lg.key) ?? []).length > 0);
+                const domainsWithoutGoals = LEEFGEBIEDEN.filter((lg) => (goalsByLg.get(lg.key) ?? []).length === 0);
+
+                return (
                 <div className="border-t px-4 py-4 space-y-4">
-                  {/* Doelen section */}
+                  {/* Doelen per leefgebied header */}
                   <div>
-                    <div className="mb-2 flex items-center justify-between">
-                      <h4 className="text-sm font-semibold text-fg">Doelen per leefgebied</h4>
+                    <div className="mb-3 flex items-center justify-between">
+                      <h4 className="text-sm font-semibold text-fg">
+                        Doelen per leefgebied
+                        <span className="ml-2 text-xs font-normal text-fg-subtle">
+                          ({goals.length} {goals.length === 1 ? "doel" : "doelen"} in {domainsWithGoals.length} {domainsWithGoals.length === 1 ? "leefgebied" : "leefgebieden"})
+                        </span>
+                      </h4>
                       <button
                         onClick={() => setShowGoalForm(showGoalForm === cp.id ? null : cp.id!)}
-                        className="text-xs font-medium text-brand-700 hover:text-brand-900"
+                        className="rounded-md bg-brand-700 px-3 py-1.5 text-xs font-medium text-white shadow-sm hover:bg-brand-800 btn-press"
                       >
                         {showGoalForm === cp.id ? "Annuleren" : "+ Doel toevoegen"}
                       </button>
                     </div>
 
+                    {/* New goal form */}
                     {showGoalForm === cp.id && (
-                      <div className="mb-3 rounded border border-brand-100 bg-brand-50 p-3 space-y-2">
-                        <div className="grid gap-2 sm:grid-cols-2">
+                      <div className="mb-4 rounded-lg border border-brand-200 bg-brand-50 p-4 space-y-3">
+                        <h5 className="text-sm font-semibold text-fg">Nieuw doel toevoegen</h5>
+                        <div className="grid gap-3 sm:grid-cols-2">
                           <div>
-                            <label className="block text-xs font-medium text-fg-muted mb-1">Leefgebied</label>
+                            <label className="block text-xs font-medium text-fg-muted mb-1">Leefgebied *</label>
                             <select value={goalLeefgebied} onChange={(e) => setGoalLeefgebied(e.target.value)} className={inputCls}>
-                              {LEEFGEBIEDEN.map((lg) => <option key={lg} value={lg}>{lg}</option>)}
+                              {LEEFGEBIEDEN.map((lg) => (
+                                <option key={lg.key} value={lg.key}>{lg.emoji} {lg.label}</option>
+                              ))}
                             </select>
                           </div>
                           <div>
@@ -1563,108 +1690,204 @@ function ZorgplanTab({ clientId }: { clientId: string }) {
                           </div>
                         </div>
                         <div>
-                          <label className="block text-xs font-medium text-fg-muted mb-1">Doelomschrijving</label>
+                          <label className="block text-xs font-medium text-fg-muted mb-1">Doelomschrijving *</label>
                           <textarea rows={2} value={goalDescription} onChange={(e) => setGoalDescription(e.target.value)} placeholder="Wat wil de client bereiken?" className={inputCls} />
                         </div>
-                        <button onClick={() => handleAddGoal(cp.id!)} disabled={goalSaving || !goalDescription} className="rounded bg-brand-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-800 disabled:opacity-50">
-                          {goalSaving ? "Opslaan..." : "Doel opslaan"}
-                        </button>
+                        <div>
+                          <label className="block text-xs font-medium text-fg-muted mb-1">Situatieschets (huidige situatie)</label>
+                          <textarea rows={2} value={goalSituatieschets} onChange={(e) => setGoalSituatieschets(e.target.value)} placeholder="Beschrijf de huidige situatie van de client bij dit leefgebied" className={inputCls} />
+                        </div>
+                        <div className="flex justify-end">
+                          <button onClick={() => handleAddGoal(cp.id!)} disabled={goalSaving || !goalDescription || !goalLeefgebied} className="rounded-md bg-brand-700 px-4 py-2 text-xs font-medium text-white shadow-sm hover:bg-brand-800 disabled:opacity-50 btn-press">
+                            {goalSaving ? "Opslaan..." : "Doel opslaan"}
+                          </button>
+                        </div>
                       </div>
                     )}
 
-                    {goals.length === 0 ? (
-                      <p className="text-xs text-fg-subtle">Nog geen doelen toegevoegd.</p>
-                    ) : (
-                      <ul className="space-y-2">
-                        {goals.map((g, gi) => {
-                          const goalId = g.id ?? `goal-${gi}`;
-                          const goalEvals = evaluaties[goalId] ?? [];
-                          return (
-                            <li key={goalId} className="rounded border border-default bg-page p-2 text-sm">
-                              <div className="flex items-start gap-2">
-                                <span className="mt-0.5 inline-block h-2 w-2 shrink-0 rounded-full bg-green-500" />
-                                <div className="flex-1">
-                                  <div className="flex items-start justify-between">
-                                    <div>
-                                      <p className="text-fg">{g.description?.text ?? "-"}</p>
-                                      {g.target?.[0]?.dueDate && (
-                                        <p className="text-xs text-fg-subtle">Streefdatum: {formatDate(g.target[0].dueDate)}</p>
-                                      )}
-                                    </div>
-                                    <button
-                                      onClick={() => {
-                                        const key = g.id ?? `goal-${gi}`;
-                                        setShowEvalForm(showEvalForm === key ? null : key);
-                                        if (showEvalForm !== key && g.id && cp.id) loadEvaluaties(cp.id, g.id);
-                                      }}
-                                      className="shrink-0 rounded bg-brand-50 px-2 py-1 text-xs font-medium text-brand-700 hover:bg-brand-100"
-                                    >
-                                      Evalueren
-                                    </button>
-                                  </div>
-
-                                  {showEvalForm === goalId && (
-                                    <div className="mt-2 rounded border border-brand-100 bg-brand-50 p-3 space-y-2">
-                                      <div className="grid gap-2 sm:grid-cols-3">
-                                        <div>
-                                          <label className="block text-xs font-medium text-fg-muted mb-1">Status</label>
-                                          <select value={evalStatus} onChange={(e) => setEvalStatus(e.target.value)} className={inputCls}>
-                                            <option value="Bereikt">Bereikt</option>
-                                            <option value="Verbeterd">Verbeterd</option>
-                                            <option value="Geen verandering">Geen verandering</option>
-                                            <option value="Verslechterd">Verslechterd</option>
-                                            <option value="Niet bereikt">Niet bereikt</option>
-                                          </select>
-                                        </div>
-                                        <div className="sm:col-span-2">
-                                          <label className="block text-xs font-medium text-fg-muted mb-1">Voortgang: {evalVoortgang}%</label>
-                                          <input type="range" min={0} max={100} value={evalVoortgang} onChange={(e) => setEvalVoortgang(Number(e.target.value))} className="w-full accent-brand-700" />
-                                        </div>
-                                      </div>
-                                      <div>
-                                        <label className="block text-xs font-medium text-fg-muted mb-1">Opmerking</label>
-                                        <textarea rows={2} value={evalOpmerking} onChange={(e) => setEvalOpmerking(e.target.value)} placeholder="Toelichting bij de evaluatie" className={inputCls} />
-                                      </div>
-                                      <button
-                                        onClick={() => g.id && cp.id && handleAddEvaluatie(cp.id, g.id)}
-                                        disabled={evalSaving}
-                                        className="rounded bg-brand-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-800 disabled:opacity-50"
-                                      >
-                                        {evalSaving ? "Opslaan..." : "Evaluatie opslaan"}
-                                      </button>
-                                    </div>
-                                  )}
-
-                                  {/* Evaluatiehistorie */}
-                                  {goalEvals.length > 0 && (
-                                    <div className="mt-2 space-y-1">
-                                      <p className="text-xs font-medium text-fg-subtle">Evaluatiehistorie:</p>
-                                      {goalEvals.map((ev, evi) => (
-                                        <div key={evi} className="flex items-center gap-2 rounded bg-raised px-2 py-1 text-xs">
-                                          <span className={`inline-block rounded-full px-1.5 py-0.5 font-semibold ${
-                                            ev.status === "Bereikt" ? "bg-green-100 text-green-800" :
-                                            ev.status === "Verbeterd" ? "bg-blue-100 text-blue-800" :
-                                            ev.status === "Verslechterd" ? "bg-coral-50 text-coral-700" :
-                                            ev.status === "Niet bereikt" ? "bg-coral-50 text-coral-700" :
-                                            "bg-surface-100 dark:bg-surface-800 text-fg-muted"
-                                          }`}>{ev.status}</span>
-                                          {ev.voortgang !== undefined && <span className="text-fg-muted">{ev.voortgang}%</span>}
-                                          {ev.opmerking && <span className="text-fg-muted truncate">{ev.opmerking}</span>}
-                                          <span className="ml-auto text-fg-subtle">{formatDate(ev.datum)}</span>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  )}
+                    {/* Leefgebieden with goals */}
+                    <div className="space-y-2">
+                      {domainsWithGoals.map((lg) => {
+                        const lgGoals = goalsByLg.get(lg.key) ?? [];
+                        const isLgExpanded = expandedLeefgebieden.has(lg.key);
+                        return (
+                          <div key={lg.key} className="rounded-lg border border-default bg-raised overflow-hidden">
+                            <button
+                              type="button"
+                              onClick={() => toggleLeefgebied(lg.key)}
+                              className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-page transition-[border-color,background-color] duration-200 ease-out btn-press"
+                            >
+                              <div className="flex items-center gap-3">
+                                <span className="text-lg" role="img" aria-label={lg.label}>{lg.emoji}</span>
+                                <div>
+                                  <span className="text-sm font-semibold text-fg">{lg.label}</span>
+                                  <span className="ml-2 inline-block rounded-full bg-brand-100 px-2 py-0.5 text-xs font-semibold text-brand-800">
+                                    {lgGoals.length} {lgGoals.length === 1 ? "doel" : "doelen"}
+                                  </span>
                                 </div>
                               </div>
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    )}
+                              <svg className={`h-4 w-4 text-fg-subtle transition-transform duration-200 ${isLgExpanded ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                              </svg>
+                            </button>
+
+                            {isLgExpanded && (
+                              <div className="border-t border-default px-4 py-3 space-y-3">
+                                {lgGoals.map((g, gi) => {
+                                  const goalId = g.id ?? `goal-${gi}`;
+                                  const goalEvals = evaluaties[goalId] ?? [];
+                                  const situatieschets = getGoalSituatieschets(g);
+                                  return (
+                                    <div key={goalId} className="rounded-md border border-default bg-page p-3">
+                                      <div className="flex items-start justify-between gap-2">
+                                        <div className="flex-1">
+                                          <div className="flex items-start gap-2">
+                                            <span className={`mt-1 inline-block h-2.5 w-2.5 shrink-0 rounded-full ${
+                                              g.lifecycleStatus === "completed" ? "bg-green-500" :
+                                              g.lifecycleStatus === "cancelled" ? "bg-coral-500" :
+                                              "bg-brand-500"
+                                            }`} />
+                                            <div className="flex-1">
+                                              <p className="text-sm font-medium text-fg">{g.description?.text ?? "-"}</p>
+                                              {situatieschets && (
+                                                <p className="mt-1 text-xs text-fg-muted italic">Situatie: {situatieschets}</p>
+                                              )}
+                                              {g.target?.[0]?.dueDate && (
+                                                <p className="mt-0.5 text-xs text-fg-subtle">Streefdatum: {formatDate(g.target[0].dueDate)}</p>
+                                              )}
+                                              {g.lifecycleStatus && g.lifecycleStatus !== "active" && (
+                                                <span className={`mt-1 inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${
+                                                  g.lifecycleStatus === "completed" ? "bg-green-100 text-green-800" :
+                                                  g.lifecycleStatus === "cancelled" ? "bg-coral-50 text-coral-700" :
+                                                  "bg-surface-100 dark:bg-surface-800 text-fg-muted"
+                                                }`}>{g.lifecycleStatus}</span>
+                                              )}
+                                            </div>
+                                          </div>
+
+                                          {/* Linked interventies */}
+                                          {interventies.filter((sr) => sr.basedOn?.some((ref) => ref.reference === `CarePlan/${cp.id}`)).length > 0 && (
+                                            <div className="mt-2 ml-5">
+                                              <p className="text-xs font-medium text-fg-subtle mb-1">Interventies:</p>
+                                              <ul className="space-y-1">
+                                                {interventies.filter((sr) => sr.basedOn?.some((ref) => ref.reference === `CarePlan/${cp.id}`)).map((sr, si) => (
+                                                  <li key={sr.id ?? si} className="flex items-center gap-1.5 text-xs text-fg-muted">
+                                                    <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-blue-400" />
+                                                    {sr.code?.text ?? sr.code?.coding?.[0]?.display ?? "-"}
+                                                  </li>
+                                                ))}
+                                              </ul>
+                                            </div>
+                                          )}
+                                        </div>
+
+                                        <button
+                                          onClick={() => {
+                                            setShowEvalForm(showEvalForm === goalId ? null : goalId);
+                                            if (showEvalForm !== goalId && g.id && cp.id) loadEvaluaties(cp.id, g.id);
+                                          }}
+                                          className="shrink-0 rounded-md bg-brand-50 px-2.5 py-1 text-xs font-medium text-brand-700 hover:bg-brand-100 btn-press"
+                                        >
+                                          Evalueren
+                                        </button>
+                                      </div>
+
+                                      {/* Evaluatie form */}
+                                      {showEvalForm === goalId && (
+                                        <div className="mt-3 rounded-md border border-brand-100 bg-brand-50 p-3 space-y-2">
+                                          <div className="grid gap-2 sm:grid-cols-3">
+                                            <div>
+                                              <label className="block text-xs font-medium text-fg-muted mb-1">Status</label>
+                                              <select value={evalStatus} onChange={(e) => setEvalStatus(e.target.value)} className={inputCls}>
+                                                <option value="Bereikt">Bereikt</option>
+                                                <option value="Verbeterd">Verbeterd</option>
+                                                <option value="Geen verandering">Geen verandering</option>
+                                                <option value="Verslechterd">Verslechterd</option>
+                                                <option value="Niet bereikt">Niet bereikt</option>
+                                              </select>
+                                            </div>
+                                            <div className="sm:col-span-2">
+                                              <label className="block text-xs font-medium text-fg-muted mb-1">Voortgang: {evalVoortgang}%</label>
+                                              <input type="range" min={0} max={100} value={evalVoortgang} onChange={(e) => setEvalVoortgang(Number(e.target.value))} className="w-full accent-brand-700" />
+                                            </div>
+                                          </div>
+                                          <div>
+                                            <label className="block text-xs font-medium text-fg-muted mb-1">Opmerking</label>
+                                            <textarea rows={2} value={evalOpmerking} onChange={(e) => setEvalOpmerking(e.target.value)} placeholder="Toelichting bij de evaluatie" className={inputCls} />
+                                          </div>
+                                          <button
+                                            onClick={() => g.id && cp.id && handleAddEvaluatie(cp.id, g.id)}
+                                            disabled={evalSaving}
+                                            className="rounded-md bg-brand-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-800 disabled:opacity-50 btn-press"
+                                          >
+                                            {evalSaving ? "Opslaan..." : "Evaluatie opslaan"}
+                                          </button>
+                                        </div>
+                                      )}
+
+                                      {/* Evaluatiehistorie */}
+                                      {goalEvals.length > 0 && (
+                                        <div className="mt-2 space-y-1">
+                                          <p className="text-xs font-medium text-fg-subtle">Evaluatiehistorie:</p>
+                                          {goalEvals.map((ev, evi) => (
+                                            <div key={evi} className="flex items-center gap-2 rounded bg-raised px-2 py-1 text-xs">
+                                              <span className={`inline-block rounded-full px-1.5 py-0.5 font-semibold ${
+                                                ev.status === "Bereikt" ? "bg-green-100 text-green-800" :
+                                                ev.status === "Verbeterd" ? "bg-blue-100 text-blue-800" :
+                                                ev.status === "Verslechterd" ? "bg-coral-50 text-coral-700" :
+                                                ev.status === "Niet bereikt" ? "bg-coral-50 text-coral-700" :
+                                                "bg-surface-100 dark:bg-surface-800 text-fg-muted"
+                                              }`}>{ev.status}</span>
+                                              {ev.voortgang !== undefined && <span className="text-fg-muted">{ev.voortgang}%</span>}
+                                              {ev.opmerking && <span className="text-fg-muted truncate">{ev.opmerking}</span>}
+                                              <span className="ml-auto text-fg-subtle">{formatDate(ev.datum)}</span>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+
+                      {/* Leefgebieden without goals - collapsed summary */}
+                      {domainsWithoutGoals.length > 0 && (
+                        <div className="rounded-lg border border-default bg-raised overflow-hidden">
+                          <button
+                            type="button"
+                            onClick={() => toggleLeefgebied("__empty__")}
+                            className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-page transition-[border-color,background-color] duration-200 ease-out btn-press"
+                          >
+                            <span className="text-sm text-fg-muted">
+                              Overige leefgebieden zonder doelen ({domainsWithoutGoals.length})
+                            </span>
+                            <svg className={`h-4 w-4 text-fg-subtle transition-transform duration-200 ${expandedLeefgebieden.has("__empty__") ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                            </svg>
+                          </button>
+                          {expandedLeefgebieden.has("__empty__") && (
+                            <div className="border-t border-default px-4 py-3">
+                              <ul className="grid gap-1 sm:grid-cols-2">
+                                {domainsWithoutGoals.map((lg) => (
+                                  <li key={lg.key} className="flex items-center gap-2 text-xs text-fg-subtle py-1">
+                                    <span role="img" aria-label={lg.label}>{lg.emoji}</span>
+                                    <span>{lg.label}</span>
+                                    <span className="text-fg-subtle">&mdash; Geen doelen</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
 
-                  {/* Interventies section */}
+                  {/* Interventies section (plan-level) */}
                   <div>
                     <div className="mb-2 flex items-center justify-between">
                       <h4 className="text-sm font-semibold text-fg">Interventies</h4>
@@ -1677,7 +1900,7 @@ function ZorgplanTab({ clientId }: { clientId: string }) {
                     </div>
 
                     {showInterventieForm === cp.id && (
-                      <div className="mb-3 rounded border border-brand-100 bg-brand-50 p-3 space-y-2">
+                      <div className="mb-3 rounded-lg border border-brand-200 bg-brand-50 p-4 space-y-3">
                         <div className="grid gap-2 sm:grid-cols-2">
                           <div>
                             <label className="block text-xs font-medium text-fg-muted mb-1">Interventie / handeling</label>
@@ -1688,9 +1911,11 @@ function ZorgplanTab({ clientId }: { clientId: string }) {
                             <input type="text" value={interventieFrequentie} onChange={(e) => setInterventieFrequentie(e.target.value)} placeholder="bijv. 2x per dag, 3x per week" className={inputCls} />
                           </div>
                         </div>
-                        <button onClick={() => handleAddInterventie(cp.id!)} disabled={interventieSaving || !interventieCode} className="rounded bg-brand-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-800 disabled:opacity-50">
-                          {interventieSaving ? "Opslaan..." : "Interventie opslaan"}
-                        </button>
+                        <div className="flex justify-end">
+                          <button onClick={() => handleAddInterventie(cp.id!)} disabled={interventieSaving || !interventieCode} className="rounded-md bg-brand-700 px-4 py-2 text-xs font-medium text-white shadow-sm hover:bg-brand-800 disabled:opacity-50 btn-press">
+                            {interventieSaving ? "Opslaan..." : "Interventie opslaan"}
+                          </button>
+                        </div>
                       </div>
                     )}
 
@@ -1784,7 +2009,8 @@ function ZorgplanTab({ clientId }: { clientId: string }) {
                     )}
                   </div>
                 </div>
-              )}
+                );
+              })()}
             </li>
           );
         })}

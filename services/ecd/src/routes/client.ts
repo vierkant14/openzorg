@@ -8,6 +8,7 @@ import {
   operationOutcome,
   proxyMedplumResponse,
 } from "../lib/medplum-client.js";
+import { fireWorkflowTriggers } from "../lib/workflow-trigger-engine.js";
 
 export const clientRoutes = new Hono<AppEnv>();
 
@@ -116,26 +117,17 @@ clientRoutes.post("/", async (c) => {
 
   const resultBody = await result.json() as Record<string, unknown> & { id?: string; name?: Array<{ given?: string[]; family?: string }> };
 
-  // Fire-and-forget: start intake workflow for the new patient
+  // Fire-and-forget: evaluate workflow triggers for the new patient
   if (result.ok && resultBody.id) {
     const tenantId = c.get("tenantId");
-    const patientName = (resultBody.name?.[0]?.given?.[0] ?? "") + " " + (resultBody.name?.[0]?.family ?? "");
-    const workflowUrl = process.env.WORKFLOW_BRIDGE_URL || "http://localhost:4003";
-    try {
-      await fetch(`${workflowUrl}/api/processen/intake-proces/start`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Tenant-ID": tenantId },
-        body: JSON.stringify({
-          variables: [
-            { name: "clientId", value: resultBody.id },
-            { name: "clientNaam", value: patientName.trim() },
-            { name: "tenantId", value: tenantId },
-          ],
-        }),
-      });
-    } catch {
+    fireWorkflowTriggers(
+      "resource.created",
+      "Patient",
+      resultBody as Record<string, unknown>,
+      tenantId,
+    ).catch(() => {
       // Workflow failure should never block patient creation
-    }
+    });
   }
 
   return c.json(resultBody, result.ok ? 201 : result.status as 400);

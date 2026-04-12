@@ -36,6 +36,7 @@ import { vaccinatieRoutes } from "./routes/vaccinatie.js";
 import { vbmRoutes } from "./routes/vbm.js";
 import { vragenlijstenRoutes } from "./routes/vragenlijsten.js";
 import { wilsverklaringRoutes } from "./routes/wilsverklaring.js";
+import { workflowTriggerRoutes } from "./routes/workflow-triggers.js";
 import { zorgplanRoutes } from "./routes/zorgplan.js";
 
 export type AppEnv = {
@@ -140,6 +141,9 @@ app.route("/api/tenant-settings", tenantSettingsRoutes);
 app.route("/api/contracten", contractenRoutes);
 app.route("/api/rooster", roosterRoutes);
 app.route("/api/capaciteit", capaciteitRoutes);
+
+// Admin: Workflow triggers
+app.route("/api/admin/workflow-triggers", workflowTriggerRoutes);
 
 // Sprint 6: API docs, Integraties (webhooks + API keys)
 app.route("/api/docs", apiDocsRoutes);
