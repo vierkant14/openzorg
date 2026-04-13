@@ -1220,6 +1220,13 @@ function RapportagesTab({ clientId }: { clientId: string }) {
             Filteren
           </button>
           <button
+            onClick={() => window.print()}
+            className="rounded-lg border border-default px-3 py-1.5 text-sm font-medium text-fg-muted hover:bg-sunken btn-press print:hidden"
+            title="Rapportages afdrukken"
+          >
+            Afdrukken
+          </button>
+          <button
             onClick={() => setShowForm((v) => !v)}
             className="rounded-md bg-brand-700 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-800 btn-press"
           >
@@ -1342,6 +1349,23 @@ function RapportageForm({
   const [tekst, setTekst] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [linkedGoalId, setLinkedGoalId] = useState("");
+  const [goals, setGoals] = useState<Array<{ id: string; description: string }>>([]);
+
+  // Load active goals for this client
+  useEffect(() => {
+    ecdFetch<FhirBundle<FhirGoal>>(`/api/clients/${clientId}/zorgplan`).then(({ data: cpData }) => {
+      const cpId = cpData?.entry?.[0]?.resource?.id;
+      if (!cpId) return;
+      ecdFetch<FhirBundle<FhirGoal>>(`/api/zorgplan/${cpId}/doelen`).then(({ data }) => {
+        setGoals(
+          (data?.entry?.map((e) => e.resource) ?? [])
+            .filter((g) => g.lifecycleStatus !== "completed" && g.lifecycleStatus !== "cancelled")
+            .map((g) => ({ id: g.id ?? "", description: g.description?.text ?? "Doel" })),
+        );
+      });
+    });
+  }, [clientId]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -1350,8 +1374,8 @@ function RapportageForm({
 
     const body =
       type === "soep"
-        ? { type: "soep", subjectief, objectief, evaluatie, plan }
-        : { type: "vrij", tekst };
+        ? { type: "soep", subjectief, objectief, evaluatie, plan, goalId: linkedGoalId || undefined }
+        : { type: "vrij", tekst, goalId: linkedGoalId || undefined };
 
     const { error: err } = await ecdFetch(`/api/clients/${clientId}/rapportages`, {
       method: "POST",
@@ -1371,25 +1395,42 @@ function RapportageForm({
       onSubmit={handleSubmit}
       className="mb-6 rounded-lg border border-default bg-raised p-5 shadow-sm"
     >
-      {/* Type toggle */}
-      <fieldset className="mb-4">
-        <legend className="mb-1 text-sm font-medium text-fg-muted">Type rapportage</legend>
-        <div className="flex gap-4">
-          {(["soep", "vrij"] as const).map((t) => (
-            <label key={t} className="flex items-center gap-2 text-sm">
-              <input
-                type="radio"
-                name="rapportageType"
-                value={t}
-                checked={type === t}
-                onChange={() => setType(t)}
-                className="accent-brand-700"
-              />
-              {t === "soep" ? "SOEP" : "Vrij"}
-            </label>
-          ))}
-        </div>
-      </fieldset>
+      {/* Type toggle + goal link */}
+      <div className="mb-4 flex flex-wrap items-end gap-4">
+        <fieldset>
+          <legend className="mb-1 text-sm font-medium text-fg-muted">Type rapportage</legend>
+          <div className="flex gap-4">
+            {(["soep", "vrij"] as const).map((t) => (
+              <label key={t} className="flex items-center gap-2 text-sm">
+                <input
+                  type="radio"
+                  name="rapportageType"
+                  value={t}
+                  checked={type === t}
+                  onChange={() => setType(t)}
+                  className="accent-brand-700"
+                />
+                {t === "soep" ? "SOEP" : "Vrij"}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+        {goals.length > 0 && (
+          <div>
+            <label className="mb-1 block text-sm font-medium text-fg-muted">Koppelen aan doel</label>
+            <select
+              value={linkedGoalId}
+              onChange={(e) => setLinkedGoalId(e.target.value)}
+              className="rounded-md border border-default px-3 py-2 text-sm shadow-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+            >
+              <option value="">Geen doel (optioneel)</option>
+              {goals.map((g) => (
+                <option key={g.id} value={g.id}>{g.description}</option>
+              ))}
+            </select>
+          </div>
+        )}
+      </div>
 
       {type === "soep" ? (
         <div className="grid gap-3">

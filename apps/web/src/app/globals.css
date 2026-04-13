@@ -143,6 +143,17 @@
     display: none;
   }
 
+  /* Print styles — clean output for zorgplan, rapportages, medicatieoverzicht */
+  @media print {
+    aside, header, nav, .print\:hidden { display: none !important; }
+    main { margin: 0; padding: 0; }
+    body { background: white; color: black; font-size: 11pt; }
+    .bg-raised, .bg-sunken, .bg-page { background: white !important; }
+    .border-default, .border-subtle { border-color: #e5e5e5 !important; }
+    .shadow-sm, .shadow-md, .shadow-soft { box-shadow: none !important; }
+    * { animation: none !important; transition: none !important; }
+  }
+
   /* Reduce motion: disable stagger + btn animations */
   @media (prefers-reduced-motion: reduce) {
     .stagger > * {
