@@ -116,6 +116,17 @@ jobs:
       - name: Run seed and wait for completion
         run: docker compose -f infra/compose/docker-compose.yml run --rm seed
 
+      - name: Diagnose login endpoint (curl /api/auth/login)
+        run: |
+          echo "=== Direct POST naar /api/auth/login met jan@horizon.nl ==="
+          curl -sS -X POST http://localhost:3000/api/auth/login \
+            -H "Content-Type: application/json" \
+            -d '{"email":"jan@horizon.nl","password":"Hz!J4n#2026pKw8"}' \
+            -w "\n\nHTTP status: %{http_code}\n" || true
+          echo ""
+          echo "=== Medplum health via host localhost:8103 ==="
+          curl -sS http://localhost:8103/healthcheck -w "\nHTTP status: %{http_code}\n" || true
+
       - name: Install Playwright browsers
         run: pnpm --filter @openzorg/web exec playwright install --with-deps chromium
 
@@ -142,7 +153,18 @@ jobs:
 
       - name: Dump container logs on failure
         if: failure()
-        run: docker compose -f infra/compose/docker-compose.yml logs --tail=300
+        run: |
+          echo "=== WEB ==="
+          docker compose -f infra/compose/docker-compose.yml logs --tail=200 web || true
+          echo ""
+          echo "=== MEDPLUM ==="
+          docker compose -f infra/compose/docker-compose.yml logs --tail=200 medplum || true
+          echo ""
+          echo "=== ECD ==="
+          docker compose -f infra/compose/docker-compose.yml logs --tail=100 ecd || true
+          echo ""
+          echo "=== POSTGRES ==="
+          docker compose -f infra/compose/docker-compose.yml logs --tail=50 postgres || true
 
       - name: Tear down stack
         if: always()
