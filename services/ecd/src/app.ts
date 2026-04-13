@@ -29,6 +29,7 @@ import { organisatieRoutes } from "./routes/organisatie.js";
 import { rapportageRoutes } from "./routes/rapportage.js";
 import { risicoscreeningRoutes } from "./routes/risicoscreening.js";
 import { roosterRoutes } from "./routes/rooster.js";
+import { signaleringRoutes } from "./routes/signaleringen.js";
 import { tenantSettingsRoutes } from "./routes/tenant-settings.js";
 import { tenantRoutes } from "./routes/tenants.js";
 import { toedieningRoutes } from "./routes/toediening.js";
@@ -141,6 +142,10 @@ app.route("/api/tenant-settings", tenantSettingsRoutes);
 app.route("/api/contracten", contractenRoutes);
 app.route("/api/rooster", roosterRoutes);
 app.route("/api/capaciteit", capaciteitRoutes);
+
+// Signaleringen (Flag) — client alerts
+app.route("/api/clients", signaleringRoutes);
+app.route("/api/signaleringen", signaleringRoutes);
 
 // Admin: Workflow triggers
 app.route("/api/admin/workflow-triggers", workflowTriggerRoutes);

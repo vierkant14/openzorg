@@ -16,6 +16,8 @@ interface FhirPatient {
   active?: boolean;
   telecom?: Array<{ system?: string; value?: string }>;
   address?: Array<{ line?: string[]; city?: string; postalCode?: string }>;
+  managingOrganization?: { display?: string; reference?: string };
+  extension?: Array<{ url?: string; valueString?: string; extension?: Array<{ url?: string; valueString?: string }> }>;
 }
 
 interface FhirBundle {
@@ -86,6 +88,18 @@ function getWoonplaats(patient: FhirPatient): string {
   return patient.address?.[0]?.city ?? "";
 }
 
+function getLocatie(patient: FhirPatient): string {
+  return patient.managingOrganization?.display ?? "";
+}
+
+function getIndicatie(patient: FhirPatient): string {
+  const ext = patient.extension?.find((e) => e.url === "https://openzorg.nl/extensions/indicatie");
+  if (!ext) return "";
+  const type = ext.extension?.find((e) => e.url === "type")?.valueString ?? "";
+  const profiel = ext.extension?.find((e) => e.url === "zorgprofiel")?.valueString ?? "";
+  return [type.toUpperCase(), profiel].filter(Boolean).join(" - ");
+}
+
 /* ── Avatar color rotation based on name hash ── */
 const AVATAR_COLORS = [
   ["bg-brand-100 dark:bg-brand-900/40", "text-brand-700 dark:text-brand-300"],
@@ -109,6 +123,9 @@ export default function EcdPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [zoekterm, setZoekterm] = useState("");
+  const [filterLocatie, setFilterLocatie] = useState("");
+  const [sortKey, setSortKey] = useState<"naam" | "bsn" | "geboortedatum" | "locatie">("naam");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
   useEffect(() => {
     async function fetchClients() {
@@ -126,17 +143,52 @@ export default function EcdPage() {
     fetchClients();
   }, []);
 
+  const locaties = useMemo(() => {
+    const set = new Set<string>();
+    for (const p of patients) {
+      const loc = getLocatie(p);
+      if (loc) set.add(loc);
+    }
+    return [...set].sort();
+  }, [patients]);
+
   const gefilterdeClienten = useMemo(() => {
-    if (!zoekterm.trim()) return patients;
-    const term = zoekterm.toLowerCase();
-    return patients.filter((p) => {
-      const naam = formatNaam(p).toLowerCase();
-      const bsn = getBsn(p).toLowerCase();
-      const cnr = getClientnummer(p).toLowerCase();
-      const stad = getWoonplaats(p).toLowerCase();
-      return naam.includes(term) || bsn.includes(term) || cnr.includes(term) || stad.includes(term);
+    let result = patients;
+
+    // Locatie filter
+    if (filterLocatie) {
+      result = result.filter((p) => getLocatie(p) === filterLocatie);
+    }
+
+    // Text search
+    if (zoekterm.trim()) {
+      const term = zoekterm.toLowerCase();
+      result = result.filter((p) => {
+        const naam = formatNaam(p).toLowerCase();
+        const bsn = getBsn(p).toLowerCase();
+        const cnr = getClientnummer(p).toLowerCase();
+        const stad = getWoonplaats(p).toLowerCase();
+        const loc = getLocatie(p).toLowerCase();
+        return naam.includes(term) || bsn.includes(term) || cnr.includes(term) || stad.includes(term) || loc.includes(term);
+      });
+    }
+
+    // Sort
+    result = [...result].sort((a, b) => {
+      let va = "";
+      let vb = "";
+      switch (sortKey) {
+        case "naam": va = formatNaam(a); vb = formatNaam(b); break;
+        case "bsn": va = getBsn(a); vb = getBsn(b); break;
+        case "geboortedatum": va = a.birthDate ?? ""; vb = b.birthDate ?? ""; break;
+        case "locatie": va = getLocatie(a); vb = getLocatie(b); break;
+      }
+      const cmp = va.localeCompare(vb);
+      return sortDir === "asc" ? cmp : -cmp;
     });
-  }, [patients, zoekterm]);
+
+    return result;
+  }, [patients, zoekterm, filterLocatie, sortKey, sortDir]);
 
   return (
     <AppShell>
@@ -160,9 +212,9 @@ export default function EcdPage() {
           </a>
         </div>
 
-        {/* ── Search ── */}
-        <div className="mb-6">
-          <div className="relative max-w-md">
+        {/* ── Search + Filters ── */}
+        <div className="mb-6 flex flex-wrap items-end gap-3">
+          <div className="relative flex-1 min-w-[250px] max-w-md">
             <svg
               className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-fg-subtle"
               viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
@@ -171,12 +223,24 @@ export default function EcdPage() {
             </svg>
             <input
               type="text"
-              placeholder="Zoeken op naam, clientnummer, BSN of woonplaats..."
+              placeholder="Zoeken op naam, BSN, locatie..."
               value={zoekterm}
               onChange={(e) => setZoekterm(e.target.value)}
-              className="w-full pl-11 pr-4 py-3 bg-raised border border-default rounded-xl text-body-sm text-fg placeholder:text-fg-subtle focus:border-brand-400 focus:ring-2 focus:ring-brand-500/20 transition-all outline-none"
+              className="w-full pl-11 pr-4 py-3 bg-raised border border-default rounded-xl text-body-sm text-fg placeholder:text-fg-subtle focus:border-brand-400 focus:ring-2 focus:ring-brand-500/20 transition-[border-color,box-shadow] duration-200 ease-out outline-none"
             />
           </div>
+          {locaties.length > 0 && (
+            <select
+              value={filterLocatie}
+              onChange={(e) => setFilterLocatie(e.target.value)}
+              className="rounded-xl border border-default bg-raised px-4 py-3 text-body-sm text-fg focus:border-brand-400 focus:ring-2 focus:ring-brand-500/20 transition-[border-color,box-shadow] duration-200 ease-out outline-none"
+            >
+              <option value="">Alle locaties</option>
+              {locaties.map((loc) => (
+                <option key={loc} value={loc}>{loc}</option>
+              ))}
+            </select>
+          )}
         </div>
 
         {/* ── Content ── */}
@@ -236,11 +300,12 @@ export default function EcdPage() {
               <table className="w-full text-body-sm">
                 <thead>
                   <tr className="border-b border-default">
-                    <th className="text-left px-6 py-3.5 text-overline text-fg-subtle uppercase tracking-wider font-semibold">Client</th>
+                    <th className="text-left px-6 py-3.5 text-overline text-fg-subtle uppercase tracking-wider font-semibold cursor-pointer hover:text-fg-muted" onClick={() => { setSortKey("naam"); setSortDir(sortKey === "naam" && sortDir === "asc" ? "desc" : "asc"); }}>Client {sortKey === "naam" && (sortDir === "asc" ? "↑" : "↓")}</th>
                     <th className="text-left px-6 py-3.5 text-overline text-fg-subtle uppercase tracking-wider font-semibold">Nr.</th>
-                    <th className="text-left px-6 py-3.5 text-overline text-fg-subtle uppercase tracking-wider font-semibold hidden md:table-cell">BSN</th>
-                    <th className="text-left px-6 py-3.5 text-overline text-fg-subtle uppercase tracking-wider font-semibold hidden md:table-cell">Leeftijd</th>
-                    <th className="text-left px-6 py-3.5 text-overline text-fg-subtle uppercase tracking-wider font-semibold hidden lg:table-cell">Woonplaats</th>
+                    <th className="text-left px-6 py-3.5 text-overline text-fg-subtle uppercase tracking-wider font-semibold hidden md:table-cell cursor-pointer hover:text-fg-muted" onClick={() => { setSortKey("bsn"); setSortDir(sortKey === "bsn" && sortDir === "asc" ? "desc" : "asc"); }}>BSN {sortKey === "bsn" && (sortDir === "asc" ? "↑" : "↓")}</th>
+                    <th className="text-left px-6 py-3.5 text-overline text-fg-subtle uppercase tracking-wider font-semibold hidden md:table-cell cursor-pointer hover:text-fg-muted" onClick={() => { setSortKey("geboortedatum"); setSortDir(sortKey === "geboortedatum" && sortDir === "asc" ? "desc" : "asc"); }}>Leeftijd {sortKey === "geboortedatum" && (sortDir === "asc" ? "↑" : "↓")}</th>
+                    <th className="text-left px-6 py-3.5 text-overline text-fg-subtle uppercase tracking-wider font-semibold hidden lg:table-cell cursor-pointer hover:text-fg-muted" onClick={() => { setSortKey("locatie"); setSortDir(sortKey === "locatie" && sortDir === "asc" ? "desc" : "asc"); }}>Locatie {sortKey === "locatie" && (sortDir === "asc" ? "↑" : "↓")}</th>
+                    <th className="text-left px-6 py-3.5 text-overline text-fg-subtle uppercase tracking-wider font-semibold hidden xl:table-cell">Indicatie</th>
                     <th className="text-left px-6 py-3.5 text-overline text-fg-subtle uppercase tracking-wider font-semibold">Status</th>
                   </tr>
                 </thead>
@@ -278,7 +343,12 @@ export default function EcdPage() {
                         <td className="px-6 py-4 font-mono text-caption text-brand-600 dark:text-brand-400 font-semibold">{getClientnummer(patient)}</td>
                         <td className="px-6 py-4 font-mono text-caption text-fg-muted hidden md:table-cell">{getBsn(patient)}</td>
                         <td className="px-6 py-4 text-fg-muted hidden md:table-cell">{getLeeftijd(patient.birthDate)}</td>
-                        <td className="px-6 py-4 text-fg-muted hidden lg:table-cell">{getWoonplaats(patient) || "—"}</td>
+                        <td className="px-6 py-4 text-fg-muted hidden lg:table-cell">{getLocatie(patient) || getWoonplaats(patient) || "—"}</td>
+                        <td className="px-6 py-4 text-fg-muted hidden xl:table-cell">
+                          {getIndicatie(patient) ? (
+                            <span className="inline-flex items-center rounded-lg bg-brand-50 dark:bg-brand-950/20 px-2 py-0.5 text-xs font-medium text-brand-700 dark:text-brand-300">{getIndicatie(patient)}</span>
+                          ) : "—"}
+                        </td>
                         <td className="px-6 py-4">
                           {patient.active !== false ? (
                             <span className="inline-flex items-center gap-1.5 text-caption font-medium text-brand-600 dark:text-brand-400">

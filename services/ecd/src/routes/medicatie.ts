@@ -67,6 +67,46 @@ medicatieRoutes.put("/medicatie/:id", async (c) => {
 });
 
 /**
+ * POST /api/medicatie/:id/controle — Record double-check verification (Wet BIG).
+ */
+medicatieRoutes.post("/medicatie/:id/controle", async (c) => {
+  const id = c.req.param("id");
+  const body = await c.req.json<{
+    controleur: string;
+    akkoord: boolean;
+    opmerking?: string;
+  }>();
+
+  if (!body.controleur) {
+    return c.json(operationOutcome("error", "required", "Controleur is vereist"), 400);
+  }
+
+  // Fetch current MedicationRequest and add controle extension
+  const current = await medplumFetch(c, `/fhir/R4/MedicationRequest/${id}`);
+  if (!current.ok) {
+    return proxyMedplumResponse(c, current);
+  }
+
+  const med = (await current.json()) as Record<string, unknown>;
+  const exts = (med["extension"] as Array<Record<string, unknown>>) ?? [];
+  exts.push({
+    url: "https://openzorg.nl/extensions/dubbele-controle",
+    extension: [
+      { url: "controleur", valueString: body.controleur },
+      { url: "datum", valueDateTime: new Date().toISOString() },
+      { url: "akkoord", valueBoolean: body.akkoord },
+      ...(body.opmerking ? [{ url: "opmerking", valueString: body.opmerking }] : []),
+    ],
+  });
+  med["extension"] = exts;
+
+  return medplumProxy(c, `/fhir/R4/MedicationRequest/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(med),
+  });
+});
+
+/**
  * DELETE /api/medicatie/:id — Stop medication (set status to stopped).
  */
 medicatieRoutes.delete("/medicatie/:id", async (c) => {

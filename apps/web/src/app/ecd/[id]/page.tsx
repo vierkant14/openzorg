@@ -412,6 +412,9 @@ export default function ClientDetailPage() {
           )}
         </div>
 
+        {/* Signaleringen banner */}
+        <SignaleringenBanner clientId={id} />
+
         {/* Tabs */}
         <div className="mt-6 border-b border-default overflow-x-auto scrollbar-hide">
           <nav className="-mb-px flex gap-6" aria-label="Tabs">
@@ -466,6 +469,145 @@ function PageShell({ children }: { children: React.ReactNode }) {
     <AppShell>
       {children}
     </AppShell>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Signaleringen banner                                                      */
+/* -------------------------------------------------------------------------- */
+
+interface FhirFlag {
+  id?: string;
+  status?: string;
+  category?: Array<{ coding?: Array<{ code?: string; display?: string }> }>;
+  code?: { text?: string };
+  extension?: Array<{ url?: string; valueString?: string }>;
+}
+
+const SIGNALERING_ICONS: Record<string, string> = {
+  valrisico: "🚨",
+  allergie: "⚠️",
+  mrsa: "🦠",
+  infectie: "🦠",
+  agressie: "⚡",
+  dieet: "🍽️",
+  anders: "📌",
+};
+
+function SignaleringenBanner({ clientId }: { clientId: string }) {
+  const [flags, setFlags] = useState<FhirFlag[]>([]);
+  const [showForm, setShowForm] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [code, setCode] = useState("");
+  const [categorie, setCategorie] = useState("anders");
+  const [ernst, setErnst] = useState("midden");
+  const [toelichting, setToelichting] = useState("");
+
+  const load = useCallback(() => {
+    ecdFetch<{ entry?: Array<{ resource: FhirFlag }> }>(`/api/clients/${clientId}/signaleringen`).then(({ data }) => {
+      setFlags(data?.entry?.map((e) => e.resource).filter((f) => f.status === "active") ?? []);
+    });
+  }, [clientId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  async function handleAdd(e: React.FormEvent) {
+    e.preventDefault();
+    if (!code.trim()) return;
+    setSaving(true);
+    await ecdFetch(`/api/clients/${clientId}/signaleringen`, {
+      method: "POST",
+      body: JSON.stringify({ code: code.trim(), categorie, ernst, toelichting: toelichting.trim() || undefined }),
+    });
+    setSaving(false);
+    setShowForm(false);
+    setCode("");
+    setToelichting("");
+    load();
+  }
+
+  async function handleRemove(flagId: string) {
+    if (!confirm("Signalering verwijderen?")) return;
+    await ecdFetch(`/api/signaleringen/${flagId}`, { method: "DELETE" });
+    load();
+  }
+
+  if (flags.length === 0 && !showForm) {
+    return (
+      <div className="mt-4 flex items-center gap-2">
+        <button onClick={() => setShowForm(true)} className="text-xs font-medium text-fg-subtle hover:text-brand-600 btn-press">
+          + Signalering toevoegen
+        </button>
+      </div>
+    );
+  }
+
+  const ernstCls = (e?: string) => {
+    switch (e) {
+      case "hoog": return "bg-coral-50 dark:bg-coral-950/20 border-coral-200 dark:border-coral-800 text-coral-700 dark:text-coral-300";
+      case "midden": return "bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-300";
+      default: return "bg-brand-50 dark:bg-brand-950/20 border-brand-200 dark:border-brand-800 text-brand-700 dark:text-brand-300";
+    }
+  };
+
+  const inputCls = "rounded-lg border border-default bg-raised px-3 py-1.5 text-sm text-fg focus:border-brand-400 focus:ring-2 focus:ring-brand-500/20 outline-none transition-[border-color,box-shadow] duration-200 ease-out";
+
+  return (
+    <div className="mt-4">
+      <div className="flex flex-wrap items-center gap-2">
+        {flags.map((flag) => {
+          const cat = flag.category?.[0]?.coding?.[0]?.code ?? "anders";
+          const ernstVal = flag.extension?.find((e) => e.url === "https://openzorg.nl/extensions/signalering-ernst")?.valueString;
+          const tooltip = flag.extension?.find((e) => e.url === "https://openzorg.nl/extensions/signalering-toelichting")?.valueString;
+          return (
+            <span
+              key={flag.id}
+              className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-semibold ${ernstCls(ernstVal)}`}
+              title={tooltip ?? flag.code?.text}
+            >
+              {SIGNALERING_ICONS[cat] ?? "📌"} {flag.code?.text}
+              <button onClick={() => handleRemove(flag.id!)} className="ml-1 opacity-50 hover:opacity-100">×</button>
+            </span>
+          );
+        })}
+        <button onClick={() => setShowForm(!showForm)} className="text-xs font-medium text-fg-subtle hover:text-brand-600 btn-press">
+          + Toevoegen
+        </button>
+      </div>
+
+      {showForm && (
+        <form onSubmit={handleAdd} className="mt-2 flex flex-wrap items-end gap-2 rounded-lg border border-default bg-sunken p-3 animate-[fade-in_200ms_ease-out]">
+          <div>
+            <label className="block text-xs font-medium text-fg-muted mb-1">Omschrijving</label>
+            <input type="text" value={code} onChange={(e) => setCode(e.target.value)} placeholder="bijv. Verhoogd valrisico" className={inputCls} required />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-fg-muted mb-1">Categorie</label>
+            <select value={categorie} onChange={(e) => setCategorie(e.target.value)} className={inputCls}>
+              <option value="valrisico">🚨 Valrisico</option>
+              <option value="allergie">⚠️ Allergie</option>
+              <option value="mrsa">🦠 MRSA</option>
+              <option value="infectie">🦠 Infectie</option>
+              <option value="agressie">⚡ Agressie</option>
+              <option value="dieet">🍽️ Dieet</option>
+              <option value="anders">📌 Anders</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-fg-muted mb-1">Ernst</label>
+            <select value={ernst} onChange={(e) => setErnst(e.target.value)} className={inputCls}>
+              <option value="hoog">Hoog</option>
+              <option value="midden">Midden</option>
+              <option value="laag">Laag</option>
+            </select>
+          </div>
+          <button type="submit" disabled={saving} className="rounded-lg bg-brand-700 px-4 py-1.5 text-sm font-medium text-white hover:bg-brand-800 disabled:opacity-50 btn-press">
+            {saving ? "..." : "Toevoegen"}
+          </button>
+          <button type="button" onClick={() => setShowForm(false)} className="text-sm text-fg-muted hover:text-fg btn-press">Annuleren</button>
+        </form>
+      )}
+    </div>
   );
 }
 
@@ -2451,10 +2593,23 @@ function MedicatieTab({ clientId }: { clientId: string }) {
                 )?.valueString;
                 const statusLabel = medicatieStatusLabel(med.status);
                 const isActive = med.status === "active";
+                const RISICOVOL = ["insuline", "morfine", "fentanyl", "oxycodon", "acenocoumarol", "fenprocoumon", "methotrexaat", "lithium"];
+                const isHighRisk = RISICOVOL.some((r) => naam.toLowerCase().includes(r));
+                const controleExt = med.extension?.find((e) => e.url === "https://openzorg.nl/extensions/dubbele-controle");
+                const isGecontroleerd = !!controleExt;
 
                 return (
                   <tr key={med.id ?? i} className={!isActive ? "opacity-60" : ""}>
-                    <td className="px-4 py-3 font-medium text-fg">{naam}</td>
+                    <td className="px-4 py-3 font-medium text-fg">
+                      <div className="flex items-center gap-2">
+                        {naam}
+                        {isHighRisk && (
+                          <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-bold ${isGecontroleerd ? "bg-brand-50 dark:bg-brand-950/20 text-brand-700 dark:text-brand-300" : "bg-amber-50 dark:bg-amber-950/20 text-amber-700 dark:text-amber-300"}`}>
+                            {isGecontroleerd ? "✓ Gecontroleerd" : "⚠ Risicovol"}
+                          </span>
+                        )}
+                      </div>
+                    </td>
                     <td className="px-4 py-3 text-fg-muted">{dosering}</td>
                     <td className="px-4 py-3 text-fg-muted">{frequentie}</td>
                     <td className="px-4 py-3 text-fg-muted">{voorschrijver}</td>
@@ -2473,6 +2628,22 @@ function MedicatieTab({ clientId }: { clientId: string }) {
                     </td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex justify-end gap-2">
+                        {isHighRisk && isActive && !isGecontroleerd && (
+                          <button
+                            onClick={async () => {
+                              const controleur = prompt("Naam controleur (tweede medewerker):");
+                              if (!controleur) return;
+                              await ecdFetch(`/api/medicatie/${med.id}/controle`, {
+                                method: "POST",
+                                body: JSON.stringify({ controleur, akkoord: true }),
+                              });
+                              load();
+                            }}
+                            className="text-sm text-amber-600 hover:text-amber-800 font-medium btn-press-sm"
+                          >
+                            Controleren
+                          </button>
+                        )}
                         <button onClick={() => { setEditingMed(med); setShowForm(false); }} className="text-sm text-brand-600 hover:text-brand-800 btn-press-sm">
                           Bewerken
                         </button>

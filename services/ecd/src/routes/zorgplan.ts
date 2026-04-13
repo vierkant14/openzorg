@@ -572,3 +572,114 @@ zorgplanRoutes.get("/zorgplan/:planId/handtekeningen", async (c) => {
     `/fhir/R4/Consent?source-reference=CarePlan/${planId}&category=https://openzorg.nl/CodeSystem/consent-type|zorgplan-handtekening&_sort=-date`,
   );
 });
+
+/* ── Evaluaties ─────────────────────────────────────────────────────────── */
+
+/**
+ * GET /api/zorgplan/:planId/evaluaties — List evaluations for a care plan.
+ */
+zorgplanRoutes.get("/zorgplan/:planId/evaluaties", async (c) => {
+  const planId = c.req.param("planId");
+  return medplumProxy(
+    c,
+    `/fhir/R4/Observation?focus=CarePlan/${planId}&code=https://openzorg.nl/CodeSystem/observatie-type|zorgplan-evaluatie&_sort=-date&_count=50`,
+  );
+});
+
+/**
+ * POST /api/zorgplan/:planId/evaluaties — Create a care plan evaluation.
+ */
+zorgplanRoutes.post("/zorgplan/:planId/evaluaties", async (c) => {
+  const planId = c.req.param("planId");
+
+  const body = await c.req.json<{
+    samenvatting: string;
+    doelEvaluaties?: Array<{
+      goalId: string;
+      status: string;
+      toelichting?: string;
+    }>;
+    volgendeEvaluatieDatum?: string;
+  }>();
+
+  if (!body.samenvatting) {
+    return c.json(operationOutcome("error", "required", "Samenvatting is vereist"), 400);
+  }
+
+  // Build evaluation Observation
+  const extensions: Array<{ url: string; valueString?: string }> = [];
+  if (body.doelEvaluaties) {
+    for (const de of body.doelEvaluaties) {
+      extensions.push({
+        url: "https://openzorg.nl/extensions/doel-evaluatie",
+        valueString: JSON.stringify({ goalId: de.goalId, status: de.status, toelichting: de.toelichting ?? "" }),
+      });
+    }
+  }
+
+  const observation = {
+    resourceType: "Observation",
+    status: "final",
+    code: {
+      coding: [{ system: "https://openzorg.nl/CodeSystem/observatie-type", code: "zorgplan-evaluatie", display: "Zorgplan evaluatie" }],
+    },
+    focus: [{ reference: `CarePlan/${planId}` }],
+    effectiveDateTime: new Date().toISOString(),
+    valueString: body.samenvatting,
+    extension: extensions.length > 0 ? extensions : undefined,
+  };
+
+  const evalRes = await medplumFetch(c, "/fhir/R4/Observation", {
+    method: "POST",
+    body: JSON.stringify(observation),
+  });
+
+  if (!evalRes.ok) {
+    return proxyMedplumResponse(c, evalRes);
+  }
+
+  // Update individual goal statuses
+  if (body.doelEvaluaties) {
+    for (const de of body.doelEvaluaties) {
+      const goalRes = await medplumFetch(c, `/fhir/R4/Goal/${de.goalId}`);
+      if (goalRes.ok) {
+        const goal = (await goalRes.json()) as Record<string, unknown>;
+        const statusMap: Record<string, string> = {
+          bereikt: "completed",
+          "deels-bereikt": "active",
+          "niet-bereikt": "cancelled",
+          doorlopend: "active",
+        };
+        goal["lifecycleStatus"] = statusMap[de.status] ?? "active";
+        await medplumFetch(c, `/fhir/R4/Goal/${de.goalId}`, {
+          method: "PUT",
+          body: JSON.stringify(goal),
+        });
+      }
+    }
+  }
+
+  // Optionally set next evaluation date on the CarePlan
+  if (body.volgendeEvaluatieDatum) {
+    const cpRes = await medplumFetch(c, `/fhir/R4/CarePlan/${planId}`);
+    if (cpRes.ok) {
+      const cp = (await cpRes.json()) as Record<string, unknown>;
+      const exts = (cp["extension"] as Array<{ url: string; valueDate?: string }>) ?? [];
+      const extUrl = "https://openzorg.nl/extensions/volgende-evaluatie-datum";
+      const existing = exts.findIndex((e) => e.url === extUrl);
+      if (existing >= 0) {
+        exts[existing] = { url: extUrl, valueDate: body.volgendeEvaluatieDatum };
+      } else {
+        exts.push({ url: extUrl, valueDate: body.volgendeEvaluatieDatum });
+      }
+      cp["extension"] = exts;
+      await medplumFetch(c, `/fhir/R4/CarePlan/${planId}`, {
+        method: "PUT",
+        body: JSON.stringify(cp),
+      });
+    }
+  }
+
+  const evalBody = await evalRes.json();
+  return c.json(evalBody, 201);
+});
