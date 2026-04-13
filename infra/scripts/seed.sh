@@ -53,7 +53,10 @@ async function register(email, password, firstName, lastName, projectName) {
     body: JSON.stringify({ firstName, lastName, email, password, recaptchaToken: '', codeChallenge, codeChallengeMethod: 'S256' })
   });
   const s1 = await r1.json();
-  if (!s1.login) { console.log('  ' + email + ': SKIP (exists or error)'); return { accessToken: null, projectId: '' }; }
+  if (!s1.login) {
+    console.log('  ' + email + ': newuser failed (HTTP ' + r1.status + ') → ' + JSON.stringify(s1));
+    return { accessToken: null, projectId: '' };
+  }
 
   const r2 = await fetch(MEDPLUM + '/auth/newproject', {
     method: 'POST',
@@ -61,7 +64,10 @@ async function register(email, password, firstName, lastName, projectName) {
     body: JSON.stringify({ login: s1.login, projectName })
   });
   const s2 = await r2.json();
-  if (!s2.code) { console.log('  ' + email + ': project creation failed'); return { accessToken: null, projectId: '' }; }
+  if (!s2.code) {
+    console.log('  ' + email + ': newproject failed (HTTP ' + r2.status + ') → ' + JSON.stringify(s2));
+    return { accessToken: null, projectId: '' };
+  }
 
   const r3 = await fetch(MEDPLUM + '/oauth2/token', {
     method: 'POST',

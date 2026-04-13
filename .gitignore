@@ -10,3 +10,9 @@ coverage/
 *.log
 .DS_Store
 Thumbs.db
+
+# Playwright
+apps/web/test-results/
+apps/web/playwright-report/
+apps/web/playwright/.cache/
+apps/web/playwright/.auth/

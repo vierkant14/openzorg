@@ -136,6 +136,17 @@ Data-isolatie wordt afgedwongen op:
 2. API-niveau via Medplum projects
 3. Applicatie-niveau via tenant middleware in elke service
 
+## Smoke testing Unraid
+
+Verifieer in één commando of de Unraid-deploy gezond is:
+
+````bash
+./scripts/unraid-smoke.sh                   # default host 192.168.1.10
+./scripts/unraid-smoke.sh unraid.local      # custom host
+````
+
+Exit code 0 = alle services healthy. Niet-nul = lijst van wat down is.
+
 ## ADRs (Architecture Decision Records)
 
 - [ADR-001: Medplum als FHIR-fundament](docs/architecture/ADR-001-medplum.md)

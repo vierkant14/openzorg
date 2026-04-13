@@ -84,3 +84,88 @@ jobs:
 
       - name: Build all
         run: pnpm build
+
+  e2e:
+    name: E2E (Playwright)
+    runs-on: ubuntu-latest
+    needs: [lint-and-typecheck, forbidden-words, test]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build shared packages
+        run: pnpm --filter "@openzorg/shared-*" build
+
+      - name: Start Docker Compose stack (zonder seed)
+        run: docker compose -f infra/compose/docker-compose.yml up -d --build postgres redis medplum ecd planning workflow-bridge facturatie web
+
+      - name: Wait for stack to be healthy
+        run: ./scripts/wait-for-stack.sh
+        env:
+          MAX_WAIT: 600
+
+      - name: Run seed and wait for completion
+        run: docker compose -f infra/compose/docker-compose.yml run --rm seed
+
+      - name: Diagnose login endpoint (curl /api/auth/login)
+        run: |
+          echo "=== Direct POST naar /api/auth/login met jan@horizon.nl ==="
+          curl -sS -X POST http://localhost:3000/api/auth/login \
+            -H "Content-Type: application/json" \
+            -d '{"email":"jan@horizon.nl","password":"Hz!J4n#2026pKw8"}' \
+            -w "\n\nHTTP status: %{http_code}\n" || true
+          echo ""
+          echo "=== Medplum health via host localhost:8103 ==="
+          curl -sS http://localhost:8103/healthcheck -w "\nHTTP status: %{http_code}\n" || true
+
+      - name: Install Playwright browsers
+        run: pnpm --filter @openzorg/web exec playwright install --with-deps chromium
+
+      - name: Run Playwright tests
+        run: pnpm --filter @openzorg/web test:e2e
+        env:
+          E2E_BASE_URL: http://localhost:3000
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: apps/web/playwright-report/
+          retention-days: 14
+
+      - name: Upload Playwright traces on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-traces
+          path: apps/web/test-results/
+          retention-days: 14
+
+      - name: Dump container logs on failure
+        if: failure()
+        run: |
+          echo "=== WEB ==="
+          docker compose -f infra/compose/docker-compose.yml logs --tail=200 web || true
+          echo ""
+          echo "=== MEDPLUM ==="
+          docker compose -f infra/compose/docker-compose.yml logs --tail=200 medplum || true
+          echo ""
+          echo "=== ECD ==="
+          docker compose -f infra/compose/docker-compose.yml logs --tail=100 ecd || true
+          echo ""
+          echo "=== POSTGRES ==="
+          docker compose -f infra/compose/docker-compose.yml logs --tail=50 postgres || true
+
+      - name: Tear down stack
+        if: always()
+        run: docker compose -f infra/compose/docker-compose.yml down -v

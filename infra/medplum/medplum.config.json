@@ -15,6 +15,7 @@
   "allowedOrigins": "*",
   "introspectionEnabled": true,
   "registerEnabled": true,
+  "defaultLoginRateLimit": 100,
   "superAdminEmail": "admin@openzorg.local",
   "superAdminPassword": "X9kL#mPq2vNw$rTy"
 }
