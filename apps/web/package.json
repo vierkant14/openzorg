@@ -11,19 +11,23 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:headed": "playwright test --headed",
     "clean": "rm -rf .next"
   },
   "dependencies": {
     "@medplum/core": "^3.2.0",
     "@medplum/react": "^3.2.0",
-    "@openzorg/shared-domain": "workspace:*",
     "@openzorg/shared-config": "workspace:*",
+    "@openzorg/shared-domain": "workspace:*",
     "@openzorg/shared-ui": "workspace:*",
     "next": "^15.1.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.59.1",
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
