@@ -89,22 +89,43 @@ export default function WerkbakPage() {
 
   const role = typeof window !== "undefined" ? getUserRole() : "";
 
+  // Teamleider en beheerder zien taken van alle rollen (oversight)
+  const isOversight = role === "teamleider" || role === "beheerder";
+  const ALL_ROLES = ["zorgmedewerker", "planner", "teamleider", "beheerder"];
+
   const loadTasks = useCallback(async () => {
     if (!role) return;
     setLoading(true);
     setError(null);
 
-    const { data, error: err } = await workflowFetch<TasksResponse>(
-      `/api/taken?userId=${encodeURIComponent(role)}`,
-    );
-
-    if (err) {
-      setError(err);
+    if (isOversight) {
+      // Fetch tasks for all roles and merge
+      const allTasks: WorkflowTask[] = [];
+      const seenIds = new Set<string>();
+      for (const r of ALL_ROLES) {
+        const { data } = await workflowFetch<TasksResponse>(
+          `/api/taken?userId=${encodeURIComponent(r)}`,
+        );
+        for (const task of data?.data ?? []) {
+          if (!seenIds.has(task.id)) {
+            seenIds.add(task.id);
+            allTasks.push(task);
+          }
+        }
+      }
+      setTasks(allTasks);
     } else {
-      setTasks(data?.data ?? []);
+      const { data, error: err } = await workflowFetch<TasksResponse>(
+        `/api/taken?userId=${encodeURIComponent(role)}`,
+      );
+      if (err) {
+        setError(err);
+      } else {
+        setTasks(data?.data ?? []);
+      }
     }
     setLoading(false);
-  }, [role]);
+  }, [role, isOversight]);
 
   useEffect(() => {
     loadTasks();
@@ -157,7 +178,10 @@ export default function WerkbakPage() {
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-fg">Werkbak</h1>
           <p className="mt-1 text-sm text-fg-muted">
-            Openstaande taken voor jouw rol: <span className="font-medium text-brand-600">{role || "onbekend"}</span>
+            {isOversight
+              ? <>Alle openstaande taken (overzicht als <span className="font-medium text-brand-600">{role}</span>)</>
+              : <>Openstaande taken voor jouw rol: <span className="font-medium text-brand-600">{role || "onbekend"}</span></>
+            }
           </p>
         </div>
 

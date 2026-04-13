@@ -144,12 +144,19 @@ export async function getTasksForUser(userId: string, tenantId?: string): Promis
     return { ...assignedData, data: allTasks, total: allTasks.length, size: allTasks.length };
   }
 
+  // Filter by tenant — match on tenantId process variable.
+  // The variable may contain the Medplum project ID or a tenant slug.
+  // We accept tasks where tenantId matches OR where no tenantId variable exists
+  // (backward compatibility with process instances started without tenantId).
   const filtered = allTasks.filter((task) => {
     const vars = task["variables"] as Array<{ name: string; value: unknown; scope?: string }> | undefined;
     const tenantVar = vars?.find(
-      (v) => v.name === "tenantId" && v.scope === "global",
+      (v) => v.name === "tenantId",
     );
-    return tenantVar?.value === tenantId;
+    // No tenantId variable → show task (legacy process instance)
+    if (!tenantVar) return true;
+    // Match on exact value (could be project ID or slug)
+    return tenantVar.value === tenantId;
   });
 
   return { ...assignedData, data: filtered, total: filtered.length, size: filtered.length };
