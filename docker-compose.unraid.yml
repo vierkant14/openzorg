@@ -217,6 +217,7 @@ services:
     ports:
       - "13000:3000"
     environment:
+      HOSTNAME: 0.0.0.0
       MEDPLUM_BASE_URL: http://medplum:8103
       ECD_SERVICE_URL: http://ecd:4001
       PLANNING_SERVICE_URL: http://planning:4002
@@ -225,7 +226,7 @@ services:
       MASTER_ADMIN_KEY: ${MASTER_ADMIN_KEY:-dev-master-key}
       NEXT_PUBLIC_MEDPLUM_BASE_URL: http://192.168.1.10:18103
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/api/health').then(r=>{if(!r.ok)throw 1}).catch(()=>process.exit(1))"]
+      test: ["CMD", "node", "-e", "fetch('http://0.0.0.0:3000/').then(r=>{if(!r.ok)throw 1}).catch(()=>process.exit(1))"]
       interval: 15s
       timeout: 10s
       retries: 5
