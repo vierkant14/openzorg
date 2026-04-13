@@ -10,7 +10,8 @@ MEDPLUM="${MEDPLUM_BASE_URL:-http://localhost:8103}"
 echo "=== OpenZorg Seed Script ==="
 echo "Medplum: $MEDPLUM"
 
-apk add --no-cache curl postgresql-client > /dev/null 2>&1
+# Install tools if not present (Dockerfile.seed pre-installs these)
+command -v curl > /dev/null 2>&1 || apk add --no-cache curl postgresql-client > /dev/null 2>&1
 
 PGHOST="${POSTGRES_HOST:-postgres}"
 PGPORT="${POSTGRES_PORT:-5432}"

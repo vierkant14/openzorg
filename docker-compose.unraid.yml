@@ -69,10 +69,10 @@ services:
       - ./infra/medplum/medplum.config.json:/usr/src/medplum/medplum.config.json
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://localhost:8103/healthcheck').then(r=>{if(!r.ok)throw 1}).catch(()=>process.exit(1))"]
-      interval: 30s
-      timeout: 30s
-      retries: 60
-      start_period: 600s
+      interval: 10s
+      timeout: 10s
+      retries: 120
+      start_period: 30s
 
   # ── ECD Service (Hono) ─────────────────────────────────────
   ecd:
@@ -232,7 +232,9 @@ services:
 
   # ── Seed (runs once, creates users) ───────────────────────────
   seed:
-    image: node:20-alpine
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile.seed
     depends_on:
       medplum:
         condition: service_healthy
@@ -245,9 +247,6 @@ services:
       POSTGRES_DB: openzorg
       POSTGRES_USER: openzorg
       POSTGRES_PASSWORD: openzorg_dev_password
-    volumes:
-      - ./infra/scripts/seed.sh:/seed.sh
-    command: sh /seed.sh
     restart: "no"
 
 volumes:
