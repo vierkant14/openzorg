@@ -125,12 +125,11 @@ function LoginForm() {
             />
           </div>
 
-          {/* Role selector — only visible in development mode */}
-          {process.env.NODE_ENV === "development" && (
-            <div>
-              <label htmlFor="role" className="block text-body-sm font-medium text-fg mb-1.5">
-                Rol <span className="text-caption text-amber-600">(dev mode)</span>
-              </label>
+          {/* Role selector — shown until PractitionerRole-based role assignment is implemented */}
+          <div>
+            <label htmlFor="role" className="block text-body-sm font-medium text-fg mb-1.5">
+              Rol
+            </label>
               <select
                 id="role"
                 value={role}
@@ -141,11 +140,10 @@ function LoginForm() {
                   <option key={r.value} value={r.value}>{r.label}</option>
                 ))}
               </select>
-              <p className="text-caption text-fg-subtle mt-1.5">
-                In productie wordt je rol automatisch bepaald door de beheerder.
-              </p>
-            </div>
-          )}
+            <p className="text-caption text-fg-subtle mt-1.5">
+              In productie wordt je rol automatisch bepaald door de beheerder.
+            </p>
+          </div>
 
           {error && (
             <div className="rounded-xl bg-coral-50 dark:bg-coral-950/20 border border-coral-200 dark:border-coral-800 p-4 text-body-sm text-coral-700 dark:text-coral-300">
