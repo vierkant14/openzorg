@@ -57,6 +57,8 @@ describe("Client routes — BSN validation", () => {
     mockFetch.mockResolvedValueOnce(
       jsonResponse({ resourceType: "Patient", id: "new-id" }, 201),
     );
+    // Additional calls may happen from fire-and-forget workflow triggers
+    mockFetch.mockResolvedValue(jsonResponse({}, 200));
 
     const res = await app.request("/api/clients", {
       method: "POST",
@@ -72,7 +74,8 @@ describe("Client routes — BSN validation", () => {
     });
 
     expect(res.status).toBe(201);
-    expect(mockFetch).toHaveBeenCalledTimes(2);
+    // At least 2 core calls (clientnummer count + patient create); workflow triggers add more
+    expect(mockFetch.mock.calls.length).toBeGreaterThanOrEqual(2);
   });
 
   it("POST /api/clients allows Patient without BSN", async () => {
@@ -84,6 +87,8 @@ describe("Client routes — BSN validation", () => {
     mockFetch.mockResolvedValueOnce(
       jsonResponse({ resourceType: "Patient", id: "no-bsn" }, 201),
     );
+    // Workflow trigger fire-and-forget calls
+    mockFetch.mockResolvedValue(jsonResponse({}, 200));
 
     const res = await app.request("/api/clients", {
       method: "POST",
