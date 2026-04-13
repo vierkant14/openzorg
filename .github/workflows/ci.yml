@@ -105,16 +105,16 @@ jobs:
       - name: Build shared packages
         run: pnpm --filter "@openzorg/shared-*" build
 
-      - name: Start Docker Compose stack
-        run: docker compose -f infra/compose/docker-compose.yml up -d --build
+      - name: Start Docker Compose stack (zonder seed)
+        run: docker compose -f infra/compose/docker-compose.yml up -d --build postgres redis medplum ecd planning workflow-bridge facturatie web
 
       - name: Wait for stack to be healthy
         run: ./scripts/wait-for-stack.sh
         env:
           MAX_WAIT: 600
 
-      - name: Wait for seed to complete
-        run: docker compose -f infra/compose/docker-compose.yml wait seed
+      - name: Run seed and wait for completion
+        run: docker compose -f infra/compose/docker-compose.yml run --rm seed
 
       - name: Install Playwright browsers
         run: pnpm --filter @openzorg/web exec playwright install --with-deps chromium
