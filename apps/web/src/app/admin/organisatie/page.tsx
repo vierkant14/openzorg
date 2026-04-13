@@ -46,7 +46,7 @@ interface OrgTreeNode {
   children: OrgTreeNode[];
 }
 
-const LOCATIE_TYPES = ["verpleeghuis", "thuiszorg-team", "kantoor"] as const;
+const LOCATIE_TYPES = ["verpleeghuis", "thuiszorg-team", "kantoor", "dagbesteding", "revalidatie", "wijkteam", "regio"] as const;
 
 /* ---------- Helpers ---------- */
 

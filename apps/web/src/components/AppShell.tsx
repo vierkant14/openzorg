@@ -60,16 +60,21 @@ const NAV_SECTIONS: NavSection[] = [
     ],
   },
   {
-    label: "Beheer",
+    label: "HR",
     items: [
       { href: "/admin/medewerkers", label: "Medewerkers", icon: IconUserCog, permission: "medewerkers:read" },
-      { href: "/admin/organisatie", label: "Organisatie", icon: IconBuilding, permission: "organisatie:read" },
-      { href: "/admin/facturatie", label: "Facturatie", icon: IconReceipt, permission: "configuratie:read" },
       { href: "/admin/contracten", label: "Contracten", icon: IconContract, permission: "medewerkers:read" },
-      { href: "/admin/configuratie", label: "Configuratie", icon: IconSettings, permission: "configuratie:read" },
+      { href: "/admin/organisatie", label: "Organisatie", icon: IconBuilding, permission: "organisatie:read" },
+    ],
+  },
+  {
+    label: "Beheer",
+    items: [
+      { href: "/admin/facturatie", label: "Facturatie", icon: IconReceipt, permission: "configuratie:read" },
       { href: "/admin/codelijsten", label: "Codelijsten", icon: IconList, permission: "configuratie:read" },
-      { href: "/admin/validatie", label: "Validatieregels", icon: IconShield, permission: "configuratie:read" },
       { href: "/admin/workflows", label: "Workflows", icon: IconFlow, permission: "workflows:read" },
+      { href: "/admin/configuratie", label: "Configuratie", icon: IconSettings, permission: "configuratie:read" },
+      { href: "/admin/validatie", label: "Validatieregels", icon: IconShield, permission: "configuratie:read" },
       { href: "/admin/rollen", label: "Rollen", icon: IconShield, permission: "rollen:read" },
       { href: "/admin/client-dashboard-config", label: "Client dashboard", icon: IconGrid, permission: "configuratie:read" },
     ],
