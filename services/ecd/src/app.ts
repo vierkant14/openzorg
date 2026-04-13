@@ -26,6 +26,7 @@ import { medicatieOverzichtRoutes } from "./routes/medicatie-overzicht.js";
 import { medicatieRoutes } from "./routes/medicatie.js";
 import { micMeldingRoutes } from "./routes/mic-melding.js";
 import { organisatieRoutes } from "./routes/organisatie.js";
+import { productieRoutes } from "./routes/productie.js";
 import { rapportageRoutes } from "./routes/rapportage.js";
 import { risicoscreeningRoutes } from "./routes/risicoscreening.js";
 import { roosterRoutes } from "./routes/rooster.js";
@@ -146,6 +147,9 @@ app.route("/api/capaciteit", capaciteitRoutes);
 // Signaleringen (Flag) — client alerts
 app.route("/api/clients", signaleringRoutes);
 app.route("/api/signaleringen", signaleringRoutes);
+
+// Productieregistratie — delivered care tracking
+app.route("/api/productie", productieRoutes);
 
 // Admin: Workflow triggers
 app.route("/api/admin/workflow-triggers", workflowTriggerRoutes);

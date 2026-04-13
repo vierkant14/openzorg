@@ -175,3 +175,22 @@ ALTER TABLE openzorg.declaraties ENABLE ROW LEVEL SECURITY;
 CREATE POLICY declaratie_tenant_isolation ON openzorg.declaraties
     USING (tenant_id::text = current_setting('openzorg.current_tenant_id', true));
 CREATE INDEX idx_declaraties_tenant_status ON openzorg.declaraties (tenant_id, status);
+
+-- Productieregistratie (delivered care per client per day)
+CREATE TABLE openzorg.productie_registratie (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id TEXT NOT NULL,
+    client_id TEXT NOT NULL,
+    client_naam TEXT,
+    medewerker_id TEXT,
+    medewerker_naam TEXT,
+    datum DATE NOT NULL,
+    uren NUMERIC(5,2) NOT NULL,
+    productie_type TEXT NOT NULL, -- 'persoonlijke-verzorging', 'verpleging', 'begeleiding', etc.
+    locatie TEXT,
+    notitie TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_productie_tenant_datum ON openzorg.productie_registratie (tenant_id, datum DESC);
+CREATE INDEX idx_productie_tenant_client ON openzorg.productie_registratie (tenant_id, client_id);

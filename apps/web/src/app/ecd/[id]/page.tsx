@@ -255,16 +255,18 @@ export default function ClientDetailPage() {
   return (
     <PageShell>
       <div className="mx-auto max-w-5xl px-4 py-6 sm:px-6 lg:px-8">
-        {/* Back link */}
-        <button
-          onClick={() => router.push("/ecd")}
-          className="mb-4 inline-flex items-center gap-1 text-sm text-brand-700 hover:text-brand-900 btn-press"
-        >
-          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-          </svg>
-          Terug naar overzicht
-        </button>
+        {/* Breadcrumb */}
+        <nav className="mb-4 flex items-center gap-1.5 text-sm text-fg-subtle" aria-label="Breadcrumb">
+          <a href="/ecd" className="text-brand-700 hover:text-brand-900 btn-press">Clienten</a>
+          <span>/</span>
+          <span className="text-fg font-medium">{clientNaam(client)}</span>
+          {activeTab !== "dashboard" && (
+            <>
+              <span>/</span>
+              <span className="text-fg-muted">{TABS.find((t) => t.key === activeTab)?.label}</span>
+            </>
+          )}
+        </nav>
 
         {/* Profile header */}
         <div className="rounded-lg border border-default bg-raised p-6">
@@ -397,11 +399,32 @@ export default function ClientDetailPage() {
               if (!indicatie) return null;
               const type = indicatie.extension?.find((e) => e.url === "type")?.valueString;
               const profiel = indicatie.extension?.find((e) => e.url === "zorgprofiel")?.valueString;
+              const financiering = indicatie.extension?.find((e) => e.url === "financiering")?.valueString;
+              const einddatum = indicatie.extension?.find((e) => e.url === "einddatum")?.valueString;
+              const isVerlopen = einddatum && new Date(einddatum) < new Date();
               return (
-                <div>
-                  <dt className="font-medium text-fg-subtle">Indicatie</dt>
-                  <dd className="text-fg">{[type?.toUpperCase(), profiel].filter(Boolean).join(" - ") || "-"}</dd>
-                </div>
+                <>
+                  <div>
+                    <dt className="font-medium text-fg-subtle">Indicatie</dt>
+                    <dd className="text-fg">
+                      {[type?.toUpperCase(), profiel].filter(Boolean).join(" - ") || "-"}
+                      {financiering && (
+                        <span className="ml-2 inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-bold bg-brand-50 dark:bg-brand-950/20 text-brand-700 dark:text-brand-300">
+                          {financiering.toUpperCase()}
+                        </span>
+                      )}
+                    </dd>
+                  </div>
+                  {einddatum && (
+                    <div>
+                      <dt className="font-medium text-fg-subtle">Indicatie geldig tot</dt>
+                      <dd className={isVerlopen ? "text-coral-600 font-medium" : "text-fg"}>
+                        {formatDate(einddatum)}
+                        {isVerlopen && " (verlopen)"}
+                      </dd>
+                    </div>
+                  )}
+                </>
               );
             })()}
           </dl>
@@ -1780,9 +1803,18 @@ function ZorgplanTab({ clientId }: { clientId: string }) {
               <input type="text" value={verantwoordelijke} onChange={(e) => setVerantwoordelijke(e.target.value)} placeholder="Naam verantwoordelijke zorgverlener" className={inputCls} />
             </div>
           </div>
+          <div className="mt-3 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/10 px-3 py-2">
+            <p className="text-xs text-amber-700 dark:text-amber-300">
+              <strong>Kwaliteitskader:</strong> Een voorlopig zorgplan moet binnen 48 uur na opname worden opgesteld. Het definitieve zorgplan binnen 6 weken.
+            </p>
+          </div>
           {formError && <p className="mt-2 text-sm text-coral-600">{formError}</p>}
-          <div className="mt-4 flex justify-end">
-            <button type="submit" disabled={saving} className="rounded-md bg-brand-700 px-5 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-800 disabled:opacity-50">
+          <div className="mt-4 flex items-center justify-between">
+            <label className="flex items-center gap-2 text-sm text-fg-muted">
+              <input type="checkbox" className="accent-brand-700" id="concept-toggle" />
+              Opslaan als voorlopig zorgplan (concept)
+            </label>
+            <button type="submit" disabled={saving} className="rounded-md bg-brand-700 px-5 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-800 disabled:opacity-50 btn-press">
               {saving ? "Opslaan..." : "Zorgplan aanmaken"}
             </button>
           </div>
@@ -4515,6 +4547,7 @@ interface FhirEncounter {
   reasonCode?: Array<{ text?: string }>;
   period?: { start?: string; end?: string };
   participant?: Array<{ individual?: { display?: string }; type?: Array<{ text?: string }> }>;
+  extension?: Array<{ url: string; valueString?: string }>;
 }
 
 function MdoTab({ clientId }: { clientId: string }) {
@@ -4591,6 +4624,12 @@ function MdoTab({ clientId }: { clientId: string }) {
                   <p className="text-xs text-fg-subtle mt-1">
                     {formatDate(enc.period?.start)}
                   </p>
+                  {enc.extension?.find((e) => e.url === "https://openzorg.nl/extensions/mdo-besluiten")?.valueString && (
+                    <div className="mt-2 rounded border border-brand-100 dark:border-brand-800 bg-brand-50/50 dark:bg-brand-950/10 px-3 py-2">
+                      <p className="text-xs font-semibold text-brand-700 dark:text-brand-300 mb-0.5">Besluiten</p>
+                      <p className="text-sm text-fg">{enc.extension?.find((e) => e.url === "https://openzorg.nl/extensions/mdo-besluiten")?.valueString}</p>
+                    </div>
+                  )}
                 </div>
                 <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${statusCls[st] ?? "bg-surface-100 dark:bg-surface-800 text-fg-muted"}`}>
                   {statusLabel[st] ?? st}
@@ -4608,6 +4647,7 @@ function MdoForm({ clientId, onSaved }: { clientId: string; onSaved: () => void 
   const [datum, setDatum] = useState(new Date().toISOString().slice(0, 10));
   const [onderwerp, setOnderwerp] = useState("");
   const [deelnemerNaam, setDeelnemerNaam] = useState("");
+  const [besluiten, setBesluiten] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -4623,6 +4663,7 @@ function MdoForm({ clientId, onSaved }: { clientId: string; onSaved: () => void 
         onderwerp,
         deelnemers: [{ practitionerId: "unknown", naam: deelnemerNaam }],
         status: "planned",
+        besluiten: besluiten.trim() || undefined,
       }),
     });
     setSaving(false);
@@ -4650,10 +4691,14 @@ function MdoForm({ clientId, onSaved }: { clientId: string; onSaved: () => void 
           <label className="mb-1 block text-sm font-medium text-fg-muted">Onderwerp *</label>
           <input type="text" value={onderwerp} onChange={(e) => setOnderwerp(e.target.value)} required className={inputCls} />
         </div>
+        <div className="sm:col-span-2">
+          <label className="mb-1 block text-sm font-medium text-fg-muted">Besluiten / actiepunten</label>
+          <textarea rows={3} value={besluiten} onChange={(e) => setBesluiten(e.target.value)} placeholder="Vastleggen van besluiten en actiepunten uit het MDO..." className={inputCls} />
+        </div>
       </div>
 
       <div className="mt-4 flex justify-end">
-        <button type="submit" disabled={saving} className="rounded-md bg-brand-700 px-5 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-800 disabled:opacity-50">
+        <button type="submit" disabled={saving} className="rounded-md bg-brand-700 px-5 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-800 disabled:opacity-50 btn-press">
           {saving ? "Opslaan..." : "MDO plannen"}
         </button>
       </div>

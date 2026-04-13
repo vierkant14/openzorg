@@ -76,4 +76,20 @@ export const DEFAULT_TRIGGERS: WorkflowTrigger[] = [
     },
     enabled: false,
   },
+  {
+    id: "evaluatie-signalering-timer",
+    name: "Evaluatie herinnering (6-maandelijks)",
+    event: "timer.cron",
+    processKey: "zorgplan-evaluatie",
+    variables: {},
+    enabled: true,
+  },
+  {
+    id: "herindicatie-signalering-timer",
+    name: "Herindicatie signalering (8 weken voor einddatum)",
+    event: "timer.cron",
+    processKey: "herindicatie",
+    variables: {},
+    enabled: true,
+  },
 ];
