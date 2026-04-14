@@ -13,11 +13,37 @@ interface WorkflowTask {
   name: string;
   description?: string;
   createTime: string;
+  dueDate?: string | null;
   assignee?: string;
   processDefinitionId?: string;
   processInstanceId?: string;
   taskDefinitionKey?: string;
   variables?: Array<{ name: string; value: unknown }>;
+}
+
+/**
+ * Formatter voor deadlines. Geeft een { label, color } terug zodat de kaart
+ * kan kleuren op basis van hoe dringend het is.
+ */
+function formatDueDate(iso?: string | null): { label: string; color: string } | null {
+  if (!iso) return null;
+  const due = new Date(iso);
+  if (isNaN(due.getTime())) return null;
+  const now = new Date();
+  const diffMs = due.getTime() - now.getTime();
+  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+  const diffDays = Math.floor(diffHours / 24);
+
+  if (diffMs < 0) {
+    return { label: `Verlopen: ${Math.abs(diffDays)}d geleden`, color: "bg-coral-100 text-coral-800 dark:bg-coral-950/30 dark:text-coral-300" };
+  }
+  if (diffHours < 24) {
+    return { label: `Over ${diffHours}u`, color: "bg-amber-100 text-amber-800 dark:bg-amber-950/30 dark:text-amber-300" };
+  }
+  if (diffDays < 3) {
+    return { label: `Over ${diffDays}d`, color: "bg-amber-100 text-amber-800 dark:bg-amber-950/30 dark:text-amber-300" };
+  }
+  return { label: `Over ${diffDays}d`, color: "bg-brand-50 text-brand-700 dark:bg-brand-950/20 dark:text-brand-300" };
 }
 
 interface TasksResponse {
@@ -336,6 +362,15 @@ export default function WerkbakPage() {
                             Niet geclaimd
                           </span>
                         )}
+                        {(() => {
+                          const due = formatDueDate(task.dueDate);
+                          if (!due) return null;
+                          return (
+                            <span className={`inline-flex items-center rounded-lg px-2.5 py-0.5 text-xs font-semibold ${due.color}`}>
+                              ⏰ {due.label}
+                            </span>
+                          );
+                        })()}
                         {clientNaam && (
                           <span className="text-xs text-fg-subtle">Client: {clientNaam}</span>
                         )}
@@ -346,6 +381,7 @@ export default function WerkbakPage() {
                       )}
                       <p className="mt-1.5 text-xs text-fg-subtle">
                         Aangemaakt: {new Date(task.createTime).toLocaleString("nl-NL", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                        {task.assignee && <> · Geclaimd door <span className="font-medium text-fg-muted">{task.assignee}</span></>}
                       </p>
                     </div>
 

@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 
 import AppShell from "../../components/AppShell";
-import { ecdFetch } from "../../lib/api";
+import { ecdFetch, getUserRole } from "../../lib/api";
+import { useFeatureFlag } from "../../lib/features";
 import { planningFetch } from "../../lib/planning-api";
 import { workflowFetch } from "../../lib/workflow-api";
 
@@ -81,13 +82,35 @@ const QUICK_ACTIONS = [
   { label: "Beschikbaarheid", href: "/planning/beschikbaarheid" },
 ] as const;
 
+interface PreviewTask {
+  id: string;
+  name: string;
+  processKey?: string;
+  clientNaam?: string;
+  createTime: string;
+  dueDate?: string | null;
+  assignee?: string;
+}
+
 export default function DashboardPage() {
+  const workflowEnabled = useFeatureFlag("workflow-engine");
+  const facturatieEnabled = useFeatureFlag("facturatie-module");
+  const planningEnabled = useFeatureFlag("planning-module");
+  const micEnabled = useFeatureFlag("mic-meldingen");
+
+  const [userName, setUserName] = useState<string>("");
   const [stats, setStats] = useState<QuickStat[]>([
     { label: "Clienten", value: "—" },
     { label: "Afspraken vandaag", value: "—" },
     { label: "Open taken", value: "—" },
     { label: "Wachtlijst", value: "—" },
   ]);
+  const [previewTasks, setPreviewTasks] = useState<PreviewTask[]>([]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    setUserName(localStorage.getItem("openzorg_user_name") ?? "");
+  }, []);
 
   useEffect(() => {
     async function loadStats() {
@@ -133,7 +156,38 @@ export default function DashboardPage() {
       ]);
     }
     loadStats();
-  }, []);
+
+    // Mijn-taken preview — eerste 3 taken voor mijn rol
+    async function loadPreviewTasks() {
+      const role = typeof window !== "undefined" ? getUserRole() : "";
+      if (!role) return;
+      const { data } = await workflowFetch<{
+        data: Array<{
+          id: string;
+          name: string;
+          processDefinitionId?: string;
+          createTime: string;
+          dueDate?: string | null;
+          assignee?: string;
+          variables?: Array<{ name: string; value: unknown }>;
+        }>;
+      }>(`/api/taken?userId=${encodeURIComponent(role)}`);
+      if (!data?.data) return;
+      const items = data.data.slice(0, 3).map((t) => ({
+        id: t.id,
+        name: t.name,
+        processKey: t.processDefinitionId?.split(":")[0],
+        clientNaam: t.variables?.find((v) => v.name === "clientNaam")?.value as string | undefined,
+        createTime: t.createTime,
+        dueDate: t.dueDate,
+        assignee: t.assignee,
+      }));
+      setPreviewTasks(items);
+    }
+    if (workflowEnabled) {
+      loadPreviewTasks();
+    }
+  }, [workflowEnabled]);
 
   const greeting = getGreeting();
 
@@ -142,7 +196,9 @@ export default function DashboardPage() {
       <div className="px-6 lg:px-10 py-8 max-w-[1400px] mx-auto">
         {/* ── Greeting ── */}
         <div className="mb-10">
-          <h1 className="text-display-lg text-fg">{greeting}</h1>
+          <h1 className="text-display-lg text-fg">
+            {greeting}{userName && <>, <span className="text-brand-600">{userName}</span></>}
+          </h1>
           <p className="text-body text-fg-muted mt-1">
             Hier is je overzicht voor vandaag.
           </p>
@@ -227,31 +283,69 @@ export default function DashboardPage() {
               ))}
             </div>
 
-            {/* Active modules status */}
+            {/* Mijn taken preview */}
+            {workflowEnabled && previewTasks.length > 0 && (
+              <>
+                <h2 className="text-heading text-fg mt-8 mb-4 flex items-center justify-between">
+                  Mijn taken
+                  <a href="/werkbak" className="text-body-sm font-medium text-brand-600 hover:text-brand-700">
+                    Bekijk alles →
+                  </a>
+                </h2>
+                <div className="bg-raised rounded-2xl border border-subtle p-2 space-y-1">
+                  {previewTasks.map((task) => (
+                    <a
+                      key={task.id}
+                      href="/werkbak"
+                      className="block rounded-xl px-4 py-3 hover:bg-sunken transition-colors"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-body-sm font-medium text-fg truncate">{task.name}</p>
+                          {task.clientNaam && (
+                            <p className="text-caption text-fg-subtle mt-0.5">Cliënt: {task.clientNaam}</p>
+                          )}
+                        </div>
+                        {!task.assignee && (
+                          <span className="inline-flex items-center rounded bg-amber-50 dark:bg-amber-950/20 px-2 py-0.5 text-caption font-medium text-amber-700 dark:text-amber-300">
+                            Nieuw
+                          </span>
+                        )}
+                      </div>
+                    </a>
+                  ))}
+                </div>
+              </>
+            )}
+
+            {/* Active modules status — nu feature-flag-aware */}
             <h2 className="text-heading text-fg mt-8 mb-4">Actieve modules</h2>
             <div className="bg-raised rounded-2xl border border-subtle p-5">
               <div className="space-y-3">
                 {[
-                  "Clientregistratie", "Zorgplan", "SOEP Rapportage",
-                  "MIC-meldingen", "Planning", "Workflows",
-                  "Custom velden", "Validatieregels",
-                  "Medewerkers", "Organisatie", "Berichten",
+                  { name: "Clientregistratie", enabled: true },
+                  { name: "Zorgplan", enabled: true },
+                  { name: "SOEP Rapportage", enabled: true },
+                  { name: "MIC-meldingen", enabled: micEnabled },
+                  { name: "Planning", enabled: planningEnabled },
+                  { name: "Workflows", enabled: workflowEnabled },
+                  { name: "Custom velden", enabled: true },
+                  { name: "Validatieregels", enabled: true },
+                  { name: "Medewerkers", enabled: true },
+                  { name: "Organisatie", enabled: true },
+                  { name: "Berichten", enabled: true },
+                  { name: "Facturatie", enabled: facturatieEnabled },
                 ].map((mod) => (
-                  <div key={mod} className="flex items-center justify-between">
-                    <span className="text-body-sm text-fg-muted">{mod}</span>
-                    <span className="flex items-center gap-1.5 text-caption font-medium text-brand-600 dark:text-brand-400">
-                      <span className="w-1.5 h-1.5 rounded-full bg-brand-500" />
-                      Actief
+                  <div key={mod.name} className="flex items-center justify-between">
+                    <span className={`text-body-sm ${mod.enabled ? "text-fg-muted" : "text-fg-subtle"}`}>{mod.name}</span>
+                    <span className={`flex items-center gap-1.5 text-caption font-medium ${
+                      mod.enabled ? "text-brand-600 dark:text-brand-400" : "text-fg-subtle"
+                    }`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${mod.enabled ? "bg-brand-500" : "bg-surface-400"}`} />
+                      {mod.enabled ? "Actief" : "Uit"}
                     </span>
                   </div>
                 ))}
-                <div className="flex items-center justify-between pt-2 border-t border-subtle">
-                  <span className="text-body-sm text-fg-muted">Facturatie</span>
-                  <span className="flex items-center gap-1.5 text-caption font-medium text-fg-subtle">
-                    <span className="w-1.5 h-1.5 rounded-full bg-surface-400" />
-                    Gepland
-                  </span>
-                </div>
               </div>
             </div>
           </div>
