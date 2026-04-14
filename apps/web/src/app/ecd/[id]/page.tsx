@@ -3,7 +3,6 @@
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
-import AppShell from "../../../components/AppShell";
 import { ecdFetch } from "../../../lib/api";
 import { loadWidgetConfig } from "../../../lib/widget-config";
 
@@ -163,34 +162,29 @@ export default function ClientDetailPage() {
 
   if (loading) {
     return (
-      <PageShell>
-        <div className="flex items-center justify-center py-24">
-          <div className="h-8 w-8 rounded-full border-4 border-brand-300 border-t-brand-700" style={{ animation: "spin 0.7s linear infinite" }} />
-        </div>
-      </PageShell>
+      <div className="flex items-center justify-center py-24">
+        <div className="h-8 w-8 rounded-full border-4 border-brand-300 border-t-brand-700" style={{ animation: "spin 0.7s linear infinite" }} />
+      </div>
     );
   }
 
   if (error || !client) {
     return (
-      <PageShell>
-        <div className="mx-auto max-w-3xl px-6 py-12">
-          <p className="text-coral-600">{error ?? "Kan de gegevens niet laden."}</p>
-          <button
-            onClick={() => router.push("/ecd")}
-            className="mt-4 text-sm text-brand-700 underline"
-          >
-            Terug naar overzicht
-          </button>
-        </div>
-      </PageShell>
+      <div className="mx-auto max-w-3xl px-6 py-12">
+        <p className="text-coral-600">{error ?? "Kan de gegevens niet laden."}</p>
+        <button
+          onClick={() => router.push("/ecd")}
+          className="mt-4 text-sm text-brand-700 underline"
+        >
+          Terug naar overzicht
+        </button>
+      </div>
     );
   }
 
   return (
-    <PageShell>
-      <div className="mx-auto max-w-5xl px-4 py-6 sm:px-6 lg:px-8">
-        {/* Breadcrumb */}
+    <>
+      {/* Breadcrumb */}
         <nav className="mb-4 flex items-center gap-1.5 text-sm text-fg-subtle" aria-label="Breadcrumb">
           <a href="/ecd" className="text-brand-700 hover:text-brand-900 btn-press">Clienten</a>
           <span>/</span>
@@ -369,23 +363,10 @@ export default function ClientDetailPage() {
 
         {/* Dashboard content — tab-navigatie komt uit de layout (TabNav),
             overige tabs hebben sinds Plan 2A hun eigen route */}
-        <div className="mt-6">
-          <DashboardTab clientId={id} client={client} />
-        </div>
+      <div className="mt-6">
+        <DashboardTab clientId={id} client={client} />
       </div>
-    </PageShell>
-  );
-}
-
-/* -------------------------------------------------------------------------- */
-/*  Page shell with nav bar                                                   */
-/* -------------------------------------------------------------------------- */
-
-function PageShell({ children }: { children: React.ReactNode }) {
-  return (
-    <AppShell>
-      {children}
-    </AppShell>
+    </>
   );
 }
 
