@@ -196,6 +196,86 @@ CREATE INDEX idx_productie_tenant_datum ON openzorg.productie_registratie (tenan
 CREATE INDEX idx_productie_tenant_client ON openzorg.productie_registratie (tenant_id, client_id);
 
 -- ──────────────────────────────────────────────────────────────────────────
+-- Plan 2E: Dynamische rollen per tenant
+-- ──────────────────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS openzorg.roles (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID REFERENCES openzorg.tenants(id),
+  slug TEXT NOT NULL,
+  display_name TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  permissions TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+  is_system BOOLEAN NOT NULL DEFAULT false,
+  active BOOLEAN NOT NULL DEFAULT true,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (tenant_id, slug)
+);
+
+CREATE INDEX IF NOT EXISTS idx_roles_tenant ON openzorg.roles(tenant_id) WHERE active = true;
+
+-- Seed default rollen voor alle bestaande tenants (is_system = de 4 bestaande,
+-- niet-system = de 4 nieuwe die bewerkbaar blijven).
+-- NOTE: permissions-arrays blijven leeg — shared-domain blijft de canonical
+-- permission-per-role matrix voor de 4 kern-rollen.
+INSERT INTO openzorg.roles (tenant_id, slug, display_name, description, is_system)
+SELECT t.id, 'beheerder', 'Beheerder',
+       'Functioneel beheerder: beheert processen, formulieren, validatieregels en gebruikers',
+       true
+  FROM openzorg.tenants t
+ WHERE NOT EXISTS (SELECT 1 FROM openzorg.roles r WHERE r.tenant_id = t.id AND r.slug = 'beheerder');
+
+INSERT INTO openzorg.roles (tenant_id, slug, display_name, description, is_system)
+SELECT t.id, 'zorgmedewerker', 'Zorgmedewerker',
+       'Wijkverpleegkundige of verzorgende: raadpleegt dossiers, rapporteert, bekijkt planning',
+       true
+  FROM openzorg.tenants t
+ WHERE NOT EXISTS (SELECT 1 FROM openzorg.roles r WHERE r.tenant_id = t.id AND r.slug = 'zorgmedewerker');
+
+INSERT INTO openzorg.roles (tenant_id, slug, display_name, description, is_system)
+SELECT t.id, 'planner', 'Planner',
+       'Maakt roosters, beheert beschikbaarheid, plant afspraken',
+       true
+  FROM openzorg.tenants t
+ WHERE NOT EXISTS (SELECT 1 FROM openzorg.roles r WHERE r.tenant_id = t.id AND r.slug = 'planner');
+
+INSERT INTO openzorg.roles (tenant_id, slug, display_name, description, is_system)
+SELECT t.id, 'teamleider', 'Teamleider',
+       'Monitort caseload, bekijkt kwaliteitsindicatoren, handelt escalaties af',
+       true
+  FROM openzorg.tenants t
+ WHERE NOT EXISTS (SELECT 1 FROM openzorg.roles r WHERE r.tenant_id = t.id AND r.slug = 'teamleider');
+
+-- Extra rollen voor VVT-compleetheid (niet-system, kunnen worden gewijzigd)
+INSERT INTO openzorg.roles (tenant_id, slug, display_name, description, is_system)
+SELECT t.id, 'controller', 'Controller',
+       'Financiele controle, facturatie en declaratie-overzicht',
+       false
+  FROM openzorg.tenants t
+ WHERE NOT EXISTS (SELECT 1 FROM openzorg.roles r WHERE r.tenant_id = t.id AND r.slug = 'controller');
+
+INSERT INTO openzorg.roles (tenant_id, slug, display_name, description, is_system)
+SELECT t.id, 'kwaliteitsmedewerker', 'Kwaliteitsmedewerker',
+       'Bewaakt kwaliteit van zorg, HKZ-indicatoren, MIC-analyse',
+       false
+  FROM openzorg.tenants t
+ WHERE NOT EXISTS (SELECT 1 FROM openzorg.roles r WHERE r.tenant_id = t.id AND r.slug = 'kwaliteitsmedewerker');
+
+INSERT INTO openzorg.roles (tenant_id, slug, display_name, description, is_system)
+SELECT t.id, 'zorgadministratie', 'Zorgadministratie',
+       'Administratieve verwerking van indicaties, toewijzingen en declaraties',
+       false
+  FROM openzorg.tenants t
+ WHERE NOT EXISTS (SELECT 1 FROM openzorg.roles r WHERE r.tenant_id = t.id AND r.slug = 'zorgadministratie');
+
+INSERT INTO openzorg.roles (tenant_id, slug, display_name, description, is_system)
+SELECT t.id, 'mic-coordinator', 'MIC-coordinator',
+       'Coordineert MIC-meldingen en bewaakt de opvolging',
+       false
+  FROM openzorg.tenants t
+ WHERE NOT EXISTS (SELECT 1 FROM openzorg.roles r WHERE r.tenant_id = t.id AND r.slug = 'mic-coordinator');
+
+-- ──────────────────────────────────────────────────────────────────────────
 -- Plan 2C: Platform-level settings per tenant (feature flags, sessie, branding)
 -- ──────────────────────────────────────────────────────────────────────────
 -- platform_settings JSONB schema:
