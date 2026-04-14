@@ -61,8 +61,13 @@ interface TaskVar {
   options?: Array<{ value: string; label: string }>;
 }
 
-/** Map process definition keys to their gateway variables */
-const PROCESS_VARS: Record<string, TaskVar[]> = {
+/**
+ * Default-vars per process-key. Deze hardcoded defaults zijn Laag 1 —
+ * leveranciersvoorschrift. Tenant-configuraties (Laag 2) mergen erover
+ * heen zodat een functioneel beheerder per task eigen opties kan zetten
+ * zonder code te wijzigen.
+ */
+const DEFAULT_PROCESS_VARS: Record<string, TaskVar[]> = {
   "intake-proces": [
     { name: "goedgekeurd", label: "Goedgekeurd?", type: "boolean" },
     { name: "opmerking", label: "Opmerking", type: "text" },
@@ -116,8 +121,13 @@ export default function WerkbakPage() {
   );
 }
 
+interface TenantFormOptions {
+  [processKey: string]: { [taskKey: string]: TaskVar[] };
+}
+
 function WerkbakInner() {
   const [tasks, setTasks] = useState<WorkflowTask[]>([]);
+  const [tenantFormOptions, setTenantFormOptions] = useState<TenantFormOptions>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedTask, setExpandedTask] = useState<string | null>(null);
@@ -171,7 +181,30 @@ function WerkbakInner() {
 
   useEffect(() => {
     loadTasks();
+    // Laad tenant-specifieke form-opties (Laag 2)
+    import("../../lib/api").then(({ ecdFetch }) =>
+      ecdFetch<{ config: TenantFormOptions }>("/api/task-form-options").then(({ data }) => {
+        if (data?.config) setTenantFormOptions(data.config);
+      }),
+    );
   }, [loadTasks]);
+
+  /**
+   * Merge Laag 1 (hardcoded defaults) met Laag 2 (tenant-overrides).
+   * Tenant-config wint per var-name; defaults zijn de fallback.
+   */
+  function getTaskVars(processKey: string, taskDefKey?: string): TaskVar[] {
+    const defaults = DEFAULT_PROCESS_VARS[processKey] ?? [
+      { name: "opmerking", label: "Opmerking", type: "text" as const },
+    ];
+    const override = tenantFormOptions[processKey]?.[taskDefKey ?? ""] ?? [];
+    if (override.length === 0) return defaults;
+    // Merge: tenant-override vervangt default met zelfde name, rest blijft
+    const byName = new Map<string, TaskVar>();
+    for (const v of defaults) byName.set(v.name, v);
+    for (const v of override) byName.set(v.name, v);
+    return Array.from(byName.values());
+  }
 
   async function claimTask(taskId: string) {
     const { error: err } = await workflowFetch(`/api/taken/${taskId}/claim`, {
@@ -351,7 +384,7 @@ function WerkbakInner() {
             {filteredTasks.map((task) => {
               const processKey = getProcessKey(task.processDefinitionId);
               const isExpanded = expandedTask === task.id;
-              const taskVars = PROCESS_VARS[processKey] ?? [{ name: "opmerking", label: "Opmerking", type: "text" as const }];
+              const taskVars = getTaskVars(processKey, task.taskDefinitionKey);
               const isClaimed = !!task.assignee;
               const clientNaam = task.variables?.find((v) => v.name === "clientNaam")?.value as string | undefined;
 
