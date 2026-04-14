@@ -164,24 +164,29 @@ export async function getTasksForUser(userId: string, tenantId?: string): Promis
 
 /**
  * Verifies that a task belongs to a process instance owned by the given tenant.
- * Returns the task data if the tenant matches, throws an error otherwise.
+ * Since BPMN-definities als global templates worden deployed (Flowable's
+ * native tenantId-veld blijft leeg), loopt tenant-isolatie via de
+ * `tenantId` process variable. Deze functie leest die variable en
+ * vergelijkt met de header-tenant. Legacy-instances zonder variable
+ * worden toegestaan (back-compat).
  */
 export async function verifyTaskTenant(taskId: string, tenantId: string): Promise<void> {
   const taskResponse = await flowableFetch(
-    `/service/runtime/tasks/${encodeURIComponent(taskId)}`,
+    `/service/runtime/tasks/${encodeURIComponent(taskId)}?includeProcessVariables=true`,
   );
-  const task = (await taskResponse.json()) as { processInstanceId?: string };
+  const task = (await taskResponse.json()) as {
+    processInstanceId?: string;
+    variables?: Array<{ name: string; value: unknown; scope?: string }>;
+  };
 
   if (!task.processInstanceId) {
     throw new Error("Taak heeft geen procesinstantie");
   }
 
-  const processResponse = await flowableFetch(
-    `/service/runtime/process-instances/${encodeURIComponent(task.processInstanceId)}`,
-  );
-  const process = (await processResponse.json()) as { tenantId?: string };
-
-  if (process.tenantId !== tenantId) {
+  const tenantVar = task.variables?.find((v) => v.name === "tenantId");
+  // Legacy: geen tenantId-variable → toestaan
+  if (!tenantVar) return;
+  if (tenantVar.value !== tenantId) {
     throw new Error("Taak behoort niet tot deze tenant");
   }
 }
