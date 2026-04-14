@@ -67,11 +67,19 @@ Per hoofdstuk 8.6 van het requirements-document:
 
 ## 🌓 Wat ik NIET heb gedaan
 
-- **Nieuwe tenant-admin UI voor task-form-options** — het backend-endpoint `/api/task-form-options` bestaat, werkbak merged laag 1+2, maar er is nog geen UI om een functioneel beheerder de opties te laten bewerken. Dit moet in Plan 2F of een aparte kleine plan 2G.
-- **Dynamische Medplum token-lifetime** — Plan 2C fase 5 niet afgemaakt. Handmatige SQL update is wel gedaan.
+- **Dynamische Medplum token-lifetime** — Plan 2C fase 5 niet afgemaakt. Handmatige SQL update is wel gedaan (1d / 30d).
 - **BPMN template DI-cleanup** — de handgeschreven templates herschrijven met correcte BPMNEdge/BPMNShape bounds. Auto-layout vult dit nu aan maar imperfect.
 - **DMN editor** — grote feature, Plan 2E.
-- **Form-keys per userTask** — het property veld is toegevoegd aan het canvas, maar er is geen renderer in de werkbak die dit nog gebruikt.
+- **Form-keys per userTask renderen in werkbak** — het property veld is toegevoegd aan het canvas, maar er is geen renderer in de werkbak die dit gebruikt. Komt in Plan 2F.
+- **Validation rules editor** — Plan 2D geschreven vannacht (`docs/superpowers/plans/2026-04-15-q2-plan-2d-validation-rules.md`), niet geïmplementeerd.
+
+## ✅ Wat er ALSNOG in zit (last-minute toevoegingen)
+
+- **`/admin/task-form-options` admin-UI** — functioneel beheerder kan per proces + per taak de completion-form-velden configureren (select-opties toevoegen, veld-types kiezen). Dit is de structurele oplossing voor "MIC ernstniveau 'middel' toevoegen" zonder release.
+  - Link toegevoegd aan AppShell beheer-sectie onder "Taak-formulieren"
+  - Werkbak merged Laag 1 (hardcoded defaults) met Laag 2 (tenant config)
+  - Data slaat op in `openzorg.tenant_configurations` met `config_type='task_form_options'`
+- **Plan 2D geschreven** — validation-rules editor (H7.2), roadmap document in `docs/superpowers/plans/`
 
 ## ⏰ Ochtendtest checklist
 
