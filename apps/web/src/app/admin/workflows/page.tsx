@@ -148,6 +148,12 @@ export default function WorkflowsAdminPage() {
               Lopende instanties
             </Link>
             <Link
+              href="/admin/workflows/canvas"
+              className="border border-brand-300 text-brand-700 px-4 py-2.5 rounded-lg hover:bg-brand-50 text-sm font-medium dark:border-brand-800 dark:text-brand-300 dark:hover:bg-brand-950/20"
+            >
+              Visuele editor (bèta)
+            </Link>
+            <Link
               href="/admin/workflows/ontwerp"
               className="bg-brand-600 text-white px-5 py-2.5 rounded-lg hover:bg-brand-700 text-sm font-medium"
             >
