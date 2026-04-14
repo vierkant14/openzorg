@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 import { clearSession, getUserRole, isMasterAdmin, isLoggedIn } from "../lib/api";
+import { isFeatureEnabled, type FeatureFlagSlug } from "../lib/features";
 
 import TenantSwitcher from "./TenantSwitcher";
 
@@ -15,6 +16,8 @@ interface NavItem {
   label: string;
   icon: (props: { className?: string }) => React.JSX.Element;
   permission: Permission | null;
+  /** Feature-flag vereist — als de flag uit staat verdwijnt dit item */
+  featureFlag?: FeatureFlagSlug;
 }
 
 interface NavSection {
@@ -38,7 +41,7 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { href: "/dashboard", label: "Dashboard", icon: IconGrid, permission: null },
       { href: "/berichten", label: "Berichten", icon: IconInbox, permission: "berichten:read" },
-      { href: "/werkbak", label: "Werkbak", icon: IconClipboard, permission: null },
+      { href: "/werkbak", label: "Werkbak", icon: IconClipboard, permission: null, featureFlag: "workflow-engine" },
       { href: "/wiki", label: "Wiki", icon: IconBook, permission: null },
     ],
   },
@@ -70,9 +73,9 @@ const NAV_SECTIONS: NavSection[] = [
   {
     label: "Beheer",
     items: [
-      { href: "/admin/facturatie", label: "Facturatie", icon: IconReceipt, permission: "configuratie:read" },
+      { href: "/admin/facturatie", label: "Facturatie", icon: IconReceipt, permission: "configuratie:read", featureFlag: "facturatie-module" },
       { href: "/admin/codelijsten", label: "Codelijsten", icon: IconList, permission: "configuratie:read" },
-      { href: "/admin/workflows", label: "Workflows", icon: IconFlow, permission: "workflows:read" },
+      { href: "/admin/workflows", label: "Workflows", icon: IconFlow, permission: "workflows:read", featureFlag: "workflow-engine" },
       { href: "/admin/configuratie", label: "Configuratie", icon: IconSettings, permission: "configuratie:read" },
       { href: "/admin/validatie", label: "Validatieregels", icon: IconShield, permission: "configuratie:read" },
       { href: "/admin/rollen", label: "Rollen", icon: IconShield, permission: "rollen:read" },
@@ -97,6 +100,20 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [authChecked, setAuthChecked] = useState(false);
 
   const [sessionWarning, setSessionWarning] = useState(false);
+  // Counter die wordt verhoogd wanneer feature-flags vernieuwd worden;
+  // triggert re-render van filteredSections zodat UI live reageert.
+  const [featureFlagsVersion, setFeatureFlagsVersion] = useState(0);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const bump = () => setFeatureFlagsVersion((v) => v + 1);
+    window.addEventListener("openzorg-features-updated", bump);
+    window.addEventListener("storage", bump);
+    return () => {
+      window.removeEventListener("openzorg-features-updated", bump);
+      window.removeEventListener("storage", bump);
+    };
+  }, []);
 
   /* Auth guard — redirect to login if not authenticated */
   useEffect(() => {
@@ -158,13 +175,18 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       .map((section) => ({
         ...section,
         items: section.items.filter((item) => {
+          // Feature-flag check eerst — feature uit = item weg, ongeacht rol
+          if (item.featureFlag && !isFeatureEnabled(item.featureFlag)) {
+            return false;
+          }
           // Master-only sections: show all items (no permission filtering)
           if (section.masterOnly) return true;
           return item.permission === null || rolePermissions.includes(item.permission);
         }),
       }))
       .filter((section) => section.items.length > 0);
-  }, [rolePermissions, masterAdmin]);
+    // featureFlagsVersion triggers re-render when flags are refreshed
+  }, [rolePermissions, masterAdmin, featureFlagsVersion]);
 
   /* Close mobile drawer on navigation */
   useEffect(() => {
