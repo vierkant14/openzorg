@@ -60,8 +60,12 @@ export async function deployProcess(bpmnXml: string, name: string): Promise<unkn
 
 /**
  * Starts a new process instance for the given process definition key.
- * Uses Flowable's native tenantId field and injects tenantId as a process variable
- * so tasks can be filtered by tenant.
+ *
+ * BPMN-definities worden deployed als *global* (zonder Flowable-tenantId),
+ * omdat ze OpenZorg-templates zijn die door alle tenants worden gebruikt.
+ * Tenant-isolatie loopt daarom via een `tenantId` *process variable* op de
+ * instance — niet via Flowable's native tenantId-veld op de definition.
+ * `getTasksForUser` filtert taken op deze variabele.
  */
 export async function startProcess(
   processKey: string,
@@ -71,10 +75,6 @@ export async function startProcess(
   const body: Record<string, unknown> = {
     processDefinitionKey: processKey,
   };
-
-  if (tenantId) {
-    body.tenantId = tenantId;
-  }
 
   const allVariables: Array<{ name: string; value: unknown }> = [];
 
