@@ -359,3 +359,169 @@ tenantRoutes.get("/stats/overview", async (c) => {
     activeTenants: parseInt(stats?.active ?? "0", 10),
   });
 });
+
+/* -------------------------------------------------------------------------- */
+/*  Plan 2C: Platform settings (feature flags, sessie, branding)              */
+/* -------------------------------------------------------------------------- */
+
+interface FeatureFlag {
+  enabled: boolean;
+  rolloutDate?: string;
+  notes?: string;
+}
+
+interface PlatformSettings {
+  featureFlags: Record<string, FeatureFlag>;
+  session: {
+    accessTokenLifetime: string;
+    refreshTokenLifetime: string;
+    idleTimeoutMinutes: number;
+  };
+  branding: {
+    logoUrl: string;
+    primaryColor: string;
+    organizationNameOverride: string;
+  };
+}
+
+const FEATURE_FLAG_SLUGS = [
+  "workflow-engine",
+  "bpmn-canvas",
+  "dmn-editor",
+  "facturatie-module",
+  "planning-module",
+  "mic-meldingen",
+  "rapportages-ai",
+  "sales-canvas",
+] as const;
+
+const DEFAULT_SETTINGS: PlatformSettings = {
+  featureFlags: Object.fromEntries(
+    FEATURE_FLAG_SLUGS.map((slug) => [slug, { enabled: true }]),
+  ) as Record<string, FeatureFlag>,
+  session: {
+    accessTokenLifetime: "1d",
+    refreshTokenLifetime: "30d",
+    idleTimeoutMinutes: 60,
+  },
+  branding: {
+    logoUrl: "",
+    primaryColor: "",
+    organizationNameOverride: "",
+  },
+};
+
+/**
+ * GET /api/master/tenants/:id/settings — get platform settings for a tenant.
+ */
+tenantRoutes.get("/:id/settings", async (c) => {
+  const id = c.req.param("id");
+  const result = await pool.query<{ platform_settings: PlatformSettings }>(
+    "SELECT platform_settings FROM openzorg.tenants WHERE id = $1",
+    [id],
+  );
+  if (result.rows.length === 0) {
+    return c.json({ error: "Tenant niet gevonden" }, 404);
+  }
+  const settings = result.rows[0]?.platform_settings ?? DEFAULT_SETTINGS;
+  // Merge met defaults zodat nieuwe feature-flags direct beschikbaar zijn
+  const merged: PlatformSettings = {
+    featureFlags: { ...DEFAULT_SETTINGS.featureFlags, ...(settings.featureFlags ?? {}) },
+    session: { ...DEFAULT_SETTINGS.session, ...(settings.session ?? {}) },
+    branding: { ...DEFAULT_SETTINGS.branding, ...(settings.branding ?? {}) },
+  };
+  return c.json({ settings: merged, availableFlags: FEATURE_FLAG_SLUGS });
+});
+
+/**
+ * PATCH /api/master/tenants/:id/settings — partial update platform settings.
+ * Body: { featureFlags?: {...}, session?: {...}, branding?: {...} }
+ */
+tenantRoutes.patch("/:id/settings", async (c) => {
+  const id = c.req.param("id");
+  const body = await c.req.json<Partial<PlatformSettings>>().catch(() => null);
+  if (!body) {
+    return c.json({ error: "Ongeldige JSON body" }, 400);
+  }
+
+  // Haal huidige settings op
+  const currentRes = await pool.query<{ platform_settings: PlatformSettings }>(
+    "SELECT platform_settings FROM openzorg.tenants WHERE id = $1",
+    [id],
+  );
+  if (currentRes.rows.length === 0) {
+    return c.json({ error: "Tenant niet gevonden" }, 404);
+  }
+  const current = currentRes.rows[0]?.platform_settings ?? DEFAULT_SETTINGS;
+
+  // Merge nieuwe waarden met huidige
+  const merged: PlatformSettings = {
+    featureFlags: { ...current.featureFlags, ...(body.featureFlags ?? {}) },
+    session: { ...current.session, ...(body.session ?? {}) },
+    branding: { ...current.branding, ...(body.branding ?? {}) },
+  };
+
+  // Valideer feature-flag slugs (waarschuwing, niet blokkerend — onbekende slugs
+  // kunnen dev-features zijn die nog niet in FEATURE_FLAG_SLUGS staan)
+  const unknownFlags = Object.keys(merged.featureFlags).filter(
+    (slug) => !FEATURE_FLAG_SLUGS.includes(slug as typeof FEATURE_FLAG_SLUGS[number]),
+  );
+
+  // Schrijf terug
+  await pool.query(
+    "UPDATE openzorg.tenants SET platform_settings = $1, updated_at = now() WHERE id = $2",
+    [JSON.stringify(merged), id],
+  );
+
+  // Audit-log entry
+  const changedKeys: string[] = [];
+  if (body.featureFlags) changedKeys.push("featureFlags");
+  if (body.session) changedKeys.push("session");
+  if (body.branding) changedKeys.push("branding");
+
+  try {
+    await pool.query(
+      `INSERT INTO openzorg.audit_log (tenant_id, user_id, action, resource_type, resource_id, details)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+      [
+        id,
+        c.req.header("X-User-Id") ?? "master-admin",
+        "platform.settings.update",
+        "Tenant",
+        id,
+        JSON.stringify({
+          changedKeys,
+          before: current,
+          after: merged,
+          unknownFlags,
+        }),
+      ],
+    );
+  } catch (err) {
+    console.error("[TENANT SETTINGS] Audit log schrijven faalde:", err);
+  }
+
+  return c.json({ settings: merged, unknownFlags });
+});
+
+/**
+ * Helper voor de losse /api/tenant-features route (zie app.ts).
+ * Laadt feature-flags + branding voor een tenant op basis van id of project-id.
+ */
+export async function loadTenantFeatures(tenantIdOrProjectId: string): Promise<{
+  featureFlags: Record<string, FeatureFlag>;
+  branding: PlatformSettings["branding"];
+}> {
+  const result = await pool.query<{ platform_settings: PlatformSettings }>(
+    "SELECT platform_settings FROM openzorg.tenants WHERE id::text = $1 OR medplum_project_id = $1",
+    [tenantIdOrProjectId],
+  );
+  if (result.rows.length === 0) {
+    return { featureFlags: DEFAULT_SETTINGS.featureFlags, branding: DEFAULT_SETTINGS.branding };
+  }
+  const settings = result.rows[0]?.platform_settings ?? DEFAULT_SETTINGS;
+  return {
+    featureFlags: { ...DEFAULT_SETTINGS.featureFlags, ...(settings.featureFlags ?? {}) },
+    branding: { ...DEFAULT_SETTINGS.branding, ...(settings.branding ?? {}) },
+  };
+}

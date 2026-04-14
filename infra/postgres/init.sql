@@ -194,3 +194,73 @@ CREATE TABLE openzorg.productie_registratie (
 
 CREATE INDEX idx_productie_tenant_datum ON openzorg.productie_registratie (tenant_id, datum DESC);
 CREATE INDEX idx_productie_tenant_client ON openzorg.productie_registratie (tenant_id, client_id);
+
+-- ──────────────────────────────────────────────────────────────────────────
+-- Plan 2C: Platform-level settings per tenant (feature flags, sessie, branding)
+-- ──────────────────────────────────────────────────────────────────────────
+-- platform_settings JSONB schema:
+-- {
+--   "featureFlags": {
+--     "<slug>": { "enabled": bool, "rolloutDate": "YYYY-MM-DD"?, "notes": string? }
+--   },
+--   "session": {
+--     "accessTokenLifetime": string (ISO duration),
+--     "refreshTokenLifetime": string,
+--     "idleTimeoutMinutes": number
+--   },
+--   "branding": {
+--     "logoUrl": string,
+--     "primaryColor": string (hex),
+--     "organizationNameOverride": string
+--   }
+-- }
+ALTER TABLE openzorg.tenants
+  ADD COLUMN IF NOT EXISTS platform_settings JSONB NOT NULL DEFAULT jsonb_build_object(
+    'featureFlags', jsonb_build_object(
+      'workflow-engine',    jsonb_build_object('enabled', true),
+      'bpmn-canvas',        jsonb_build_object('enabled', true),
+      'dmn-editor',         jsonb_build_object('enabled', false, 'notes', 'Nog niet geïmplementeerd'),
+      'facturatie-module',  jsonb_build_object('enabled', true),
+      'planning-module',    jsonb_build_object('enabled', true),
+      'mic-meldingen',      jsonb_build_object('enabled', true),
+      'rapportages-ai',     jsonb_build_object('enabled', false, 'notes', 'Experimenteel'),
+      'sales-canvas',       jsonb_build_object('enabled', false, 'notes', 'Alleen voor demo tenants')
+    ),
+    'session', jsonb_build_object(
+      'accessTokenLifetime', '1d',
+      'refreshTokenLifetime', '30d',
+      'idleTimeoutMinutes', 60
+    ),
+    'branding', jsonb_build_object(
+      'logoUrl', '',
+      'primaryColor', '',
+      'organizationNameOverride', ''
+    )
+  );
+
+-- Backfill voor bestaande rijen (IF NOT EXISTS boven voegt alleen de kolom toe,
+-- default geldt alleen voor nieuwe rijen; bestaande krijgen {})
+UPDATE openzorg.tenants
+   SET platform_settings = jsonb_build_object(
+     'featureFlags', jsonb_build_object(
+       'workflow-engine',    jsonb_build_object('enabled', true),
+       'bpmn-canvas',        jsonb_build_object('enabled', true),
+       'dmn-editor',         jsonb_build_object('enabled', false),
+       'facturatie-module',  jsonb_build_object('enabled', true),
+       'planning-module',    jsonb_build_object('enabled', true),
+       'mic-meldingen',      jsonb_build_object('enabled', true),
+       'rapportages-ai',     jsonb_build_object('enabled', false),
+       'sales-canvas',       jsonb_build_object('enabled', false)
+     ),
+     'session', jsonb_build_object(
+       'accessTokenLifetime', '1d',
+       'refreshTokenLifetime', '30d',
+       'idleTimeoutMinutes', 60
+     ),
+     'branding', jsonb_build_object(
+       'logoUrl', '',
+       'primaryColor', '',
+       'organizationNameOverride', ''
+     )
+   )
+ WHERE platform_settings = '{}'::jsonb OR platform_settings IS NULL;

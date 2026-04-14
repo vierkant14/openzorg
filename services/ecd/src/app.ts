@@ -32,7 +32,7 @@ import { risicoscreeningRoutes } from "./routes/risicoscreening.js";
 import { roosterRoutes } from "./routes/rooster.js";
 import { signaleringRoutes } from "./routes/signaleringen.js";
 import { tenantSettingsRoutes } from "./routes/tenant-settings.js";
-import { tenantRoutes } from "./routes/tenants.js";
+import { loadTenantFeatures, tenantRoutes } from "./routes/tenants.js";
 import { toedieningRoutes } from "./routes/toediening.js";
 import { vaccinatieRoutes } from "./routes/vaccinatie.js";
 import { vbmRoutes } from "./routes/vbm.js";
@@ -188,3 +188,14 @@ app.use("/api/master/*", async (c, next): Promise<Response | void> => {
 });
 app.route("/api/master/tenants", tenantRoutes);
 app.route("/api/master/admins", masterAdminRoutes);
+
+// Publieke (tenant-scoped) endpoint voor feature-flags + branding.
+// Wordt door de web-app aangeroepen na login. Vereist X-Tenant-ID header.
+app.get("/api/tenant-features", async (c) => {
+  const tenantId = c.req.header("X-Tenant-ID");
+  if (!tenantId) {
+    return c.json({ error: "X-Tenant-ID header ontbreekt" }, 400);
+  }
+  const data = await loadTenantFeatures(tenantId);
+  return c.json(data);
+});
