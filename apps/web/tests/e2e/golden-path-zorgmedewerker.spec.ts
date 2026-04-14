@@ -27,6 +27,10 @@ test.describe("Golden path: zorgmedewerker", () => {
     await expect(page).toHaveURL(/\/ecd\/[^/]+$/, { timeout: 15_000 });
 
     // 3. Naar Rapportages-tab (custom button, niet role=tab)
+    // NB tijdens Plan 2A monolith-split: Unraid draait nog pre-split code
+    // met interne tab-button. Na merge+deploy updaten we dit naar
+    // page.locator('[role="tablist"]').getByRole("tab", { name: "Rapportages" })
+    // + URL assertion /\/ecd\/[^/]+\/rapportages$/
     await page.getByRole("button", { name: "Rapportages", exact: true }).click();
     await expect(
       page.getByRole("heading", { name: /^Rapportages/ }),
