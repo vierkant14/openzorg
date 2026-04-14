@@ -34,6 +34,7 @@ import { signaleringRoutes } from "./routes/signaleringen.js";
 import { tenantSettingsRoutes } from "./routes/tenant-settings.js";
 import { taskFormOptionsRoutes } from "./routes/task-form-options.js";
 import { loadTenantFeatures, tenantRoutes } from "./routes/tenants.js";
+import { validationRulesRoutes } from "./routes/validation-rules.js";
 import { toedieningRoutes } from "./routes/toediening.js";
 import { vaccinatieRoutes } from "./routes/vaccinatie.js";
 import { vbmRoutes } from "./routes/vbm.js";
@@ -167,6 +168,7 @@ app.route("/api/productie", productieRoutes);
 // Admin: Workflow triggers
 app.route("/api/admin/workflow-triggers", workflowTriggerRoutes);
 app.route("/api/task-form-options", taskFormOptionsRoutes);
+app.route("/api/admin/validation-rules", validationRulesRoutes);
 
 // Sprint 6: API docs, Integraties (webhooks + API keys)
 app.route("/api/docs", apiDocsRoutes);
