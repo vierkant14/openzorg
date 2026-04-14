@@ -63,6 +63,11 @@
 | Werkbak: echte user-IDs ipv rol-als-candidateGroup (tenant-specifieke lookup) | Workflow | Later |
 | Werkbak: opruimen legacy-fallback in `getTasksForUser` (taken zonder tenantId-variable) | Workflow | Later |
 | BPMN-templates: volledige BPMN-DI toevoegen aan alle handgeschreven templates zodat bpmn-js ze netjes rendert (nu alleen `start` heeft bounds, bpmn-js auto-layout doet rest maar ziet er rommelig uit) | Workflow | Workflow Engine |
+| Canvas: properties-panel voor ALLE BPMN element types (niet alleen UserTask). Gateway-condities per uitgaande pijl (bv. `${goedgekeurd == true}`), StartEvent type, EndEvent type, SequenceFlow label/conditie | Workflow | Workflow Engine |
+| Canvas: dynamische assignee via expressies — routeer taak naar "manager van de locatie van deze client". Vereist Location-koppeling in datamodel + service task die FHIR query uitvoert + `flowable:assignee` als expressie | Workflow | Later |
+| Canvas: StartEvent trigger-type UI. Laat een FB kiezen tussen API-call / Formulier / Timer (cron) / Event. Elk vertaalt naar een specifiek BPMN start-event type (Message / None / Timer / Conditional). Toon de concrete trigger (bv. cURL) in het properties-panel | Workflow | Workflow Engine |
+| Form-opties configuratie per userTask als Laag 2 (H7.2): mogelijkheid om enum-waarden (ernstNiveau: laag/middel/hoog, relatie-types, etc.) via UI te configureren zonder code. Oplossing via DMN decision table of JSON-backed config in `flowable:formProperties`. Voorbeeld: MIC-melding ernstniveau. Hardcode nu in werkbak-page. | Configuratie | Workflow Engine |
+| Client ↔ Location koppeling in datamodel: FHIR Patient.managingOrganization → Location. UI om clienten aan een locatie te koppelen. Fundament voor location-gebaseerde workflow-routing | Platform | Module Diepte |
 
 ### P3 - Laag
 
