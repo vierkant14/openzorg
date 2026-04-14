@@ -39,6 +39,26 @@ const ROLES = [
   { value: "beheerder", label: "Beheerder" },
 ];
 
+const EMPTY_BPMN = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  xmlns:flowable="http://flowable.org/bpmn"
+                  id="Definitions_nieuw"
+                  targetNamespace="http://openzorg.nl/bpmn">
+  <bpmn:process id="nieuw-proces" name="Nieuw proces" isExecutable="true">
+    <bpmn:startEvent id="StartEvent_1" name="Start" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="nieuw-proces">
+      <bpmndi:BPMNShape id="StartEvent_1_di" bpmnElement="StartEvent_1">
+        <dc:Bounds x="180" y="160" width="36" height="36" />
+      </bpmndi:BPMNShape>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>`;
+
 /**
  * bpmn-auto-layout leest alleen <bpmn:incoming>/<bpmn:outgoing> children
  * voor connecties, niet de sequenceFlow sourceRef/targetRef. Veel
@@ -104,6 +124,8 @@ export default function BpmnCanvasPage() {
   const [deploying, setDeploying] = useState(false);
   const [testing, setTesting] = useState(false);
   const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
+  const [showImport, setShowImport] = useState(false);
+  const [importXmlText, setImportXmlText] = useState("");
 
   useEffect(() => {
     workflowFetch<TemplatesResponse>("/api/bpmn-templates").then(({ data }) => {
@@ -228,15 +250,100 @@ export default function BpmnCanvasPage() {
     setSelectedTask((prev) => (prev ? { ...prev, name: value } : prev));
   }
 
+  async function handleNewBlank() {
+    if (!editorRef.current) return;
+    setResult(null);
+    setSelectedTemplate("");
+    setProcessKey("nieuw-proces");
+    setProcessName("Nieuw proces");
+    await editorRef.current.loadXml(EMPTY_BPMN);
+  }
+
+  async function handleImportXml() {
+    if (!editorRef.current || !importXmlText.trim()) return;
+    setResult(null);
+    try {
+      let xml = ensureFlowRefs(importXmlText);
+      try {
+        const { layoutProcess } = await import("bpmn-auto-layout");
+        xml = await layoutProcess(xml);
+      } catch {
+        // Gebruikers-BPMN heeft mogelijk al eigen DI, dan skip layout
+      }
+      await editorRef.current.loadXml(xml);
+      setShowImport(false);
+      setImportXmlText("");
+      setResult({ ok: true, message: "BPMN XML geïmporteerd. Je kunt nu bewerken en deployen." });
+    } catch (err) {
+      setResult({
+        ok: false,
+        message: `Import mislukt: ${err instanceof Error ? err.message : "ongeldige BPMN XML"}`,
+      });
+    }
+  }
+
   return (
     <AppShell>
       <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-fg">Workflow canvas (BPMN)</h1>
-          <p className="mt-1 text-sm text-fg-muted">
-            Visuele editor voor BPMN 2.0-processen. Kies een template, pas 'm aan en deploy naar Flowable.
-          </p>
+        <div className="mb-6 flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-fg">Workflow canvas (BPMN)</h1>
+            <p className="mt-1 text-sm text-fg-muted">
+              Visuele editor voor BPMN 2.0-processen. Kies een template, begin leeg, of importeer XML.
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={handleNewBlank}
+              className="rounded-lg border border-default px-4 py-2 text-sm font-medium text-fg-muted hover:bg-sunken btn-press"
+            >
+              + Nieuw (leeg)
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowImport((v) => !v)}
+              className="rounded-lg border border-default px-4 py-2 text-sm font-medium text-fg-muted hover:bg-sunken btn-press"
+            >
+              ⬆ Importeer BPMN
+            </button>
+          </div>
         </div>
+
+        {showImport && (
+          <div className="mb-4 rounded-xl border border-brand-200 bg-brand-50/30 p-4 dark:border-brand-800 dark:bg-brand-950/10">
+            <div className="mb-2 flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-fg">BPMN XML importeren</h3>
+              <span className="text-xs text-fg-subtle">
+                Tip: laat Claude/GPT een BPMN 2.0 XML genereren en plak 'm hier
+              </span>
+            </div>
+            <textarea
+              value={importXmlText}
+              onChange={(e) => setImportXmlText(e.target.value)}
+              rows={8}
+              placeholder={`<?xml version="1.0" encoding="UTF-8"?>\n<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" ...>\n  <bpmn:process id="..." ...>\n    ...\n  </bpmn:process>\n</bpmn:definitions>`}
+              className="w-full rounded-lg border border-default bg-raised px-3 py-2 font-mono text-xs text-fg"
+            />
+            <div className="mt-2 flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleImportXml}
+                disabled={!importXmlText.trim()}
+                className="rounded-lg bg-brand-700 px-4 py-2 text-sm font-medium text-white hover:bg-brand-800 disabled:opacity-50"
+              >
+                Importeer in canvas
+              </button>
+              <button
+                type="button"
+                onClick={() => { setShowImport(false); setImportXmlText(""); }}
+                className="text-sm text-fg-muted hover:text-fg"
+              >
+                Annuleren
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Template-row + meta */}
         <div className="mb-4 grid gap-3 lg:grid-cols-[260px_1fr_1fr_auto]">

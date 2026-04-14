@@ -79,6 +79,8 @@ function getProcessLabel(key: string): string {
 
 /* ---------- Page ---------- */
 
+type StatusFilter = "all" | "unclaimed" | "claimed-mine" | "claimed-other";
+
 export default function WerkbakPage() {
   const [tasks, setTasks] = useState<WorkflowTask[]>([]);
   const [loading, setLoading] = useState(true);
@@ -86,6 +88,11 @@ export default function WerkbakPage() {
   const [expandedTask, setExpandedTask] = useState<string | null>(null);
   const [completing, setCompleting] = useState<string | null>(null);
   const [formVars, setFormVars] = useState<Record<string, string>>({});
+
+  // Filters
+  const [processFilter, setProcessFilter] = useState<string>("all");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [searchQuery, setSearchQuery] = useState<string>("");
 
   const role = typeof window !== "undefined" ? getUserRole() : "";
 
@@ -172,6 +179,35 @@ export default function WerkbakPage() {
 
   const inputCls = "w-full rounded-lg border border-default bg-raised px-3 py-2 text-sm text-fg focus:border-brand-400 focus:ring-2 focus:ring-brand-500/20 outline-none transition-[border-color,box-shadow] duration-200 ease-out";
 
+  // Unieke proces-keys uit de huidige taken-set, gesorteerd op label
+  const availableProcesses = Array.from(
+    new Set(tasks.map((t) => getProcessKey(t.processDefinitionId)).filter(Boolean)),
+  )
+    .map((key) => ({ key, label: getProcessLabel(key) }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+
+  // Filter de taken-lijst
+  const filteredTasks = tasks.filter((task) => {
+    if (processFilter !== "all" && getProcessKey(task.processDefinitionId) !== processFilter) return false;
+
+    if (statusFilter === "unclaimed" && task.assignee) return false;
+    if (statusFilter === "claimed-mine" && task.assignee !== role) return false;
+    if (statusFilter === "claimed-other" && (!task.assignee || task.assignee === role)) return false;
+
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      const hay = [
+        task.name,
+        task.description ?? "",
+        (task.variables?.find((v) => v.name === "clientNaam")?.value as string | undefined) ?? "",
+        task.assignee ?? "",
+      ].join(" ").toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+
+    return true;
+  });
+
   return (
     <AppShell>
       <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6 lg:px-8">
@@ -184,6 +220,68 @@ export default function WerkbakPage() {
             }
           </p>
         </div>
+
+        {/* Filter-bar */}
+        <div className="mb-5 grid gap-3 rounded-xl border border-default bg-raised p-4 sm:grid-cols-[1fr_200px_200px]">
+          <div>
+            <label className="mb-1 block text-xs font-medium text-fg-muted">Zoek (naam, cliënt, beschrijving)</label>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Typ om te filteren..."
+              className={inputCls}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-fg-muted">Proces-type</label>
+            <select
+              value={processFilter}
+              onChange={(e) => setProcessFilter(e.target.value)}
+              className={inputCls}
+            >
+              <option value="all">Alle processen</option>
+              {availableProcesses.map((p) => (
+                <option key={p.key} value={p.key}>{p.label}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-fg-muted">Status</label>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
+              className={inputCls}
+            >
+              <option value="all">Alles</option>
+              <option value="unclaimed">Niet geclaimd</option>
+              <option value="claimed-mine">Door mij geclaimd</option>
+              <option value="claimed-other">Door anderen geclaimd</option>
+            </select>
+          </div>
+        </div>
+
+        {!loading && tasks.length > 0 && (
+          <p className="mb-3 text-xs text-fg-subtle">
+            {filteredTasks.length} van {tasks.length} taken zichtbaar
+            {(processFilter !== "all" || statusFilter !== "all" || searchQuery.trim()) && (
+              <>
+                {" · "}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setProcessFilter("all");
+                    setStatusFilter("all");
+                    setSearchQuery("");
+                  }}
+                  className="text-brand-600 hover:underline"
+                >
+                  filters wissen
+                </button>
+              </>
+            )}
+          </p>
+        )}
 
         {loading && (
           <div className="flex items-center justify-center py-16">
@@ -207,9 +305,15 @@ export default function WerkbakPage() {
           </div>
         )}
 
-        {!loading && !error && tasks.length > 0 && (
+        {!loading && !error && tasks.length > 0 && filteredTasks.length === 0 && (
+          <div className="rounded-2xl border border-dashed border-default bg-raised p-8 text-center">
+            <p className="text-fg-muted">Geen taken die voldoen aan deze filters.</p>
+          </div>
+        )}
+
+        {!loading && !error && filteredTasks.length > 0 && (
           <div className="space-y-3 stagger">
-            {tasks.map((task) => {
+            {filteredTasks.map((task) => {
               const processKey = getProcessKey(task.processDefinitionId);
               const isExpanded = expandedTask === task.id;
               const taskVars = PROCESS_VARS[processKey] ?? [{ name: "opmerking", label: "Opmerking", type: "text" as const }];
