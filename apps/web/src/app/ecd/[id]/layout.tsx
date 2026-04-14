@@ -1,6 +1,6 @@
 "use client";
 
-import { useParams, usePathname } from "next/navigation";
+import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import AppShell from "../../../components/AppShell";
@@ -11,21 +11,14 @@ import { TabNav } from "./TabNav";
 
 export default function EcdDetailLayout({ children }: { children: React.ReactNode }) {
   const params = useParams<{ id: string }>();
-  const pathname = usePathname();
   const id = params?.id;
-
-  // Op de exacte base-route /ecd/[id] renderen we ALLEEN children, zodat de
-  // bestaande monolith (page.tsx) ongewijzigd zijn eigen AppShell + header
-  // toont. De nieuwe layout-shell is alleen actief op sub-routes
-  // /ecd/[id]/{tab-slug}.
-  const isSubRoute = !!id && pathname !== `/ecd/${id}`;
 
   const [client, setClient] = useState<ClientResource | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!id || !isSubRoute) return;
+    if (!id) return;
     let cancelled = false;
     setLoading(true);
     ecdFetch<ClientResource>(`/api/clients/${id}`).then(({ data, error: err }) => {
@@ -37,11 +30,7 @@ export default function EcdDetailLayout({ children }: { children: React.ReactNod
     return () => {
       cancelled = true;
     };
-  }, [id, isSubRoute]);
-
-  if (!isSubRoute) {
-    return <>{children}</>;
-  }
+  }, [id]);
 
   if (loading) {
     return (
