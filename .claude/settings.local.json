@@ -1,0 +1,37 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find /c/Users/kevin/Documents/ClaudeCode/openzorg/apps/web/src/app/ecd/[id] -type f)",
+      "Bash(git push:*)",
+      "Bash(pnpm --filter @openzorg/web typecheck)",
+      "Bash(pnpm typecheck:*)",
+      "Bash(pnpm lint:*)",
+      "Bash(pnpm --filter @openzorg/service-planning typecheck)",
+      "Bash(pnpm test:*)",
+      "mcp__679d0560-b794-48ed-9ccf-54bcd3e87f57__notion-update-page",
+      "mcp__679d0560-b794-48ed-9ccf-54bcd3e87f57__notion-create-pages",
+      "Bash(grep -r \"healthcheck\\\\|health_check\" /c/Users/kevin/Documents/ClaudeCode/openzorg/*.yml /c/Users/kevin/Documents/ClaudeCode/openzorg/infra/)",
+      "Bash(find /c/Users/kevin/Documents/ClaudeCode/openzorg -path \"*/node_modules\" -prune -o -type f \\\\\\( -name \"*.ts\" -o -name \"*.tsx\" \\\\\\) -exec wc -l {} \\\\;)",
+      "Bash(awk '$1 > 500 {print $2}')",
+      "Bash(find /c/Users/kevin/Documents/ClaudeCode/openzorg -path '*/node_modules' -prune -o -type f '\\(' -name '*.ts' -o -name '*.tsx' '\\)' -exec sh -c 'lines=$\\(wc -l < \"$1\"\\); if [ \"$lines\" -gt 500 ]; then echo \"$lines $1\"; fi' _ '{}' ';')",
+      "Bash(git add:*)",
+      "Bash(git commit -m ':*)",
+      "Bash(pnpm --filter @openzorg/web add -D @playwright/test)",
+      "Bash(where node.exe)",
+      "Bash(cmd.exe //c \"where node\")",
+      "Bash(export PATH=\"/c/Program Files/nodejs:$PATH\")",
+      "Bash(pnpm --filter @openzorg/web exec playwright install chromium)",
+      "Bash(pnpm --filter @openzorg/web list @playwright/test)",
+      "Bash(git commit:*)",
+      "Bash(E2E_BASE_URL=http://192.168.1.10:13000 pnpm --filter @openzorg/web test:e2e -- smoke.spec.ts)",
+      "Bash(E2E_BASE_URL=http://192.168.1.10:13000 pnpm --filter @openzorg/web test:e2e -- auth-helper.spec.ts)",
+      "Bash(xxd scripts/wait-for-stack.sh)",
+      "Bash(python:*)",
+      "Bash($GH pr:*)",
+      "Bash(git checkout:*)",
+      "Bash(pnpm install:*)",
+      "Bash(pnpm --filter @openzorg/web lint)",
+      "Bash(E2E_BASE_URL=http://192.168.1.10:13000 pnpm --filter @openzorg/web test:e2e)"
+    ]
+  }
+}
