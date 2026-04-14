@@ -62,6 +62,7 @@
 | Workflow: Flowable-auth uit env ipv hardcoded `admin:admin` | Compliance | Pilot Voorbereiding |
 | Werkbak: echte user-IDs ipv rol-als-candidateGroup (tenant-specifieke lookup) | Workflow | Later |
 | Werkbak: opruimen legacy-fallback in `getTasksForUser` (taken zonder tenantId-variable) | Workflow | Later |
+| BPMN-templates: volledige BPMN-DI toevoegen aan alle handgeschreven templates zodat bpmn-js ze netjes rendert (nu alleen `start` heeft bounds, bpmn-js auto-layout doet rest maar ziet er rommelig uit) | Workflow | Workflow Engine |
 
 ### P3 - Laag
 
