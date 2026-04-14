@@ -68,6 +68,7 @@
 | Canvas: StartEvent trigger-type UI. Laat een FB kiezen tussen API-call / Formulier / Timer (cron) / Event. Elk vertaalt naar een specifiek BPMN start-event type (Message / None / Timer / Conditional). Toon de concrete trigger (bv. cURL) in het properties-panel | Workflow | Workflow Engine |
 | Form-opties configuratie per userTask als Laag 2 (H7.2): mogelijkheid om enum-waarden (ernstNiveau: laag/middel/hoog, relatie-types, etc.) via UI te configureren zonder code. Oplossing via DMN decision table of JSON-backed config in `flowable:formProperties`. Voorbeeld: MIC-melding ernstniveau. Hardcode nu in werkbak-page. | Configuratie | Workflow Engine |
 | Client ↔ Location koppeling in datamodel: FHIR Patient.managingOrganization → Location. UI om clienten aan een locatie te koppelen. Fundament voor location-gebaseerde workflow-routing | Platform | Module Diepte |
+| Home-pagina / landing-scherm voor ingelogde gebruikers: vandaag toont /dashboard een technische fallback. Moet een welkomstscherm worden met taken-teller, snelle acties, signaleringen, activiteiten-feed — de visuele pit die een nieuwe gebruiker met "wow" onthaalt | Design/UX | Pilot Voorbereiding |
 
 ### P3 - Laag
 

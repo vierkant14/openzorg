@@ -26,23 +26,59 @@ const EMPTY_DIAGRAM = `<?xml version="1.0" encoding="UTF-8"?>
   </bpmndi:BPMNDiagram>
 </bpmn:definitions>`;
 
+export type ElementKind =
+  | "UserTask"
+  | "StartEvent"
+  | "EndEvent"
+  | "ExclusiveGateway"
+  | "ParallelGateway"
+  | "InclusiveGateway"
+  | "ServiceTask"
+  | "ScriptTask"
+  | "SequenceFlow"
+  | "Process"
+  | "Other";
+
+export interface SelectedElement {
+  id: string;
+  kind: ElementKind;
+  name?: string;
+  // UserTask-specifiek
+  candidateGroups?: string;
+  assignee?: string;
+  formKey?: string;
+  dueDate?: string;
+  // Gateway-specifiek
+  outgoingFlows?: Array<{
+    id: string;
+    name?: string;
+    targetId: string;
+    targetName?: string;
+    condition?: string;
+  }>;
+  // SequenceFlow-specifiek
+  condition?: string;
+  sourceId?: string;
+  targetId?: string;
+}
+
+// Backwards-compat alias
+export type SelectedTask = SelectedElement;
+
 export interface BpmnEditorHandle {
   loadXml: (xml: string) => Promise<void>;
   exportXml: () => Promise<string | null>;
   zoomFit: () => void;
   zoomIn: () => void;
   zoomOut: () => void;
-  getSelectedUserTask: () => SelectedTask | null;
+  getSelected: () => SelectedElement | null;
+  setElementName: (value: string) => void;
   setCandidateGroups: (value: string) => void;
   setAssignee: (value: string) => void;
+  setFormKey: (value: string) => void;
+  setDueDate: (value: string) => void;
   setTaskName: (value: string) => void;
-}
-
-export interface SelectedTask {
-  id: string;
-  name?: string;
-  candidateGroups?: string;
-  assignee?: string;
+  setFlowCondition: (flowId: string, expression: string) => void;
 }
 
 interface BpmnCanvas {
@@ -57,12 +93,25 @@ interface BpmnModeling {
   updateProperties: (element: BpmnElement, props: Record<string, unknown>) => void;
 }
 
+interface BpmnFactory {
+  create: (type: string, attrs?: Record<string, unknown>) => unknown;
+}
+
+interface BpmnElementRegistry {
+  get: (id: string) => BpmnElement | undefined;
+}
+
 interface BpmnBusinessObject {
   id?: string;
   name?: string;
   $type?: string;
   candidateGroups?: string;
   $attrs?: Record<string, unknown>;
+  outgoing?: BpmnBusinessObject[];
+  incoming?: BpmnBusinessObject[];
+  sourceRef?: BpmnBusinessObject;
+  targetRef?: BpmnBusinessObject;
+  conditionExpression?: { body?: string; $type?: string };
 }
 
 interface BpmnElement {
@@ -84,7 +133,64 @@ interface BpmnModeler {
 
 interface BpmnEditorProps {
   initialXml?: string;
-  onSelectionChange?: (task: SelectedTask | null) => void;
+  onSelectionChange?: (element: SelectedElement | null) => void;
+}
+
+/** Verkort een bpmn:* type naar de kind. */
+function typeToKind(type: string): ElementKind {
+  const short = type.replace(/^bpmn:/, "");
+  switch (short) {
+    case "UserTask":
+    case "StartEvent":
+    case "EndEvent":
+    case "ExclusiveGateway":
+    case "ParallelGateway":
+    case "InclusiveGateway":
+    case "ServiceTask":
+    case "ScriptTask":
+    case "SequenceFlow":
+    case "Process":
+      return short;
+    default:
+      return "Other";
+  }
+}
+
+/** Bouw een SelectedElement-snapshot van een bpmn-js element. */
+function describeElement(el: BpmnElement): SelectedElement {
+  const bo = el.businessObject;
+  const kind = typeToKind(el.type);
+  const result: SelectedElement = {
+    id: el.id,
+    kind,
+    name: bo.name,
+  };
+
+  if (kind === "UserTask") {
+    const attrs = bo.$attrs ?? {};
+    result.candidateGroups = bo.candidateGroups ?? (attrs["flowable:candidateGroups"] as string | undefined);
+    result.assignee = (bo as BpmnBusinessObject & { assignee?: string }).assignee ?? (attrs["flowable:assignee"] as string | undefined);
+    result.formKey = (bo as BpmnBusinessObject & { formKey?: string }).formKey ?? (attrs["flowable:formKey"] as string | undefined);
+    result.dueDate = (bo as BpmnBusinessObject & { dueDate?: string }).dueDate ?? (attrs["flowable:dueDate"] as string | undefined);
+  }
+
+  if (kind.endsWith("Gateway")) {
+    result.outgoingFlows = (bo.outgoing ?? []).map((flow) => ({
+      id: flow.id ?? "",
+      name: flow.name,
+      targetId: flow.targetRef?.id ?? "",
+      targetName: flow.targetRef?.name,
+      condition: flow.conditionExpression?.body,
+    }));
+  }
+
+  if (kind === "SequenceFlow") {
+    result.sourceId = bo.sourceRef?.id;
+    result.targetId = bo.targetRef?.id;
+    result.condition = bo.conditionExpression?.body;
+  }
+
+  return result;
 }
 
 export const BpmnEditor = forwardRef<BpmnEditorHandle, BpmnEditorProps>(function BpmnEditor(
@@ -98,82 +204,98 @@ export const BpmnEditor = forwardRef<BpmnEditorHandle, BpmnEditorProps>(function
 
   useImperativeHandle(
     ref,
-    () => ({
-      async loadXml(xml: string) {
+    () => {
+      const getSelected = (): { element: BpmnElement | null; snapshot: SelectedElement | null } => {
+        if (!modelerRef.current) return { element: null, snapshot: null };
+        const selection = modelerRef.current.get("selection") as BpmnSelection;
+        const picked = selection.get()[0];
+        if (!picked) return { element: null, snapshot: null };
+        return { element: picked, snapshot: describeElement(picked) };
+      };
+
+      const updateSelected = (props: Record<string, unknown>) => {
         if (!modelerRef.current) return;
-        try {
-          await modelerRef.current.importXML(xml);
+        const { element } = getSelected();
+        if (!element) return;
+        const modeling = modelerRef.current.get("modeling") as BpmnModeling;
+        modeling.updateProperties(element, props);
+      };
+
+      return {
+        async loadXml(xml: string) {
+          if (!modelerRef.current) return;
+          try {
+            await modelerRef.current.importXML(xml);
+            (modelerRef.current.get("canvas") as BpmnCanvas).zoom("fit-viewport");
+          } catch (err) {
+            setError(err instanceof Error ? err.message : "Kon BPMN niet laden");
+          }
+        },
+        async exportXml() {
+          if (!modelerRef.current) return null;
+          try {
+            const { xml } = await modelerRef.current.saveXML({ format: true });
+            return xml;
+          } catch (err) {
+            setError(err instanceof Error ? err.message : "Export mislukt");
+            return null;
+          }
+        },
+        zoomFit() {
+          if (!modelerRef.current) return;
           (modelerRef.current.get("canvas") as BpmnCanvas).zoom("fit-viewport");
-        } catch (err) {
-          setError(err instanceof Error ? err.message : "Kon BPMN niet laden");
-        }
-      },
-      async exportXml() {
-        if (!modelerRef.current) return null;
-        try {
-          const { xml } = await modelerRef.current.saveXML({ format: true });
-          return xml;
-        } catch (err) {
-          setError(err instanceof Error ? err.message : "Export mislukt");
-          return null;
-        }
-      },
-      zoomFit() {
-        if (!modelerRef.current) return;
-        (modelerRef.current.get("canvas") as BpmnCanvas).zoom("fit-viewport");
-      },
-      zoomIn() {
-        if (!modelerRef.current) return;
-        const canvas = modelerRef.current.get("canvas") as BpmnCanvas & { zoom: (level: number | string) => number };
-        const current = canvas.zoom("fit-viewport");
-        canvas.zoom(typeof current === "number" ? current * 1.2 : 1);
-      },
-      zoomOut() {
-        if (!modelerRef.current) return;
-        const canvas = modelerRef.current.get("canvas") as BpmnCanvas & { zoom: (level: number | string) => number };
-        const current = canvas.zoom("fit-viewport");
-        canvas.zoom(typeof current === "number" ? current * 0.8 : 1);
-      },
-      getSelectedUserTask() {
-        if (!modelerRef.current) return null;
-        const selection = modelerRef.current.get("selection") as BpmnSelection;
-        const picked = selection.get()[0];
-        if (!picked) return null;
-        if (!picked.type.endsWith("UserTask")) return null;
-        const bo = picked.businessObject;
-        return {
-          id: picked.id,
-          name: bo.name,
-          candidateGroups: bo.candidateGroups ?? (bo.$attrs?.["flowable:candidateGroups"] as string | undefined),
-          assignee: (bo as BpmnBusinessObject & { assignee?: string }).assignee ?? (bo.$attrs?.["flowable:assignee"] as string | undefined),
-        };
-      },
-      setCandidateGroups(value: string) {
-        if (!modelerRef.current) return;
-        const selection = modelerRef.current.get("selection") as BpmnSelection;
-        const picked = selection.get()[0];
-        if (!picked || !picked.type.endsWith("UserTask")) return;
-        const modeling = modelerRef.current.get("modeling") as BpmnModeling;
-        // Flowable-extensie: candidateGroups leeft als attribuut op de userTask
-        modeling.updateProperties(picked, { "flowable:candidateGroups": value });
-      },
-      setAssignee(value: string) {
-        if (!modelerRef.current) return;
-        const selection = modelerRef.current.get("selection") as BpmnSelection;
-        const picked = selection.get()[0];
-        if (!picked || !picked.type.endsWith("UserTask")) return;
-        const modeling = modelerRef.current.get("modeling") as BpmnModeling;
-        modeling.updateProperties(picked, { "flowable:assignee": value });
-      },
-      setTaskName(value: string) {
-        if (!modelerRef.current) return;
-        const selection = modelerRef.current.get("selection") as BpmnSelection;
-        const picked = selection.get()[0];
-        if (!picked || !picked.type.endsWith("UserTask")) return;
-        const modeling = modelerRef.current.get("modeling") as BpmnModeling;
-        modeling.updateProperties(picked, { name: value });
-      },
-    }),
+        },
+        zoomIn() {
+          if (!modelerRef.current) return;
+          const canvas = modelerRef.current.get("canvas") as BpmnCanvas & { zoom: (level: number | string) => number };
+          const current = canvas.zoom("fit-viewport");
+          canvas.zoom(typeof current === "number" ? current * 1.2 : 1);
+        },
+        zoomOut() {
+          if (!modelerRef.current) return;
+          const canvas = modelerRef.current.get("canvas") as BpmnCanvas & { zoom: (level: number | string) => number };
+          const current = canvas.zoom("fit-viewport");
+          canvas.zoom(typeof current === "number" ? current * 0.8 : 1);
+        },
+        getSelected() {
+          return getSelected().snapshot;
+        },
+        setElementName(value: string) {
+          updateSelected({ name: value });
+        },
+        setTaskName(value: string) {
+          updateSelected({ name: value });
+        },
+        setCandidateGroups(value: string) {
+          updateSelected({ "flowable:candidateGroups": value });
+        },
+        setAssignee(value: string) {
+          updateSelected({ "flowable:assignee": value });
+        },
+        setFormKey(value: string) {
+          updateSelected({ "flowable:formKey": value });
+        },
+        setDueDate(value: string) {
+          updateSelected({ "flowable:dueDate": value });
+        },
+        setFlowCondition(flowId: string, expression: string) {
+          if (!modelerRef.current) return;
+          const registry = modelerRef.current.get("elementRegistry") as BpmnElementRegistry;
+          const flow = registry.get(flowId);
+          if (!flow) return;
+          const modeling = modelerRef.current.get("modeling") as BpmnModeling;
+          if (!expression.trim()) {
+            modeling.updateProperties(flow, { conditionExpression: undefined });
+            return;
+          }
+          const bpmnFactory = modelerRef.current.get("bpmnFactory") as BpmnFactory;
+          const conditionExpression = bpmnFactory.create("bpmn:FormalExpression", {
+            body: expression,
+          });
+          modeling.updateProperties(flow, { conditionExpression });
+        },
+      };
+    },
     [],
   );
 
@@ -194,7 +316,7 @@ export const BpmnEditor = forwardRef<BpmnEditorHandle, BpmnEditorProps>(function
         await modeler.importXML(initialXml ?? EMPTY_DIAGRAM);
         (modeler.get("canvas") as BpmnCanvas).zoom("fit-viewport");
 
-        // Selectie-events doorgeven aan de parent voor het properties-panel
+        // Selectie-events doorgeven aan de parent
         const eventBus = modeler.get("eventBus") as BpmnEventBus;
         eventBus.on("selection.changed", (e) => {
           if (!onSelectionChange) return;
@@ -203,18 +325,19 @@ export const BpmnEditor = forwardRef<BpmnEditorHandle, BpmnEditorProps>(function
             onSelectionChange(null);
             return;
           }
-          if (!picked.type.endsWith("UserTask")) {
-            onSelectionChange(null);
-            return;
-          }
-          const bo = picked.businessObject;
-          onSelectionChange({
-            id: picked.id,
-            name: bo.name,
-            candidateGroups: bo.candidateGroups ?? (bo.$attrs?.["flowable:candidateGroups"] as string | undefined),
-            assignee: (bo as BpmnBusinessObject & { assignee?: string }).assignee ?? (bo.$attrs?.["flowable:assignee"] as string | undefined),
-          });
+          onSelectionChange(describeElement(picked));
         });
+
+        // Ook bij element.changed updates doorgeven zodat het panel
+        // live bijwerkt na modeling.updateProperties aanroepen elders
+        eventBus.on("element.changed", ((e: { element?: BpmnElement }) => {
+          if (!onSelectionChange || !modelerRef.current) return;
+          const selection = modelerRef.current.get("selection") as BpmnSelection;
+          const picked = selection.get()[0];
+          if (picked && e.element && picked.id === e.element.id) {
+            onSelectionChange(describeElement(picked));
+          }
+        }) as unknown as (e: { newSelection?: BpmnElement[] }) => void);
 
         setReady(true);
       } catch (err) {

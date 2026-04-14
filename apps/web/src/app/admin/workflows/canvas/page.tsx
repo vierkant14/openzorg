@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import AppShell from "../../../../components/AppShell";
 import { workflowFetch } from "../../../../lib/workflow-api";
 
-import type { BpmnEditorHandle, SelectedTask } from "./BpmnEditor";
+import type { BpmnEditorHandle, SelectedElement } from "./BpmnEditor";
 
 const BpmnEditor = dynamic(
   () => import("./BpmnEditor").then((m) => m.BpmnEditor),
@@ -118,7 +118,7 @@ export default function BpmnCanvasPage() {
   const editorRef = useRef<BpmnEditorHandle>(null);
   const [templates, setTemplates] = useState<Template[]>([]);
   const [selectedTemplate, setSelectedTemplate] = useState<string>("");
-  const [selectedTask, setSelectedTask] = useState<SelectedTask | null>(null);
+  const [selectedElement, setSelectedElement] = useState<SelectedElement | null>(null);
   const [processKey, setProcessKey] = useState("nieuw-proces");
   const [processName, setProcessName] = useState("Nieuw proces");
   const [deploying, setDeploying] = useState(false);
@@ -237,17 +237,40 @@ export default function BpmnCanvasPage() {
 
   function applyCandidateGroup(value: string) {
     editorRef.current?.setCandidateGroups(value);
-    setSelectedTask((prev) => (prev ? { ...prev, candidateGroups: value } : prev));
+    setSelectedElement((prev) => (prev ? { ...prev, candidateGroups: value } : prev));
   }
 
   function applyAssignee(value: string) {
     editorRef.current?.setAssignee(value);
-    setSelectedTask((prev) => (prev ? { ...prev, assignee: value } : prev));
+    setSelectedElement((prev) => (prev ? { ...prev, assignee: value } : prev));
   }
 
-  function applyTaskName(value: string) {
-    editorRef.current?.setTaskName(value);
-    setSelectedTask((prev) => (prev ? { ...prev, name: value } : prev));
+  function applyFormKey(value: string) {
+    editorRef.current?.setFormKey(value);
+    setSelectedElement((prev) => (prev ? { ...prev, formKey: value } : prev));
+  }
+
+  function applyDueDate(value: string) {
+    editorRef.current?.setDueDate(value);
+    setSelectedElement((prev) => (prev ? { ...prev, dueDate: value } : prev));
+  }
+
+  function applyElementName(value: string) {
+    editorRef.current?.setElementName(value);
+    setSelectedElement((prev) => (prev ? { ...prev, name: value } : prev));
+  }
+
+  function applyFlowCondition(flowId: string, value: string) {
+    editorRef.current?.setFlowCondition(flowId, value);
+    setSelectedElement((prev) => {
+      if (!prev?.outgoingFlows) return prev;
+      return {
+        ...prev,
+        outgoingFlows: prev.outgoingFlows.map((f) =>
+          f.id === flowId ? { ...f, condition: value } : f,
+        ),
+      };
+    });
   }
 
   async function handleNewBlank() {
@@ -409,62 +432,190 @@ export default function BpmnCanvasPage() {
           <div className="h-[600px]">
             <BpmnEditor
               ref={editorRef}
-              onSelectionChange={setSelectedTask}
+              onSelectionChange={setSelectedElement}
             />
           </div>
           <aside className="rounded-xl border border-default bg-raised p-4 shadow-sm">
             <h2 className="mb-3 text-sm font-semibold text-fg">Eigenschappen</h2>
-            {!selectedTask ? (
+            {!selectedElement ? (
               <p className="text-xs text-fg-subtle">
-                Klik een <strong>User Task</strong> aan op het canvas om 'm aan een rol toe te wijzen.
+                Klik een element aan op het canvas (taak, gateway, start, einde) om de eigenschappen te zien en te bewerken.
               </p>
             ) : (
               <div className="space-y-3">
                 <div>
-                  <div className="text-xs font-medium text-fg-muted">ID</div>
-                  <div className="text-sm text-fg font-mono">{selectedTask.id}</div>
+                  <div className="text-xs font-medium text-fg-muted">Element</div>
+                  <div className="text-sm text-fg">
+                    <span className="mr-2 rounded bg-brand-50 px-2 py-0.5 text-xs font-medium text-brand-700 dark:bg-brand-950/20 dark:text-brand-300">
+                      {selectedElement.kind}
+                    </span>
+                    <span className="font-mono text-xs text-fg-subtle">{selectedElement.id}</span>
+                  </div>
                 </div>
-                <div>
-                  <label className="mb-1 block text-xs font-medium text-fg-muted">Taaknaam</label>
-                  <input
-                    type="text"
-                    value={selectedTask.name ?? ""}
-                    onChange={(e) => applyTaskName(e.target.value)}
-                    placeholder="Bijv. Aanmelding beoordelen"
-                    className="w-full rounded-lg border border-default bg-raised px-3 py-2 text-sm text-fg"
-                  />
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs font-medium text-fg-muted">Toegewezen rol (candidateGroups)</label>
-                  <select
-                    value={selectedTask.candidateGroups ?? ""}
-                    onChange={(e) => applyCandidateGroup(e.target.value)}
-                    className="w-full rounded-lg border border-default bg-raised px-3 py-2 text-sm text-fg"
-                  >
-                    {ROLES.map((r) => (
-                      <option key={r.value} value={r.value}>
-                        {r.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs font-medium text-fg-muted">
-                    Specifieke persoon (assignee)
-                  </label>
-                  <input
-                    type="text"
-                    value={selectedTask.assignee ?? ""}
-                    onChange={(e) => applyAssignee(e.target.value)}
-                    placeholder="bv. jan@horizon.nl"
-                    className="w-full rounded-lg border border-default bg-raised px-3 py-2 text-sm text-fg"
-                  />
-                  <p className="mt-1 text-xs text-fg-subtle">
-                    {selectedTask.assignee
-                      ? "Taak wordt direct aan deze persoon toegewezen (overruled de rol)."
-                      : "Leeg laten = iedereen met de geselecteerde rol kan de taak claimen. Vul in om deze taak aan één persoon te geven."}
-                  </p>
-                </div>
+
+                {/* Naam — beschikbaar voor vrijwel elk element */}
+                {(selectedElement.kind === "UserTask" ||
+                  selectedElement.kind === "StartEvent" ||
+                  selectedElement.kind === "EndEvent" ||
+                  selectedElement.kind === "ExclusiveGateway" ||
+                  selectedElement.kind === "ParallelGateway" ||
+                  selectedElement.kind === "InclusiveGateway" ||
+                  selectedElement.kind === "ServiceTask" ||
+                  selectedElement.kind === "ScriptTask" ||
+                  selectedElement.kind === "SequenceFlow") && (
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-fg-muted">Naam / label</label>
+                    <input
+                      type="text"
+                      value={selectedElement.name ?? ""}
+                      onChange={(e) => applyElementName(e.target.value)}
+                      placeholder={
+                        selectedElement.kind === "StartEvent"
+                          ? "Bijv. Aanmelding ontvangen"
+                          : selectedElement.kind === "EndEvent"
+                            ? "Bijv. Cliënt in zorg"
+                            : selectedElement.kind.endsWith("Gateway")
+                              ? "Bijv. Goedgekeurd?"
+                              : "Bijv. Aanmelding beoordelen"
+                      }
+                      className="w-full rounded-lg border border-default bg-raised px-3 py-2 text-sm text-fg"
+                    />
+                  </div>
+                )}
+
+                {/* UserTask-specifiek */}
+                {selectedElement.kind === "UserTask" && (
+                  <>
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-fg-muted">Toegewezen rol (candidateGroups)</label>
+                      <select
+                        value={selectedElement.candidateGroups ?? ""}
+                        onChange={(e) => applyCandidateGroup(e.target.value)}
+                        className="w-full rounded-lg border border-default bg-raised px-3 py-2 text-sm text-fg"
+                      >
+                        {ROLES.map((r) => (
+                          <option key={r.value} value={r.value}>
+                            {r.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-fg-muted">
+                        Specifieke persoon (assignee)
+                      </label>
+                      <input
+                        type="text"
+                        value={selectedElement.assignee ?? ""}
+                        onChange={(e) => applyAssignee(e.target.value)}
+                        placeholder="bv. jan@horizon.nl"
+                        className="w-full rounded-lg border border-default bg-raised px-3 py-2 text-sm text-fg"
+                      />
+                      <p className="mt-1 text-xs text-fg-subtle">
+                        {selectedElement.assignee
+                          ? "Taak wordt direct aan deze persoon toegewezen (overruled de rol)."
+                          : "Leeg = iedereen met de rol kan claimen. Vul in om aan één persoon te geven."}
+                      </p>
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-fg-muted">Formulier (formKey, optioneel)</label>
+                      <input
+                        type="text"
+                        value={selectedElement.formKey ?? ""}
+                        onChange={(e) => applyFormKey(e.target.value)}
+                        placeholder="bv. intake-formulier"
+                        className="w-full rounded-lg border border-default bg-raised px-3 py-2 text-sm text-fg"
+                      />
+                      <p className="mt-1 text-xs text-fg-subtle">
+                        Verwijst naar een JSONForms-template; voorlopig informatief.
+                      </p>
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-fg-muted">Deadline / SLA (dueDate)</label>
+                      <input
+                        type="text"
+                        value={selectedElement.dueDate ?? ""}
+                        onChange={(e) => applyDueDate(e.target.value)}
+                        placeholder="bv. PT5D (5 dagen)"
+                        className="w-full rounded-lg border border-default bg-raised px-3 py-2 text-sm text-fg"
+                      />
+                      <p className="mt-1 text-xs text-fg-subtle">
+                        ISO 8601 duration (PT1H, P2D, PT5D). Flowable rekent vanaf taak-creatie.
+                      </p>
+                    </div>
+                  </>
+                )}
+
+                {/* Gateway-specifiek: bewerk condities per uitgaande pijl */}
+                {(selectedElement.kind === "ExclusiveGateway" ||
+                  selectedElement.kind === "InclusiveGateway") && (
+                  <div>
+                    <div className="mb-1 text-xs font-medium text-fg-muted">
+                      Uitgaande paden ({selectedElement.outgoingFlows?.length ?? 0})
+                    </div>
+                    {!selectedElement.outgoingFlows?.length ? (
+                      <p className="text-xs text-fg-subtle">
+                        Teken een pijl vanaf deze gateway naar het volgende element om paden toe te voegen.
+                      </p>
+                    ) : (
+                      <div className="space-y-2">
+                        {selectedElement.outgoingFlows.map((flow) => (
+                          <div key={flow.id} className="rounded-lg border border-default bg-page p-2">
+                            <div className="mb-1 flex items-center justify-between text-xs">
+                              <span className="font-medium text-fg">
+                                → {flow.targetName ?? flow.targetId ?? "(onbekend)"}
+                              </span>
+                              <span className="font-mono text-fg-subtle">{flow.id}</span>
+                            </div>
+                            <input
+                              type="text"
+                              value={flow.condition ?? ""}
+                              onChange={(e) => applyFlowCondition(flow.id, e.target.value)}
+                              placeholder="${goedgekeurd == true}"
+                              className="w-full rounded-md border border-default bg-raised px-2 py-1 font-mono text-xs text-fg"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <p className="mt-2 text-xs text-fg-subtle">
+                      Flowable-expressie, bv. <code className="text-xs">$&#123;goedgekeurd == true&#125;</code>. Leeg = default pad.
+                    </p>
+                  </div>
+                )}
+
+                {/* StartEvent-specifiek: toon de trigger info */}
+                {selectedElement.kind === "StartEvent" && (
+                  <div className="rounded-lg border border-default bg-page p-3">
+                    <div className="mb-1 text-xs font-medium text-fg-muted">Trigger</div>
+                    <p className="text-xs text-fg-muted">
+                      Dit proces start via een API-call:
+                    </p>
+                    <code className="mt-1 block rounded bg-raised px-2 py-1 text-xs text-fg">
+                      POST /api/processen/{processKey}/start
+                    </code>
+                    <p className="mt-2 text-xs text-fg-subtle">
+                      Meer trigger-types (formulier, timer, event) komen in een volgende versie.
+                    </p>
+                  </div>
+                )}
+
+                {/* SequenceFlow-specifiek */}
+                {selectedElement.kind === "SequenceFlow" && (
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-fg-muted">Conditie</label>
+                    <input
+                      type="text"
+                      value={selectedElement.condition ?? ""}
+                      onChange={(e) => applyFlowCondition(selectedElement.id, e.target.value)}
+                      placeholder="${goedgekeurd == true}"
+                      className="w-full rounded-lg border border-default bg-raised px-3 py-2 font-mono text-xs text-fg"
+                    />
+                    <p className="mt-1 text-xs text-fg-subtle">
+                      Van {selectedElement.sourceId ?? "?"} → {selectedElement.targetId ?? "?"}
+                    </p>
+                  </div>
+                )}
               </div>
             )}
           </aside>
