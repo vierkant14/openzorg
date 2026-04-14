@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 import AppShell from "../../../../components/AppShell";
+import { FeatureGate } from "../../../../components/FeatureGate";
 import { workflowFetch } from "../../../../lib/workflow-api";
 
 import type { BpmnEditorHandle, SelectedElement } from "./BpmnEditor";
@@ -114,6 +115,14 @@ function ensureFlowRefs(xml: string): string {
 }
 
 export default function BpmnCanvasPage() {
+  return (
+    <FeatureGate flag="bpmn-canvas">
+      <BpmnCanvasInner />
+    </FeatureGate>
+  );
+}
+
+function BpmnCanvasInner() {
   const router = useRouter();
   const editorRef = useRef<BpmnEditorHandle>(null);
   const [templates, setTemplates] = useState<Template[]>([]);

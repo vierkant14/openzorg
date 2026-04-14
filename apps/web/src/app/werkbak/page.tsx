@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import AppShell from "../../components/AppShell";
+import { FeatureGate } from "../../components/FeatureGate";
 import { getUserRole } from "../../lib/api";
 import { workflowFetch } from "../../lib/workflow-api";
 
@@ -108,6 +109,14 @@ function getProcessLabel(key: string): string {
 type StatusFilter = "all" | "unclaimed" | "claimed-mine" | "claimed-other";
 
 export default function WerkbakPage() {
+  return (
+    <FeatureGate flag="workflow-engine">
+      <WerkbakInner />
+    </FeatureGate>
+  );
+}
+
+function WerkbakInner() {
   const [tasks, setTasks] = useState<WorkflowTask[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
