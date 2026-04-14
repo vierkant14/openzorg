@@ -57,6 +57,11 @@
 |------|--------|--------|
 | Frontend tests: E2E voor kernmodules | Platform | Pilot Voorbereiding |
 | Revalidatie: GRZ behandelplan (apart van zorgplan) | Zorgplan | Later |
+| Workflow: NEN 7513 audit-log voor taak-transities (start, claim, complete) | Compliance | Workflow Engine |
+| Workflow: `zorgplan-evaluatie` BPMN-template deployen naar Flowable | Workflow | Workflow Engine |
+| Workflow: Flowable-auth uit env ipv hardcoded `admin:admin` | Compliance | Pilot Voorbereiding |
+| Werkbak: echte user-IDs ipv rol-als-candidateGroup (tenant-specifieke lookup) | Workflow | Later |
+| Werkbak: opruimen legacy-fallback in `getTasksForUser` (taken zonder tenantId-variable) | Workflow | Later |
 
 ### P3 - Laag
 
