@@ -55,6 +55,18 @@ app.use("*", cors());
 // Health check does not require tenant context
 app.route("/health", healthRoutes);
 
+// Publieke tenant-features endpoint — MOET voor de /api/* middleware chain
+// staan zodat hij niet door tenant/rbac/audit/medplum-auth loopt. Alleen
+// X-Tenant-ID vereist; geen Bearer token.
+app.get("/api/tenant-features", async (c) => {
+  const tenantId = c.req.header("X-Tenant-ID");
+  if (!tenantId) {
+    return c.json({ error: "X-Tenant-ID header ontbreekt" }, 400);
+  }
+  const data = await loadTenantFeatures(tenantId);
+  return c.json(data);
+});
+
 // All other routes require tenant context
 app.use("/api/*", tenantMiddleware);
 app.use("/api/*", rbacMiddleware);
@@ -188,14 +200,3 @@ app.use("/api/master/*", async (c, next): Promise<Response | void> => {
 });
 app.route("/api/master/tenants", tenantRoutes);
 app.route("/api/master/admins", masterAdminRoutes);
-
-// Publieke (tenant-scoped) endpoint voor feature-flags + branding.
-// Wordt door de web-app aangeroepen na login. Vereist X-Tenant-ID header.
-app.get("/api/tenant-features", async (c) => {
-  const tenantId = c.req.header("X-Tenant-ID");
-  if (!tenantId) {
-    return c.json({ error: "X-Tenant-ID header ontbreekt" }, 400);
-  }
-  const data = await loadTenantFeatures(tenantId);
-  return c.json(data);
-});
