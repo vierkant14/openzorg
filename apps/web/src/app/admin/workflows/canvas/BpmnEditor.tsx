@@ -34,6 +34,7 @@ export interface BpmnEditorHandle {
   zoomOut: () => void;
   getSelectedUserTask: () => SelectedTask | null;
   setCandidateGroups: (value: string) => void;
+  setTaskName: (value: string) => void;
 }
 
 export interface SelectedTask {
@@ -152,6 +153,14 @@ export const BpmnEditor = forwardRef<BpmnEditorHandle, BpmnEditorProps>(function
         const modeling = modelerRef.current.get("modeling") as BpmnModeling;
         // Flowable-extensie: candidateGroups leeft als attribuut op de userTask
         modeling.updateProperties(picked, { "flowable:candidateGroups": value });
+      },
+      setTaskName(value: string) {
+        if (!modelerRef.current) return;
+        const selection = modelerRef.current.get("selection") as BpmnSelection;
+        const picked = selection.get()[0];
+        if (!picked || !picked.type.endsWith("UserTask")) return;
+        const modeling = modelerRef.current.get("modeling") as BpmnModeling;
+        modeling.updateProperties(picked, { name: value });
       },
     }),
     [],

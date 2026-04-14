@@ -22,6 +22,7 @@
     "@openzorg/shared-config": "workspace:*",
     "@openzorg/shared-domain": "workspace:*",
     "@openzorg/shared-ui": "workspace:*",
+    "bpmn-auto-layout": "^1.3.0",
     "bpmn-js": "^18.14.0",
     "next": "^15.1.0",
     "react": "^19.0.0",

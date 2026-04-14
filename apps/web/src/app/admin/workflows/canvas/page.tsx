@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 import AppShell from "../../../../components/AppShell";
@@ -39,6 +40,7 @@ const ROLES = [
 ];
 
 export default function BpmnCanvasPage() {
+  const router = useRouter();
   const editorRef = useRef<BpmnEditorHandle>(null);
   const [templates, setTemplates] = useState<Template[]>([]);
   const [selectedTemplate, setSelectedTemplate] = useState<string>("");
@@ -46,6 +48,7 @@ export default function BpmnCanvasPage() {
   const [processKey, setProcessKey] = useState("nieuw-proces");
   const [processName, setProcessName] = useState("Nieuw proces");
   const [deploying, setDeploying] = useState(false);
+  const [testing, setTesting] = useState(false);
   const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
 
   useEffect(() => {
@@ -67,7 +70,17 @@ export default function BpmnCanvasPage() {
         setResult({ ok: false, message: `Template ophalen mislukt (${res.status})` });
         return;
       }
-      const xml = await res.text();
+      let xml = await res.text();
+
+      // Templates uit bpmn-templates.ts hebben alleen de start-shape in DI;
+      // laat bpmn-auto-layout de rest uittekenen voordat we importeren.
+      try {
+        const { layoutProcess } = await import("bpmn-auto-layout");
+        xml = await layoutProcess(xml);
+      } catch (layoutErr) {
+        console.warn("bpmn-auto-layout faalde, importeer ongeauto-layout'de XML", layoutErr);
+      }
+
       await editorRef.current.loadXml(xml);
       const found = templates.find((t) => t.id === templateId);
       if (found) {
@@ -107,9 +120,52 @@ export default function BpmnCanvasPage() {
     }
   }
 
+  /**
+   * Killer-demo-knop (H8.6): deploy huidige XML → start meteen een
+   * instance → spring naar werkbak zodat je de taak ziet verschijnen.
+   */
+  async function handleTest() {
+    if (!editorRef.current) return;
+    setTesting(true);
+    setResult(null);
+    const xml = await editorRef.current.exportXml();
+    if (!xml) {
+      setTesting(false);
+      setResult({ ok: false, message: "Kon BPMN XML niet exporteren." });
+      return;
+    }
+    // Stap 1: deploy
+    const deployRes = await workflowFetch("/api/processen/deploy", {
+      method: "POST",
+      body: JSON.stringify({ xml, name: processKey }),
+    });
+    if (deployRes.error) {
+      setTesting(false);
+      setResult({ ok: false, message: `Deploy mislukt: ${deployRes.error}` });
+      return;
+    }
+    // Stap 2: start instance met test-clientnaam
+    const startRes = await workflowFetch(`/api/processen/${encodeURIComponent(processKey)}/start`, {
+      method: "POST",
+      body: JSON.stringify({ variables: { clientNaam: "Test cliënt (canvas)" } }),
+    });
+    setTesting(false);
+    if (startRes.error) {
+      setResult({ ok: false, message: `Proces starten mislukt: ${startRes.error}` });
+      return;
+    }
+    // Stap 3: spring naar werkbak
+    router.push("/werkbak");
+  }
+
   function applyCandidateGroup(value: string) {
     editorRef.current?.setCandidateGroups(value);
     setSelectedTask((prev) => (prev ? { ...prev, candidateGroups: value } : prev));
+  }
+
+  function applyTaskName(value: string) {
+    editorRef.current?.setTaskName(value);
+    setSelectedTask((prev) => (prev ? { ...prev, name: value } : prev));
   }
 
   return (
@@ -160,14 +216,23 @@ export default function BpmnCanvasPage() {
               className="w-full rounded-lg border border-default bg-raised px-3 py-2 text-sm text-fg"
             />
           </div>
-          <div className="flex items-end">
+          <div className="flex items-end gap-2">
             <button
               type="button"
               onClick={handleDeploy}
-              disabled={deploying}
+              disabled={deploying || testing}
+              className="h-[38px] rounded-lg border border-default px-4 text-sm font-medium text-fg-muted hover:bg-sunken disabled:opacity-50 btn-press"
+            >
+              {deploying ? "Deployen..." : "Deploy"}
+            </button>
+            <button
+              type="button"
+              onClick={handleTest}
+              disabled={testing || deploying}
+              title="Deploy, start een test-instance en spring naar de werkbak"
               className="h-[38px] rounded-lg bg-brand-700 px-5 text-sm font-medium text-white shadow-sm hover:bg-brand-800 disabled:opacity-50 btn-press"
             >
-              {deploying ? "Deployen..." : "Deploy naar Flowable"}
+              {testing ? "Testen..." : "▶ Test dit proces"}
             </button>
           </div>
         </div>
@@ -193,8 +258,14 @@ export default function BpmnCanvasPage() {
                   <div className="text-sm text-fg font-mono">{selectedTask.id}</div>
                 </div>
                 <div>
-                  <div className="text-xs font-medium text-fg-muted">Naam</div>
-                  <div className="text-sm text-fg">{selectedTask.name ?? <span className="text-fg-subtle">—</span>}</div>
+                  <label className="mb-1 block text-xs font-medium text-fg-muted">Taaknaam</label>
+                  <input
+                    type="text"
+                    value={selectedTask.name ?? ""}
+                    onChange={(e) => applyTaskName(e.target.value)}
+                    placeholder="Bijv. Aanmelding beoordelen"
+                    className="w-full rounded-lg border border-default bg-raised px-3 py-2 text-sm text-fg"
+                  />
                 </div>
                 <div>
                   <label className="mb-1 block text-xs font-medium text-fg-muted">Toegewezen rol (candidateGroups)</label>
