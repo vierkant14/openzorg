@@ -75,6 +75,16 @@ const MODULES = [
   },
 ] as const;
 
+const SIGNALERING_ICONS: Record<string, string> = {
+  valrisico: "🚨",
+  allergie: "⚠️",
+  mrsa: "🦠",
+  infectie: "🦠",
+  agressie: "⚡",
+  dieet: "🍽️",
+  anders: "📌",
+};
+
 const QUICK_ACTIONS = [
   { label: "Nieuwe client", href: "/ecd/nieuw" },
   { label: "Nieuwe afspraak", href: "/planning/nieuw" },
@@ -92,6 +102,14 @@ interface PreviewTask {
   assignee?: string;
 }
 
+interface Signalering {
+  id: string;
+  code?: string;
+  categorie?: string;
+  ernst?: string;
+  clientRef?: string;
+}
+
 export default function DashboardPage() {
   const workflowEnabled = useFeatureFlag("workflow-engine");
   const facturatieEnabled = useFeatureFlag("facturatie-module");
@@ -106,6 +124,7 @@ export default function DashboardPage() {
     { label: "Wachtlijst", value: "—" },
   ]);
   const [previewTasks, setPreviewTasks] = useState<PreviewTask[]>([]);
+  const [signaleringen, setSignaleringen] = useState<Signalering[]>([]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -187,6 +206,31 @@ export default function DashboardPage() {
     if (workflowEnabled) {
       loadPreviewTasks();
     }
+
+    // Signaleringen overzicht — top 5 actieve flags
+    async function loadSignaleringen() {
+      const { data } = await ecdFetch<{
+        entry?: Array<{
+          resource: {
+            id?: string;
+            code?: { text?: string };
+            category?: Array<{ coding?: Array<{ code?: string; display?: string }> }>;
+            subject?: { reference?: string };
+            extension?: Array<{ url?: string; valueString?: string }>;
+          };
+        }>;
+      }>("/api/signaleringen/overzicht?limit=5");
+      if (!data?.entry) return;
+      const items = data.entry.map((e) => ({
+        id: e.resource.id ?? "",
+        code: e.resource.code?.text,
+        categorie: e.resource.category?.[0]?.coding?.[0]?.code,
+        ernst: e.resource.extension?.find((x) => x.url?.includes("signalering-ernst"))?.valueString,
+        clientRef: e.resource.subject?.reference,
+      }));
+      setSignaleringen(items);
+    }
+    loadSignaleringen();
   }, [workflowEnabled]);
 
   const greeting = getGreeting();
@@ -282,6 +326,49 @@ export default function DashboardPage() {
                 </a>
               ))}
             </div>
+
+            {/* Signaleringen */}
+            {signaleringen.length > 0 && (
+              <>
+                <h2 className="text-heading text-fg mt-8 mb-4 flex items-center justify-between">
+                  Signaleringen
+                  <a href="/ecd" className="text-body-sm font-medium text-brand-600 hover:text-brand-700">
+                    Bekijk alles →
+                  </a>
+                </h2>
+                <div className="bg-raised rounded-2xl border border-subtle p-2 space-y-1">
+                  {signaleringen.map((sig) => {
+                    const isHigh = sig.ernst === "hoog";
+                    const clientId = sig.clientRef?.replace("Patient/", "");
+                    const icon = SIGNALERING_ICONS[sig.categorie ?? "anders"] ?? "📌";
+                    return (
+                      <a
+                        key={sig.id}
+                        href={clientId ? `/ecd/${clientId}` : "/ecd"}
+                        className="block rounded-xl px-4 py-3 hover:bg-sunken transition-colors"
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className="text-lg leading-none">{icon}</span>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-body-sm font-medium text-fg truncate">
+                              {sig.code ?? "Signalering"}
+                            </p>
+                            <p className="text-caption text-fg-subtle capitalize">
+                              {sig.categorie ?? "algemeen"}
+                            </p>
+                          </div>
+                          {isHigh && (
+                            <span className="inline-flex items-center rounded bg-coral-50 dark:bg-coral-950/20 px-2 py-0.5 text-caption font-semibold text-coral-700 dark:text-coral-300">
+                              Hoog
+                            </span>
+                          )}
+                        </div>
+                      </a>
+                    );
+                  })}
+                </div>
+              </>
+            )}
 
             {/* Mijn taken preview */}
             {workflowEnabled && previewTasks.length > 0 && (
