@@ -282,6 +282,11 @@ function BpmnCanvasInner() {
     });
   }
 
+  function applyStartTrigger(type: "api" | "form" | "timer" | "event", config: string) {
+    editorRef.current?.setStartTrigger(type, config);
+    setSelectedElement((prev) => (prev ? { ...prev, triggerType: type, triggerConfig: config } : prev));
+  }
+
   async function handleNewBlank() {
     if (!editorRef.current) return;
     setResult(null);
@@ -593,19 +598,87 @@ function BpmnCanvasInner() {
                   </div>
                 )}
 
-                {/* StartEvent-specifiek: toon de trigger info */}
+                {/* StartEvent-specifiek: trigger-type kiezer + config */}
                 {selectedElement.kind === "StartEvent" && (
-                  <div className="rounded-lg border border-default bg-page p-3">
-                    <div className="mb-1 text-xs font-medium text-fg-muted">Trigger</div>
-                    <p className="text-xs text-fg-muted">
-                      Dit proces start via een API-call:
-                    </p>
-                    <code className="mt-1 block rounded bg-raised px-2 py-1 text-xs text-fg">
-                      POST /api/processen/{processKey}/start
-                    </code>
-                    <p className="mt-2 text-xs text-fg-subtle">
-                      Meer trigger-types (formulier, timer, event) komen in een volgende versie.
-                    </p>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-fg-muted">Trigger-type</label>
+                      <select
+                        value={selectedElement.triggerType ?? "api"}
+                        onChange={(e) => applyStartTrigger(
+                          e.target.value as "api" | "form" | "timer" | "event",
+                          selectedElement.triggerConfig ?? "",
+                        )}
+                        className="w-full rounded-lg border border-default bg-raised px-3 py-2 text-sm text-fg"
+                      >
+                        <option value="api">🔌 API-call (extern systeem)</option>
+                        <option value="form">📝 Formulier (gebruiker klikt "+ nieuw")</option>
+                        <option value="timer">⏰ Timer (cron schedule)</option>
+                        <option value="event">⚡ Event (FHIR signal)</option>
+                      </select>
+                    </div>
+
+                    {selectedElement.triggerType === "api" && (
+                      <div className="rounded-lg border border-default bg-page p-3">
+                        <p className="text-xs text-fg-muted mb-1">Start dit proces met een POST-request:</p>
+                        <code className="block rounded bg-raised px-2 py-1 text-xs text-fg break-all">
+                          POST /api/processen/{processKey}/start
+                        </code>
+                        <p className="mt-2 text-xs text-fg-subtle">
+                          Body: {`{"variables": {"clientId": "...", "clientNaam": "..."}}`}
+                        </p>
+                      </div>
+                    )}
+
+                    {selectedElement.triggerType === "form" && (
+                      <div>
+                        <label className="mb-1 block text-xs font-medium text-fg-muted">Formulier-key</label>
+                        <input
+                          type="text"
+                          value={selectedElement.triggerConfig ?? ""}
+                          onChange={(e) => applyStartTrigger("form", e.target.value)}
+                          placeholder="bv. nieuwe-aanmelding"
+                          className="w-full rounded-lg border border-default bg-raised px-3 py-2 text-sm text-fg"
+                        />
+                        <p className="mt-1 text-xs text-fg-subtle">
+                          Een gebruiker met de juiste rol ziet in /werkbak een "+ Nieuw proces"-knop die dit formulier opent.
+                        </p>
+                      </div>
+                    )}
+
+                    {selectedElement.triggerType === "timer" && (
+                      <div>
+                        <label className="mb-1 block text-xs font-medium text-fg-muted">Cron-schedule</label>
+                        <input
+                          type="text"
+                          value={selectedElement.triggerConfig ?? ""}
+                          onChange={(e) => applyStartTrigger("timer", e.target.value)}
+                          placeholder="0 0 9 * * MON (elke maandag 9:00)"
+                          className="w-full rounded-lg border border-default bg-raised px-3 py-2 font-mono text-xs text-fg"
+                        />
+                        <p className="mt-1 text-xs text-fg-subtle">
+                          Cron-expressie in Flowable-format (seconden minuten uren dag-maand maand dag-week).
+                          Voorbeeld: <code>0 0 8 1 * ?</code> = 1ste van de maand om 08:00.
+                        </p>
+                      </div>
+                    )}
+
+                    {selectedElement.triggerType === "event" && (
+                      <div>
+                        <label className="mb-1 block text-xs font-medium text-fg-muted">Event-conditie</label>
+                        <input
+                          type="text"
+                          value={selectedElement.triggerConfig ?? ""}
+                          onChange={(e) => applyStartTrigger("event", e.target.value)}
+                          placeholder="bv. Patient.indicatie.einddatum < now + 30d"
+                          className="w-full rounded-lg border border-default bg-raised px-3 py-2 text-xs text-fg"
+                        />
+                        <p className="mt-1 text-xs text-fg-subtle">
+                          Een regel die een FHIR-resource observeert en het proces start wanneer de conditie waar wordt.
+                          Vereist Plan 2E trigger-engine — nu informatief.
+                        </p>
+                      </div>
+                    )}
                   </div>
                 )}
 

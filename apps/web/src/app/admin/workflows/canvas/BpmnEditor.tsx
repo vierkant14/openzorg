@@ -48,6 +48,9 @@ export interface SelectedElement {
   assignee?: string;
   formKey?: string;
   dueDate?: string;
+  // StartEvent-specifiek
+  triggerType?: "api" | "form" | "timer" | "event";
+  triggerConfig?: string;
   // Gateway-specifiek
   outgoingFlows?: Array<{
     id: string;
@@ -79,6 +82,7 @@ export interface BpmnEditorHandle {
   setDueDate: (value: string) => void;
   setTaskName: (value: string) => void;
   setFlowCondition: (flowId: string, expression: string) => void;
+  setStartTrigger: (type: "api" | "form" | "timer" | "event", config: string) => void;
 }
 
 interface BpmnCanvas {
@@ -190,6 +194,14 @@ function describeElement(el: BpmnElement): SelectedElement {
     result.condition = bo.conditionExpression?.body;
   }
 
+  if (kind === "StartEvent") {
+    const attrs = bo.$attrs ?? {};
+    const rawType = attrs["openzorg:triggerType"] as string | undefined;
+    const rawCfg = attrs["openzorg:triggerConfig"] as string | undefined;
+    result.triggerType = (rawType as "api" | "form" | "timer" | "event" | undefined) ?? "api";
+    result.triggerConfig = rawCfg ?? "";
+  }
+
   return result;
 }
 
@@ -293,6 +305,15 @@ export const BpmnEditor = forwardRef<BpmnEditorHandle, BpmnEditorProps>(function
             body: expression,
           });
           modeling.updateProperties(flow, { conditionExpression });
+        },
+        setStartTrigger(type, config) {
+          // Schrijf de trigger-metadata als custom openzorg:* attributen op
+          // het start-event. Wordt bij export behouden omdat bpmn-js onbekende
+          // attributen in $attrs bewaart.
+          updateSelected({
+            "openzorg:triggerType": type,
+            "openzorg:triggerConfig": config,
+          });
         },
       };
     },
