@@ -251,6 +251,52 @@ export default function ClientDetailPage() {
               </div>
             </div>
             <div className="flex items-center gap-2">
+              {(() => {
+                const c = client;
+                const statusExt = c.extension?.find((e) => e.url === "https://openzorg.nl/extensions/trajectStatus");
+                const currentStatus = statusExt?.valueString;
+                const STATUS_LABELS: Record<string, { label: string; color: string; next: string[] }> = {
+                  aangemeld:      { label: "Aangemeld",      color: "bg-blue-100 text-blue-800 dark:bg-blue-950/30 dark:text-blue-300", next: ["in-intake", "uitgeschreven"] },
+                  "in-intake":    { label: "In intake",      color: "bg-amber-100 text-amber-800 dark:bg-amber-950/30 dark:text-amber-300", next: ["in-zorg", "uitgeschreven"] },
+                  "in-zorg":      { label: "In zorg",        color: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300", next: ["overdracht", "uitgeschreven", "overleden"] },
+                  overdracht:     { label: "Overdracht",     color: "bg-navy-100 text-navy-800 dark:bg-navy-950/30 dark:text-navy-300", next: ["in-zorg", "uitgeschreven"] },
+                  uitgeschreven:  { label: "Uitgeschreven",  color: "bg-surface-200 text-fg-muted dark:bg-surface-800", next: ["aangemeld"] },
+                  overleden:      { label: "Overleden",      color: "bg-coral-100 text-coral-800 dark:bg-coral-950/30 dark:text-coral-300", next: [] },
+                };
+                const cfg = currentStatus ? STATUS_LABELS[currentStatus] : null;
+                async function transitionTo(newStatus: string) {
+                  if (!confirm(`Status wijzigen naar '${STATUS_LABELS[newStatus]?.label ?? newStatus}'?`)) return;
+                  const otherExt = (c.extension ?? []).filter((e) => e.url !== "https://openzorg.nl/extensions/trajectStatus");
+                  const newExt = [...otherExt, { url: "https://openzorg.nl/extensions/trajectStatus", valueString: newStatus }];
+                  const { error: err } = await ecdFetch(`/api/clients/${c.id}`, {
+                    method: "PUT",
+                    body: JSON.stringify({ ...c, extension: newExt }),
+                  });
+                  if (err) { alert(err); return; }
+                  loadClient();
+                }
+                if (!cfg) return null;
+                return (
+                  <div className="relative inline-flex" data-testid="traject-status">
+                    <span className={`inline-flex items-center rounded-lg px-3 py-1 text-caption font-semibold ${cfg.color}`}>
+                      {cfg.label}
+                    </span>
+                    {cfg.next.length > 0 && (
+                      <select
+                        aria-label="Status wijzigen"
+                        onChange={(e) => e.target.value && transitionTo(e.target.value)}
+                        value=""
+                        className="ml-1 rounded-lg border border-default bg-raised px-2 py-1 text-caption text-fg-muted cursor-pointer"
+                      >
+                        <option value="">→ wijzig</option>
+                        {cfg.next.map((s) => (
+                          <option key={s} value={s}>{STATUS_LABELS[s]?.label ?? s}</option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                );
+              })()}
               {client.active === false && (
                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-caption font-medium bg-coral-50 dark:bg-coral-950/20 text-coral-600">
                   Inactief
