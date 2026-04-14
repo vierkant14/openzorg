@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useImperativeHandle, useRef, useState, forwardRef } from "react";
 
 import "bpmn-js/dist/assets/diagram-js.css";
 import "bpmn-js/dist/assets/bpmn-js.css";
@@ -26,24 +26,136 @@ const EMPTY_DIAGRAM = `<?xml version="1.0" encoding="UTF-8"?>
   </bpmndi:BPMNDiagram>
 </bpmn:definitions>`;
 
-interface BpmnEditorProps {
-  initialXml?: string;
-  onSaved?: (xml: string) => void;
+export interface BpmnEditorHandle {
+  loadXml: (xml: string) => Promise<void>;
+  exportXml: () => Promise<string | null>;
+  zoomFit: () => void;
+  zoomIn: () => void;
+  zoomOut: () => void;
+  getSelectedUserTask: () => SelectedTask | null;
+  setCandidateGroups: (value: string) => void;
+}
+
+export interface SelectedTask {
+  id: string;
+  name?: string;
+  candidateGroups?: string;
+}
+
+interface BpmnCanvas {
+  zoom: (fit: string | number, center?: unknown) => number;
+}
+
+interface BpmnSelection {
+  get: () => BpmnElement[];
+}
+
+interface BpmnModeling {
+  updateProperties: (element: BpmnElement, props: Record<string, unknown>) => void;
+}
+
+interface BpmnBusinessObject {
+  id?: string;
+  name?: string;
+  $type?: string;
+  candidateGroups?: string;
+  $attrs?: Record<string, unknown>;
+}
+
+interface BpmnElement {
+  id: string;
+  type: string;
+  businessObject: BpmnBusinessObject;
+}
+
+interface BpmnEventBus {
+  on: (event: string, cb: (e: { newSelection?: BpmnElement[] }) => void) => void;
 }
 
 interface BpmnModeler {
   importXML: (xml: string) => Promise<{ warnings: unknown[] }>;
   saveXML: (opts: { format: boolean }) => Promise<{ xml: string }>;
   destroy: () => void;
-  get: (name: string) => { zoom: (fit: string) => void };
+  get(name: string): unknown;
 }
 
-export function BpmnEditor({ initialXml, onSaved }: BpmnEditorProps) {
+interface BpmnEditorProps {
+  initialXml?: string;
+  onSelectionChange?: (task: SelectedTask | null) => void;
+}
+
+export const BpmnEditor = forwardRef<BpmnEditorHandle, BpmnEditorProps>(function BpmnEditor(
+  { initialXml, onSelectionChange },
+  ref,
+) {
   const containerRef = useRef<HTMLDivElement>(null);
   const modelerRef = useRef<BpmnModeler | null>(null);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      async loadXml(xml: string) {
+        if (!modelerRef.current) return;
+        try {
+          await modelerRef.current.importXML(xml);
+          (modelerRef.current.get("canvas") as BpmnCanvas).zoom("fit-viewport");
+        } catch (err) {
+          setError(err instanceof Error ? err.message : "Kon BPMN niet laden");
+        }
+      },
+      async exportXml() {
+        if (!modelerRef.current) return null;
+        try {
+          const { xml } = await modelerRef.current.saveXML({ format: true });
+          return xml;
+        } catch (err) {
+          setError(err instanceof Error ? err.message : "Export mislukt");
+          return null;
+        }
+      },
+      zoomFit() {
+        if (!modelerRef.current) return;
+        (modelerRef.current.get("canvas") as BpmnCanvas).zoom("fit-viewport");
+      },
+      zoomIn() {
+        if (!modelerRef.current) return;
+        const canvas = modelerRef.current.get("canvas") as BpmnCanvas & { zoom: (level: number | string) => number };
+        const current = canvas.zoom("fit-viewport");
+        canvas.zoom(typeof current === "number" ? current * 1.2 : 1);
+      },
+      zoomOut() {
+        if (!modelerRef.current) return;
+        const canvas = modelerRef.current.get("canvas") as BpmnCanvas & { zoom: (level: number | string) => number };
+        const current = canvas.zoom("fit-viewport");
+        canvas.zoom(typeof current === "number" ? current * 0.8 : 1);
+      },
+      getSelectedUserTask() {
+        if (!modelerRef.current) return null;
+        const selection = modelerRef.current.get("selection") as BpmnSelection;
+        const picked = selection.get()[0];
+        if (!picked) return null;
+        if (!picked.type.endsWith("UserTask")) return null;
+        const bo = picked.businessObject;
+        return {
+          id: picked.id,
+          name: bo.name,
+          candidateGroups: bo.candidateGroups ?? (bo.$attrs?.["flowable:candidateGroups"] as string | undefined),
+        };
+      },
+      setCandidateGroups(value: string) {
+        if (!modelerRef.current) return;
+        const selection = modelerRef.current.get("selection") as BpmnSelection;
+        const picked = selection.get()[0];
+        if (!picked || !picked.type.endsWith("UserTask")) return;
+        const modeling = modelerRef.current.get("modeling") as BpmnModeling;
+        // Flowable-extensie: candidateGroups leeft als attribuut op de userTask
+        modeling.updateProperties(picked, { "flowable:candidateGroups": value });
+      },
+    }),
+    [],
+  );
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -60,7 +172,29 @@ export function BpmnEditor({ initialXml, onSaved }: BpmnEditorProps) {
         modelerRef.current = modeler;
 
         await modeler.importXML(initialXml ?? EMPTY_DIAGRAM);
-        modeler.get("canvas").zoom("fit-viewport");
+        (modeler.get("canvas") as BpmnCanvas).zoom("fit-viewport");
+
+        // Selectie-events doorgeven aan de parent voor het properties-panel
+        const eventBus = modeler.get("eventBus") as BpmnEventBus;
+        eventBus.on("selection.changed", (e) => {
+          if (!onSelectionChange) return;
+          const picked = e.newSelection?.[0];
+          if (!picked) {
+            onSelectionChange(null);
+            return;
+          }
+          if (!picked.type.endsWith("UserTask")) {
+            onSelectionChange(null);
+            return;
+          }
+          const bo = picked.businessObject;
+          onSelectionChange({
+            id: picked.id,
+            name: bo.name,
+            candidateGroups: bo.candidateGroups ?? (bo.$attrs?.["flowable:candidateGroups"] as string | undefined),
+          });
+        });
+
         setReady(true);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Kon BPMN-editor niet laden");
@@ -72,23 +206,11 @@ export function BpmnEditor({ initialXml, onSaved }: BpmnEditorProps) {
       modelerRef.current?.destroy();
       modelerRef.current = null;
     };
-  }, [initialXml]);
 
-  async function handleExport() {
-    if (!modelerRef.current) return;
-    setSaving(true);
-    try {
-      const { xml } = await modelerRef.current.saveXML({ format: true });
-      onSaved?.(xml);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Export mislukt");
-    } finally {
-      setSaving(false);
-    }
-  }
+  }, []);
 
   return (
-    <div className="flex h-full flex-col gap-3">
+    <div className="flex h-full flex-col gap-2">
       {error && (
         <div className="rounded-lg border border-coral-200 bg-coral-50 px-4 py-2 text-sm text-coral-700 dark:border-coral-800 dark:bg-coral-950/20 dark:text-coral-300">
           {error}
@@ -96,22 +218,12 @@ export function BpmnEditor({ initialXml, onSaved }: BpmnEditorProps) {
       )}
       <div
         ref={containerRef}
-        className="relative min-h-[500px] flex-1 rounded-lg border border-default bg-raised"
-        style={{ minHeight: 500 }}
+        className="relative flex-1 overflow-hidden rounded-xl border border-default bg-raised shadow-sm"
+        style={{ minHeight: 560 }}
       />
-      <div className="flex items-center justify-end gap-2">
-        <span className="text-xs text-fg-subtle">
-          {ready ? "Klaar — sleep elementen uit het palet links" : "Editor laden..."}
-        </span>
-        <button
-          type="button"
-          onClick={handleExport}
-          disabled={!ready || saving}
-          className="rounded-lg bg-brand-700 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-800 disabled:opacity-50 btn-press"
-        >
-          {saving ? "Exporteren..." : "Exporteer BPMN XML"}
-        </button>
-      </div>
+      {!ready && (
+        <span className="text-xs text-fg-subtle">Editor laden...</span>
+      )}
     </div>
   );
-}
+});
