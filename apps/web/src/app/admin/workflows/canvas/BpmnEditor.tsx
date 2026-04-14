@@ -34,6 +34,7 @@ export interface BpmnEditorHandle {
   zoomOut: () => void;
   getSelectedUserTask: () => SelectedTask | null;
   setCandidateGroups: (value: string) => void;
+  setAssignee: (value: string) => void;
   setTaskName: (value: string) => void;
 }
 
@@ -41,6 +42,7 @@ export interface SelectedTask {
   id: string;
   name?: string;
   candidateGroups?: string;
+  assignee?: string;
 }
 
 interface BpmnCanvas {
@@ -143,6 +145,7 @@ export const BpmnEditor = forwardRef<BpmnEditorHandle, BpmnEditorProps>(function
           id: picked.id,
           name: bo.name,
           candidateGroups: bo.candidateGroups ?? (bo.$attrs?.["flowable:candidateGroups"] as string | undefined),
+          assignee: (bo as BpmnBusinessObject & { assignee?: string }).assignee ?? (bo.$attrs?.["flowable:assignee"] as string | undefined),
         };
       },
       setCandidateGroups(value: string) {
@@ -153,6 +156,14 @@ export const BpmnEditor = forwardRef<BpmnEditorHandle, BpmnEditorProps>(function
         const modeling = modelerRef.current.get("modeling") as BpmnModeling;
         // Flowable-extensie: candidateGroups leeft als attribuut op de userTask
         modeling.updateProperties(picked, { "flowable:candidateGroups": value });
+      },
+      setAssignee(value: string) {
+        if (!modelerRef.current) return;
+        const selection = modelerRef.current.get("selection") as BpmnSelection;
+        const picked = selection.get()[0];
+        if (!picked || !picked.type.endsWith("UserTask")) return;
+        const modeling = modelerRef.current.get("modeling") as BpmnModeling;
+        modeling.updateProperties(picked, { "flowable:assignee": value });
       },
       setTaskName(value: string) {
         if (!modelerRef.current) return;
@@ -201,6 +212,7 @@ export const BpmnEditor = forwardRef<BpmnEditorHandle, BpmnEditorProps>(function
             id: picked.id,
             name: bo.name,
             candidateGroups: bo.candidateGroups ?? (bo.$attrs?.["flowable:candidateGroups"] as string | undefined),
+            assignee: (bo as BpmnBusinessObject & { assignee?: string }).assignee ?? (bo.$attrs?.["flowable:assignee"] as string | undefined),
           });
         });
 

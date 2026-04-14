@@ -157,6 +157,11 @@ services:
       WORKFLOW_PORT: 4003
       MEDPLUM_BASE_URL: http://medplum:8103
       FLOWABLE_BASE_URL: http://flowable:8080/flowable-rest
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: openzorg
+      POSTGRES_USER: openzorg
+      POSTGRES_PASSWORD: openzorg_dev_password
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:4003/health || exit 1"]
       interval: 10s

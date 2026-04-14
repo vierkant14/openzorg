@@ -39,6 +39,60 @@ const ROLES = [
   { value: "beheerder", label: "Beheerder" },
 ];
 
+/**
+ * bpmn-auto-layout leest alleen <bpmn:incoming>/<bpmn:outgoing> children
+ * voor connecties, niet de sequenceFlow sourceRef/targetRef. Veel
+ * hand-gemaakte BPMN (zoals onze templates) laat die children weg. Deze
+ * preprocessor leest alle sequenceFlows en injecteert de ontbrekende
+ * incoming/outgoing children in de flow nodes zodat de layouter edges kan
+ * genereren.
+ */
+function ensureFlowRefs(xml: string): string {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(xml, "application/xml");
+  if (doc.getElementsByTagName("parsererror").length > 0) return xml;
+
+  const BPMN_NS = "http://www.omg.org/spec/BPMN/20100524/MODEL";
+  const flows = Array.from(doc.getElementsByTagNameNS(BPMN_NS, "sequenceFlow"));
+  if (flows.length === 0) {
+    // Fallback voor documenten zonder default namespace-prefix
+    const any = Array.from(doc.getElementsByTagName("*")).filter(
+      (el) => el.localName === "sequenceFlow",
+    );
+    flows.push(...(any as Element[]));
+  }
+
+  for (const flow of flows) {
+    const flowId = flow.getAttribute("id");
+    const sourceRef = flow.getAttribute("sourceRef");
+    const targetRef = flow.getAttribute("targetRef");
+    if (!flowId || !sourceRef || !targetRef) continue;
+
+    const source = doc.getElementById(sourceRef)
+      ?? doc.querySelector(`[id='${sourceRef}']`);
+    const target = doc.getElementById(targetRef)
+      ?? doc.querySelector(`[id='${targetRef}']`);
+
+    const addChild = (parent: Element | null, tag: "incoming" | "outgoing", value: string) => {
+      if (!parent) return;
+      const existing = Array.from(parent.children).find(
+        (c) => c.localName === tag && c.textContent?.trim() === value,
+      );
+      if (existing) return;
+      // Gebruik hetzelfde prefix als de parent zodat de output geldig blijft
+      const prefix = parent.prefix ? `${parent.prefix}:` : "";
+      const child = doc.createElementNS(BPMN_NS, `${prefix}${tag}`);
+      child.textContent = value;
+      parent.appendChild(child);
+    };
+
+    addChild(source, "outgoing", flowId);
+    addChild(target, "incoming", flowId);
+  }
+
+  return new XMLSerializer().serializeToString(doc);
+}
+
 export default function BpmnCanvasPage() {
   const router = useRouter();
   const editorRef = useRef<BpmnEditorHandle>(null);
@@ -75,6 +129,7 @@ export default function BpmnCanvasPage() {
       // Templates uit bpmn-templates.ts hebben alleen de start-shape in DI;
       // laat bpmn-auto-layout de rest uittekenen voordat we importeren.
       try {
+        xml = ensureFlowRefs(xml);
         const { layoutProcess } = await import("bpmn-auto-layout");
         xml = await layoutProcess(xml);
       } catch (layoutErr) {
@@ -161,6 +216,11 @@ export default function BpmnCanvasPage() {
   function applyCandidateGroup(value: string) {
     editorRef.current?.setCandidateGroups(value);
     setSelectedTask((prev) => (prev ? { ...prev, candidateGroups: value } : prev));
+  }
+
+  function applyAssignee(value: string) {
+    editorRef.current?.setAssignee(value);
+    setSelectedTask((prev) => (prev ? { ...prev, assignee: value } : prev));
   }
 
   function applyTaskName(value: string) {
@@ -280,8 +340,22 @@ export default function BpmnCanvasPage() {
                       </option>
                     ))}
                   </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-fg-muted">
+                    Specifieke persoon (assignee)
+                  </label>
+                  <input
+                    type="text"
+                    value={selectedTask.assignee ?? ""}
+                    onChange={(e) => applyAssignee(e.target.value)}
+                    placeholder="bv. jan@horizon.nl"
+                    className="w-full rounded-lg border border-default bg-raised px-3 py-2 text-sm text-fg"
+                  />
                   <p className="mt-1 text-xs text-fg-subtle">
-                    Deze taak verschijnt na deploy in de werkbak van iedereen met deze rol.
+                    {selectedTask.assignee
+                      ? "Taak wordt direct aan deze persoon toegewezen (overruled de rol)."
+                      : "Leeg laten = iedereen met de geselecteerde rol kan de taak claimen. Vul in om deze taak aan één persoon te geven."}
                   </p>
                 </div>
               </div>
