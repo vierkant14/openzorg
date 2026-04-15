@@ -8,11 +8,6 @@ import { pool } from "../lib/db.js";
  *
  * Elke regel is een aparte rij in openzorg.tenant_configurations met
  * config_type='validation_rule' en config_data als ValidationRule JSON.
- * Dit maakt eenvoudige CRUD mogelijk zonder de hele config bij elke
- * wijziging te herschrijven.
- *
- * De validation-engine in shared-config leest deze regels en past ze toe.
- * De fhir-save hooks (fase 4) komen in een aparte commit.
  */
 export const validationRulesRoutes = new Hono<AppEnv>();
 
@@ -32,6 +27,18 @@ const VALID_OPERATORS: readonly Operator[] = [
   "required", "min", "max", "range", "pattern", "in", "minLength", "maxLength",
 ];
 
+async function resolveTenantUuid(tenantIdOrProjectId: string): Promise<string | null> {
+  try {
+    const result = await pool.query<{ id: string }>(
+      "SELECT id FROM openzorg.tenants WHERE id::text = $1 OR medplum_project_id = $1 LIMIT 1",
+      [tenantIdOrProjectId],
+    );
+    return result.rows[0]?.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
 function validateRule(rule: Partial<ValidationRule>): string | null {
   if (!rule.resourceType || typeof rule.resourceType !== "string") {
     return "resourceType is vereist";
@@ -48,7 +55,6 @@ function validateRule(rule: Partial<ValidationRule>): string | null {
   if (!rule.errorMessage || typeof rule.errorMessage !== "string") {
     return "errorMessage is vereist";
   }
-  // Type-check value tegen operator
   if (rule.operator === "min" || rule.operator === "max" || rule.operator === "minLength" || rule.operator === "maxLength") {
     if (typeof rule.value !== "number") return `${rule.operator} vereist een numerieke value`;
   }
@@ -67,13 +73,17 @@ function validateRule(rule: Partial<ValidationRule>): string | null {
  * GET / — List all validation rules for the current tenant.
  */
 validationRulesRoutes.get("/", async (c) => {
-  const tenantId = c.get("tenantId");
+  const tenantHeader = c.get("tenantId");
+  const tenantUuid = await resolveTenantUuid(tenantHeader);
+  if (!tenantUuid) {
+    return c.json({ rules: [] });
+  }
   const result = await pool.query<{ id: string; config_data: ValidationRule; version: number; created_at: string }>(
     `SELECT id, config_data, version, created_at
        FROM openzorg.tenant_configurations
-      WHERE tenant_id::text = $1 AND config_type = 'validation_rule'
+      WHERE tenant_id = $1 AND config_type = 'validation_rule'
       ORDER BY created_at DESC`,
-    [tenantId],
+    [tenantUuid],
   );
   const rules = result.rows.map((row) => ({
     ...row.config_data,
@@ -87,7 +97,12 @@ validationRulesRoutes.get("/", async (c) => {
  * POST / — Create a new validation rule.
  */
 validationRulesRoutes.post("/", async (c) => {
-  const tenantId = c.get("tenantId");
+  const tenantHeader = c.get("tenantId");
+  const tenantUuid = await resolveTenantUuid(tenantHeader);
+  if (!tenantUuid) {
+    return c.json({ error: `Tenant niet gevonden voor id '${tenantHeader}'` }, 404);
+  }
+
   const body = await c.req.json<Partial<ValidationRule>>().catch(() => null);
   if (!body) {
     return c.json({ error: "Ongeldige JSON body" }, 400);
@@ -107,42 +122,52 @@ validationRulesRoutes.post("/", async (c) => {
     active: body.active ?? true,
   };
 
-  const result = await pool.query<{ id: string }>(
-    `INSERT INTO openzorg.tenant_configurations
-       (tenant_id, config_type, config_data, version)
-     VALUES ($1, 'validation_rule', $2, 1)
-     RETURNING id`,
-    [tenantId, JSON.stringify(rule)],
-  );
-  const newId = result.rows[0]?.id;
-
-  // Audit-log
   try {
-    await pool.query(
-      `INSERT INTO openzorg.audit_log
-         (tenant_id, user_id, action, resource_type, resource_id, details)
-       VALUES ($1, $2, $3, $4, $5, $6)`,
-      [
-        tenantId,
-        c.req.header("X-User-Id") ?? "system",
-        "validation.rule.create",
-        "ValidationRule",
-        newId,
-        JSON.stringify({ rule }),
-      ],
+    const result = await pool.query<{ id: string }>(
+      `INSERT INTO openzorg.tenant_configurations
+         (tenant_id, config_type, config_data, version)
+       VALUES ($1, 'validation_rule', $2, 1)
+       RETURNING id`,
+      [tenantUuid, JSON.stringify(rule)],
     );
-  } catch (err) {
-    console.error("[VALIDATION] audit failed:", err);
-  }
+    const newId = result.rows[0]?.id;
 
-  return c.json({ id: newId, ...rule }, 201);
+    try {
+      await pool.query(
+        `INSERT INTO openzorg.audit_log
+           (tenant_id, user_id, action, resource_type, resource_id, details)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [
+          tenantUuid,
+          c.req.header("X-User-Id") ?? "system",
+          "validation.rule.create",
+          "ValidationRule",
+          newId,
+          JSON.stringify({ rule }),
+        ],
+      );
+    } catch (err) {
+      console.error("[VALIDATION] audit failed:", err);
+    }
+
+    return c.json({ id: newId, ...rule }, 201);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "onbekende fout";
+    console.error("[VALIDATION] POST faalde:", msg);
+    return c.json({ error: `Database-fout: ${msg}` }, 500);
+  }
 });
 
 /**
  * PUT /:id — Update an existing validation rule.
  */
 validationRulesRoutes.put("/:id", async (c) => {
-  const tenantId = c.get("tenantId");
+  const tenantHeader = c.get("tenantId");
+  const tenantUuid = await resolveTenantUuid(tenantHeader);
+  if (!tenantUuid) {
+    return c.json({ error: `Tenant niet gevonden voor id '${tenantHeader}'` }, 404);
+  }
+
   const id = c.req.param("id");
   const body = await c.req.json<Partial<ValidationRule>>().catch(() => null);
   if (!body) {
@@ -156,8 +181,8 @@ validationRulesRoutes.put("/:id", async (c) => {
 
   const existing = await pool.query<{ config_data: ValidationRule; version: number }>(
     `SELECT config_data, version FROM openzorg.tenant_configurations
-      WHERE id = $1 AND tenant_id::text = $2 AND config_type = 'validation_rule'`,
-    [id, tenantId],
+      WHERE id = $1 AND tenant_id = $2 AND config_type = 'validation_rule'`,
+    [id, tenantUuid],
   );
   if (existing.rows.length === 0) {
     return c.json({ error: "Regel niet gevonden" }, 404);
@@ -186,7 +211,7 @@ validationRulesRoutes.put("/:id", async (c) => {
          (tenant_id, user_id, action, resource_type, resource_id, details)
        VALUES ($1, $2, $3, $4, $5, $6)`,
       [
-        tenantId,
+        tenantUuid,
         c.req.header("X-User-Id") ?? "system",
         "validation.rule.update",
         "ValidationRule",
@@ -205,12 +230,16 @@ validationRulesRoutes.put("/:id", async (c) => {
  * DELETE /:id — Delete a validation rule.
  */
 validationRulesRoutes.delete("/:id", async (c) => {
-  const tenantId = c.get("tenantId");
+  const tenantHeader = c.get("tenantId");
+  const tenantUuid = await resolveTenantUuid(tenantHeader);
+  if (!tenantUuid) {
+    return c.json({ error: "Tenant niet gevonden" }, 404);
+  }
   const id = c.req.param("id");
   const result = await pool.query(
     `DELETE FROM openzorg.tenant_configurations
-      WHERE id = $1 AND tenant_id::text = $2 AND config_type = 'validation_rule'`,
-    [id, tenantId],
+      WHERE id = $1 AND tenant_id = $2 AND config_type = 'validation_rule'`,
+    [id, tenantUuid],
   );
   if (result.rowCount === 0) {
     return c.json({ error: "Regel niet gevonden" }, 404);
@@ -221,14 +250,7 @@ validationRulesRoutes.delete("/:id", async (c) => {
       `INSERT INTO openzorg.audit_log
          (tenant_id, user_id, action, resource_type, resource_id, details)
        VALUES ($1, $2, $3, $4, $5, $6)`,
-      [
-        tenantId,
-        c.req.header("X-User-Id") ?? "system",
-        "validation.rule.delete",
-        "ValidationRule",
-        id,
-        JSON.stringify({}),
-      ],
+      [tenantUuid, c.req.header("X-User-Id") ?? "system", "validation.rule.delete", "ValidationRule", id, JSON.stringify({})],
     );
   } catch (err) {
     console.error("[VALIDATION] audit failed:", err);
@@ -239,8 +261,6 @@ validationRulesRoutes.delete("/:id", async (c) => {
 
 /**
  * POST /test — Test a rule against an example resource without persisting.
- * Body: { rule: ValidationRule, resource: object }
- * Response: { pass: boolean, error?: string }
  */
 validationRulesRoutes.post("/test", async (c) => {
   const body = await c.req.json<{ rule: Partial<ValidationRule>; resource: Record<string, unknown> }>().catch(() => null);
