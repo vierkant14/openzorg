@@ -46,7 +46,33 @@ interface OrgTreeNode {
   children: OrgTreeNode[];
 }
 
-const LOCATIE_TYPES = ["verpleeghuis", "thuiszorg-team", "kantoor", "dagbesteding", "revalidatie", "wijkteam", "regio"] as const;
+const LOCATIE_TYPES = [
+  "holding",
+  "regio",
+  "cluster",
+  "locatie",
+  "team",
+  "verpleeghuis",
+  "thuiszorg-team",
+  "kantoor",
+  "dagbesteding",
+  "revalidatie",
+  "wijkteam",
+] as const;
+
+const LOCATIE_TYPE_CONFIG: Record<string, { label: string; badge: string; hint: string }> = {
+  holding:        { label: "Holding",        badge: "bg-navy-100 text-navy-800 dark:bg-navy-950/30 dark:text-navy-300",       hint: "Top-niveau (bv. zorggroep)" },
+  regio:          { label: "Regio",          badge: "bg-brand-100 text-brand-800 dark:bg-brand-950/30 dark:text-brand-300",   hint: "Geografische regio onder holding" },
+  cluster:        { label: "Cluster",        badge: "bg-sky-100 text-sky-800 dark:bg-sky-950/30 dark:text-sky-300",           hint: "Cluster van locaties binnen een regio" },
+  locatie:        { label: "Locatie",        badge: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300", hint: "Fysieke locatie (verpleeghuis/wijkteam)" },
+  team:           { label: "Team",           badge: "bg-amber-100 text-amber-800 dark:bg-amber-950/30 dark:text-amber-300",   hint: "Zorgteam binnen een locatie" },
+  verpleeghuis:   { label: "Verpleeghuis",   badge: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300", hint: "Legacy: kan als locatie" },
+  "thuiszorg-team": { label: "Thuiszorg team", badge: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300", hint: "Legacy: kan als locatie" },
+  kantoor:        { label: "Kantoor",        badge: "bg-surface-200 text-fg-muted dark:bg-surface-800", hint: "Kantoorlocatie" },
+  dagbesteding:   { label: "Dagbesteding",   badge: "bg-amber-100 text-amber-800 dark:bg-amber-950/30 dark:text-amber-300",   hint: "Dagbestedingslocatie" },
+  revalidatie:    { label: "Revalidatie",    badge: "bg-sky-100 text-sky-800 dark:bg-sky-950/30 dark:text-sky-300",           hint: "Revalidatiecentrum" },
+  wijkteam:       { label: "Wijkteam",       badge: "bg-amber-100 text-amber-800 dark:bg-amber-950/30 dark:text-amber-300",   hint: "Wijkzorg-team" },
+};
 
 /* ---------- Helpers ---------- */
 
@@ -354,7 +380,7 @@ export default function OrganisatiePage() {
                 >
                   {LOCATIE_TYPES.map((t) => (
                     <option key={t} value={t}>
-                      {t.charAt(0).toUpperCase() + t.slice(1).replace("-", " ")}
+                      {LOCATIE_TYPE_CONFIG[t]?.label ?? t}
                     </option>
                   ))}
                 </select>
@@ -533,7 +559,14 @@ function TreeNode({
               {org.name ?? "(naamloos)"}
             </span>
             <div className="flex items-center gap-3 text-xs text-fg-subtle">
-              {locType && <span>{locType}</span>}
+              {locType && (() => {
+                const cfg = LOCATIE_TYPE_CONFIG[locType];
+                return (
+                  <span className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-semibold ${cfg?.badge ?? "bg-surface-200 text-fg-muted"}`}>
+                    {cfg?.label ?? locType}
+                  </span>
+                );
+              })()}
               {addr && <span>{addr}</span>}
               {tel && <span>{tel}</span>}
             </div>
