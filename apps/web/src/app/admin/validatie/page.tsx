@@ -33,6 +33,62 @@ function formatValue(rule: ValidationRule): string {
   return String(rule.value);
 }
 
+/**
+ * Voorbeeld-resources per type. Verwacht door de UI als startwaarde
+ * voor het 'Test deze regel'-venster, zodat de gebruiker direct iets
+ * zinnigs heeft om tegen te testen. Wisselt mee bij veld-selectie.
+ */
+const EXAMPLE_RESOURCES: Record<string, Record<string, unknown>> = {
+  Patient: {
+    resourceType: "Patient",
+    name: [{ family: "Jansen", given: ["Jan"] }],
+    birthDate: "1940-05-12",
+    gender: "male",
+    telecom: [{ system: "phone", value: "06-12345678" }],
+    address: [{ line: ["Kerkstraat 1"], postalCode: "1234 AB", city: "Amsterdam" }],
+  },
+  Observation: {
+    resourceType: "Observation",
+    status: "final",
+    code: { text: "Gewicht" },
+    valueQuantity: { value: 75, unit: "kg" },
+    effectiveDateTime: "2026-04-15T10:00:00Z",
+  },
+  MedicationRequest: {
+    resourceType: "MedicationRequest",
+    status: "active",
+    medicationCodeableConcept: { text: "Paracetamol 500mg" },
+    dosageInstruction: [{ text: "3x per dag 1 tablet" }],
+    authoredOn: "2026-04-15",
+  },
+  Condition: {
+    resourceType: "Condition",
+    code: { text: "Diabetes type 2" },
+    onsetDateTime: "2020-03-15",
+    clinicalStatus: { coding: [{ code: "active" }] },
+    severity: { coding: [{ display: "moderate" }] },
+  },
+  AllergyIntolerance: {
+    resourceType: "AllergyIntolerance",
+    code: { text: "Penicilline" },
+    criticality: "high",
+    category: ["medication"],
+  },
+  Flag: {
+    resourceType: "Flag",
+    status: "active",
+    code: { text: "Valrisico hoog" },
+    category: [{ coding: [{ code: "valrisico" }] }],
+    extension: [{ url: "https://openzorg.nl/extensions/signalering-ernst", valueString: "hoog" }],
+  },
+  Practitioner: {
+    resourceType: "Practitioner",
+    active: true,
+    name: [{ family: "de Vries", given: ["Jan"] }],
+    qualification: [{ code: { text: "Wijkverpleegkundige" } }],
+  },
+};
+
 export default function ValidatiePage() {
   const [rules, setRules] = useState<ValidationRule[]>([]);
   const [loading, setLoading] = useState(true);
@@ -51,7 +107,10 @@ export default function ValidatiePage() {
   const [editActive, setEditActive] = useState<boolean>(true);
 
   // Test runner
-  const [testResourceJson, setTestResourceJson] = useState<string>("{\n  \"name\": [{\"family\": \"Jansen\"}],\n  \"birthDate\": \"1940-05-12\"\n}");
+  const [testResourceJson, setTestResourceJson] = useState<string>(
+    JSON.stringify(EXAMPLE_RESOURCES.Patient, null, 2),
+  );
+  const [testResourceDirty, setTestResourceDirty] = useState(false);
   const [testResult, setTestResult] = useState<{ pass: boolean; failMessage?: string } | null>(null);
 
   const load = useCallback(async () => {
@@ -84,6 +143,21 @@ export default function ValidatiePage() {
       }
     }
   }, [selected]);
+
+  /**
+   * Wanneer resource-type of veld wijzigt, ververs de test-JSON met een
+   * passend voorbeeld — tenzij de gebruiker het al handmatig heeft bewerkt.
+   * Het voorbeeld krijgt ook de fieldPath-gerelateerde waarde gepopuleerd
+   * zodat testen meteen werkt.
+   */
+  useEffect(() => {
+    if (testResourceDirty) return;
+    const example = EXAMPLE_RESOURCES[editResourceType];
+    if (example) {
+      setTestResourceJson(JSON.stringify(example, null, 2));
+      setTestResult(null);
+    }
+  }, [editResourceType, testResourceDirty]);
 
   function buildValue(): ValidationRule["value"] {
     if (!operatorDef) return "";
@@ -390,11 +464,35 @@ export default function ValidatiePage() {
 
                   {/* Test runner */}
                   <div className="rounded-lg border border-default bg-page p-3">
-                    <h3 className="mb-2 text-xs font-semibold text-fg">Test deze regel</h3>
+                    <div className="mb-2 flex items-center justify-between">
+                      <h3 className="text-xs font-semibold text-fg">Test deze regel</h3>
+                      <div className="flex items-center gap-2 text-xs">
+                        {testResourceDirty && (
+                          <span className="text-fg-subtle">handmatig aangepast</span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setTestResourceDirty(false);
+                            const example = EXAMPLE_RESOURCES[editResourceType];
+                            if (example) {
+                              setTestResourceJson(JSON.stringify(example, null, 2));
+                              setTestResult(null);
+                            }
+                          }}
+                          className="text-brand-600 hover:underline"
+                        >
+                          🔄 Voorbeeld voor {editResourceType}
+                        </button>
+                      </div>
+                    </div>
                     <textarea
                       value={testResourceJson}
-                      onChange={(e) => setTestResourceJson(e.target.value)}
-                      rows={5}
+                      onChange={(e) => {
+                        setTestResourceJson(e.target.value);
+                        setTestResourceDirty(true);
+                      }}
+                      rows={8}
                       className="w-full rounded-md border border-default bg-raised px-2 py-1 font-mono text-xs text-fg"
                     />
                     <div className="mt-2 flex items-center gap-3">
@@ -417,6 +515,10 @@ export default function ValidatiePage() {
                         </span>
                       )}
                     </div>
+                    <p className="mt-2 text-xs text-fg-subtle">
+                      Tip: test slaagt alleen als het veld in de resource daadwerkelijk bestaat.
+                      Pas de JSON aan om verschillende scenario&apos;s door te spelen.
+                    </p>
                   </div>
 
                   <div className="flex justify-end gap-2">
