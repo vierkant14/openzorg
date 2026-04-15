@@ -3,6 +3,7 @@
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
+import { PractitionerPicker } from "../../../../components/PractitionerPicker";
 import { ecdFetch } from "../../../../lib/api";
 
 interface FhirBundle<T> {
@@ -88,8 +89,12 @@ function MdoForm({ clientId, onSaved }: { clientId: string; onSaved: () => void 
           <input type="date" value={datum} onChange={(e) => setDatum(e.target.value)} required className={inputCls} />
         </div>
         <div>
-          <label className="mb-1 block text-sm font-medium text-fg-muted">Deelnemer naam *</label>
-          <input type="text" value={deelnemerNaam} onChange={(e) => setDeelnemerNaam(e.target.value)} placeholder="bijv. Dr. Jansen" required className={inputCls} />
+          <label className="mb-1 block text-sm font-medium text-fg-muted">Deelnemer *</label>
+          <PractitionerPicker
+            value={deelnemerNaam}
+            onChange={(_id, displayName) => setDeelnemerNaam(displayName)}
+            placeholder="Zoek een medewerker..."
+          />
         </div>
         <div className="sm:col-span-2">
           <label className="mb-1 block text-sm font-medium text-fg-muted">Onderwerp *</label>
