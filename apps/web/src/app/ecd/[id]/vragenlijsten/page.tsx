@@ -80,7 +80,7 @@ function VragenlijstForm({
     if (!selectedTemplate?.id) return;
     setSaving(true);
     setError(null);
-    const { error: err } = await ecdFetch(`/api/clients/${clientId}/vragenlijsten`, {
+    const { error: err } = await ecdFetch(`/api/clients/${clientId}/responses`, {
       method: "POST",
       body: JSON.stringify({
         questionnaireId: selectedTemplate.id,
@@ -157,7 +157,7 @@ export default function VragenlijstenPage() {
   const load = useCallback(() => {
     setLoading(true);
     ecdFetch<{ entry?: Array<{ resource: FhirQuestionnaireResponse }> }>(
-      `/api/clients/${clientId}/vragenlijsten`,
+      `/api/clients/${clientId}/responses`,
     ).then(({ data, error: err }) => {
       if (err) setError(err);
       else setResponses(data?.entry?.map((e) => e.resource) ?? []);
