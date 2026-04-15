@@ -109,12 +109,15 @@ services:
   # ── Ollama (lokale LLM runtime) ─────────────────────────────
   # Start apart aan: `docker compose -f docker-compose.unraid.yml --profile ai up -d ollama`
   # Eerste keer: `docker exec openzorg-ollama-1 ollama pull gemma3:4b`
+  #
+  # Port 11434 is intentioneel NIET ge-exposed naar de host — de ECD
+  # service verbindt via het docker netwerk op http://ollama:11434. Als
+  # je 'm ook vanaf buiten wilt aanroepen, voeg `ports: ["11435:11434"]`
+  # toe.
   ollama:
     profiles: ["ai"]
     image: ollama/ollama:latest
     restart: unless-stopped
-    ports:
-      - "11434:11434"
     volumes:
       - ollama_data:/root/.ollama
     # GPU-acceleratie: ontkoppel de volgende lines als je een NVIDIA GPU hebt
