@@ -101,22 +101,13 @@ export default function MedicatiePage() {
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [medCodelijst, setMedCodelijst] = useState<Array<{ code: string; display: string }>>([]);
-  const [practitioners, setPractitioners] = useState<Array<{ id: string; name: string }>>([]);
   const [editingMed, setEditingMed] = useState<FhirMedicationRequest | null>(null);
   const [stoppingId, setStoppingId] = useState<string | null>(null);
 
-  // Load medicatie codelijst + practitioners
+  // Load medicatie codelijst (voorschrijvers komen via PractitionerPicker in het form)
   useEffect(() => {
     ecdFetch<{ items: Array<{ code: string; display: string }> }>("/api/admin/codelijsten/medicatie")
       .then(({ data }) => { if (data?.items) setMedCodelijst(data.items); });
-    ecdFetch<{ entry?: Array<{ resource: { id: string; name?: Array<{ family?: string; given?: string[] }> } }> }>("/api/medewerkers")
-      .then(({ data }) => {
-        const list = data?.entry?.map((e) => ({
-          id: e.resource.id,
-          name: [...(e.resource.name?.[0]?.given ?? []), e.resource.name?.[0]?.family ?? ""].filter(Boolean).join(" ") || e.resource.id,
-        })) ?? [];
-        setPractitioners(list);
-      });
   }, []);
 
   const load = useCallback(() => {
@@ -159,7 +150,6 @@ export default function MedicatiePage() {
         <MedicatieForm
           clientId={clientId}
           medCodelijst={medCodelijst}
-          practitioners={practitioners}
           onSaved={() => {
             setShowForm(false);
             load();
@@ -171,7 +161,6 @@ export default function MedicatiePage() {
         <MedicatieForm
           clientId={clientId}
           medCodelijst={medCodelijst}
-          practitioners={practitioners}
           editItem={editingMed}
           onSaved={() => {
             setEditingMed(null);
@@ -297,14 +286,12 @@ function MedicatieForm({
   onSaved,
   onCancel,
   medCodelijst = [],
-  practitioners = [],
   editItem,
 }: {
   clientId: string;
   onSaved: () => void;
   onCancel?: () => void;
   medCodelijst?: Array<{ code: string; display: string }>;
-  practitioners?: Array<{ id: string; name: string }>;
   editItem?: FhirMedicationRequest;
 }) {
   const [naam, setNaam] = useState(editItem?.medicationCodeableConcept?.text ?? "");
