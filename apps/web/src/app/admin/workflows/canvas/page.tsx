@@ -287,6 +287,10 @@ function BpmnCanvasInner() {
     setSelectedElement((prev) => (prev ? { ...prev, triggerType: type, triggerConfig: config } : prev));
   }
 
+  function insertShape(type: "bpmn:UserTask" | "bpmn:ExclusiveGateway" | "bpmn:EndEvent" | "bpmn:ServiceTask" | "bpmn:ScriptTask" | "bpmn:ParallelGateway") {
+    editorRef.current?.appendShape(type);
+  }
+
   async function handleNewBlank() {
     if (!editorRef.current) return;
     setResult(null);
@@ -438,6 +442,60 @@ function BpmnCanvasInner() {
             >
               {testing ? "Testen..." : "▶ Test dit proces"}
             </button>
+          </div>
+        </div>
+
+        {/* Quick-insert toolbar — maakt BPMN-shapes toevoegen makkelijker
+             dan de kleine default bpmn-js palette */}
+        <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-default bg-raised p-3">
+          <span className="text-xs font-medium text-fg-muted mr-1">Voeg toe:</span>
+          <button
+            type="button"
+            onClick={() => insertShape("bpmn:UserTask")}
+            className="inline-flex items-center gap-2 rounded-lg border border-default bg-page px-3 py-1.5 text-sm font-medium text-fg hover:bg-brand-50 hover:border-brand-300 dark:hover:bg-brand-950/20 btn-press"
+            title="Taak die door een gebruiker uitgevoerd moet worden"
+          >
+            <span className="inline-block h-4 w-6 rounded border-2 border-brand-600 bg-brand-50 dark:bg-brand-950/30" />
+            User Task
+          </button>
+          <button
+            type="button"
+            onClick={() => insertShape("bpmn:ExclusiveGateway")}
+            className="inline-flex items-center gap-2 rounded-lg border border-default bg-page px-3 py-1.5 text-sm font-medium text-fg hover:bg-amber-50 hover:border-amber-300 dark:hover:bg-amber-950/20 btn-press"
+            title="Exclusive Gateway: ja/nee beslissing"
+          >
+            <span className="inline-block h-4 w-4 rotate-45 border-2 border-amber-600 bg-amber-50 dark:bg-amber-950/30" />
+            Beslissing
+          </button>
+          <button
+            type="button"
+            onClick={() => insertShape("bpmn:ParallelGateway")}
+            className="inline-flex items-center gap-2 rounded-lg border border-default bg-page px-3 py-1.5 text-sm font-medium text-fg hover:bg-sky-50 hover:border-sky-300 dark:hover:bg-sky-950/20 btn-press"
+            title="Parallel Gateway: alle paden tegelijk"
+          >
+            <span className="inline-block h-4 w-4 rotate-45 border-2 border-sky-600 bg-sky-50 dark:bg-sky-950/30" />
+            Parallel
+          </button>
+          <button
+            type="button"
+            onClick={() => insertShape("bpmn:ServiceTask")}
+            className="inline-flex items-center gap-2 rounded-lg border border-default bg-page px-3 py-1.5 text-sm font-medium text-fg hover:bg-emerald-50 hover:border-emerald-300 dark:hover:bg-emerald-950/20 btn-press"
+            title="Service Task: automatisch door het systeem"
+          >
+            <span className="inline-block h-4 w-6 rounded border-2 border-emerald-600 bg-emerald-50 dark:bg-emerald-950/30" />
+            Service (auto)
+          </button>
+          <button
+            type="button"
+            onClick={() => insertShape("bpmn:EndEvent")}
+            className="inline-flex items-center gap-2 rounded-lg border border-default bg-page px-3 py-1.5 text-sm font-medium text-fg hover:bg-coral-50 hover:border-coral-300 dark:hover:bg-coral-950/20 btn-press"
+            title="Einde van het proces"
+          >
+            <span className="inline-block h-4 w-4 rounded-full border-2 border-coral-600 bg-coral-50 dark:bg-coral-950/30" />
+            Einde
+          </button>
+          <div className="ml-auto flex items-center gap-2 text-xs text-fg-subtle">
+            <span>💡 Selecteer eerst een element, of klik zonder selectie om naast het start-event toe te voegen</span>
           </div>
         </div>
 

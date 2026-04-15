@@ -83,6 +83,11 @@ export interface BpmnEditorHandle {
   setTaskName: (value: string) => void;
   setFlowCondition: (flowId: string, expression: string) => void;
   setStartTrigger: (type: "api" | "form" | "timer" | "event", config: string) => void;
+  /**
+   * Voeg een shape toe aan het canvas naast het laatste geselecteerde element
+   * (of naast het start event als niks is geselecteerd).
+   */
+  appendShape: (type: "bpmn:UserTask" | "bpmn:ExclusiveGateway" | "bpmn:EndEvent" | "bpmn:ServiceTask" | "bpmn:ScriptTask" | "bpmn:ParallelGateway") => void;
 }
 
 interface BpmnCanvas {
@@ -95,6 +100,8 @@ interface BpmnSelection {
 
 interface BpmnModeling {
   updateProperties: (element: BpmnElement, props: Record<string, unknown>) => void;
+  appendShape: (source: BpmnElement, shape: { type: string }, position: { x: number; y: number }) => BpmnElement;
+  createShape: (shape: { type: string }, position: { x: number; y: number }, parent: BpmnElement) => BpmnElement;
 }
 
 interface BpmnFactory {
@@ -314,6 +321,42 @@ export const BpmnEditor = forwardRef<BpmnEditorHandle, BpmnEditorProps>(function
             "openzorg:triggerType": type,
             "openzorg:triggerConfig": config,
           });
+        },
+        appendShape(shapeType) {
+          if (!modelerRef.current) return;
+          const modeling = modelerRef.current.get("modeling") as BpmnModeling;
+          const registry = modelerRef.current.get("elementRegistry") as BpmnElementRegistry;
+          const { element: picked } = getSelected();
+
+          // Kies een source: selectie of het eerste start-event
+          let source = picked;
+          if (!source) {
+            // Vind start-event
+            const all = Object.values((registry as unknown as { _elements: Record<string, { element: BpmnElement }> })._elements ?? {});
+            for (const wrapper of all) {
+              const el = (wrapper as { element?: BpmnElement }).element ?? (wrapper as unknown as BpmnElement);
+              if (el && typeof el === "object" && (el as BpmnElement).type?.endsWith("StartEvent")) {
+                source = el as BpmnElement;
+                break;
+              }
+            }
+          }
+          if (!source) return;
+
+          try {
+            // Gebruik relatieve positie naast de source
+            const newElement = modeling.appendShape(
+              source,
+              { type: shapeType },
+              { x: 150, y: 0 },
+            );
+            if (newElement) {
+              const selection = modelerRef.current.get("selection") as BpmnSelection & { select: (el: BpmnElement) => void };
+              selection.select(newElement);
+            }
+          } catch (err) {
+            setError(err instanceof Error ? err.message : "Kon shape niet toevoegen");
+          }
         },
       };
     },
