@@ -98,8 +98,14 @@ services:
       POSTGRES_USER: openzorg
       POSTGRES_PASSWORD: openzorg_dev_password
       MASTER_ADMIN_KEY: ${MASTER_ADMIN_KEY:-dev-master-key}
-      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
+      # Ollama draait al op de Unraid host op :11434 — bereikbaar via
+      # host.docker.internal. Als je liever de meegeleverde openzorg-
+      # ollama-1 container gebruikt, zet hem in profile 'ai' aan en
+      # override OLLAMA_BASE_URL naar http://ollama:11434
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       OLLAMA_DEFAULT_MODEL: ${OLLAMA_DEFAULT_MODEL:-gemma3:4b}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:4001/health || exit 1"]
       interval: 10s
