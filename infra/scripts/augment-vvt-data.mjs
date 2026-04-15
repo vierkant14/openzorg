@@ -26,6 +26,9 @@ const MEDPLUM = process.env.MEDPLUM || 'http://medplum:8103';
 const EMAIL = process.env.TENANT_EMAIL || 'jan@horizon.nl';
 const PASSWORD = process.env.TENANT_PASSWORD;
 const TARGET_CLIENTS = parseInt(process.env.TARGET_CLIENTS || '42', 10);
+const TARGET_APPOINTMENTS = parseInt(process.env.TARGET_APPOINTMENTS || '25', 10);
+const TARGET_INTAKES = parseInt(process.env.TARGET_INTAKES || '8', 10);
+const WORKFLOW_BRIDGE = process.env.WORKFLOW_BRIDGE || 'http://workflow-bridge:4003';
 
 if (!PASSWORD) {
   console.error('TENANT_PASSWORD env var is required');
@@ -315,9 +318,102 @@ async function main() {
     }
   }
 
-  console.log(`\n\n✅ Klaar!`);
-  console.log(`   Cliënten aangemaakt: ${created}/${TARGET_CLIENTS}`);
-  console.log(`   Errors: ${errors.length}`);
+  console.log(`\n\n✅ Cliënten klaar: ${created}/${TARGET_CLIENTS} (errors: ${errors.length})`);
+
+  // ── Afspraken (Appointment) ──
+  console.log(`\n📅 ${TARGET_APPOINTMENTS} afspraken aanmaken...`);
+  const patientsForAppt = await fhirSearch(token, 'Patient', '_count=50&active=true');
+  const patientIds = (patientsForAppt.entry ?? []).map((e) => e.resource.id).filter(Boolean);
+  const practRes = await fhirSearch(token, 'Practitioner', '_count=30');
+  const practIds = (practRes.entry ?? []).map((e) => e.resource.id).filter(Boolean);
+
+  let apptCreated = 0;
+  const APPT_TYPES = [
+    { code: 'persoonlijke-verzorging', label: 'Persoonlijke verzorging' },
+    { code: 'wondverzorging', label: 'Wondverzorging' },
+    { code: 'medicatie', label: 'Medicatie aanreiken' },
+    { code: 'dagbesteding', label: 'Dagbesteding' },
+    { code: 'intakegesprek', label: 'Intakegesprek' },
+    { code: 'evaluatie', label: 'Evaluatie zorgplan' },
+    { code: 'huisbezoek', label: 'Huisbezoek' },
+  ];
+  for (let i = 0; i < TARGET_APPOINTMENTS; i++) {
+    if (patientIds.length === 0 || practIds.length === 0) break;
+    try {
+      const daysFromNow = randInt(-2, 14);
+      const hour = randInt(8, 17);
+      const start = new Date();
+      start.setDate(start.getDate() + daysFromNow);
+      start.setHours(hour, randInt(0, 3) * 15, 0, 0);
+      const end = new Date(start.getTime() + randInt(30, 90) * 60000);
+      const type = rand(APPT_TYPES);
+      const clientId = rand(patientIds);
+      const practId = rand(practIds);
+      await fhirCreate(token, {
+        resourceType: 'Appointment',
+        status: daysFromNow < 0 ? 'fulfilled' : 'booked',
+        serviceType: [{ text: type.label }],
+        appointmentType: { text: type.label, coding: [{ code: type.code }] },
+        start: start.toISOString(),
+        end: end.toISOString(),
+        participant: [
+          { actor: { reference: `Patient/${clientId}` }, status: 'accepted' },
+          { actor: { reference: `Practitioner/${practId}` }, status: 'accepted' },
+        ],
+        description: `${type.label} voor cliënt`,
+      });
+      apptCreated++;
+    } catch (e) {
+      errors.push(`Afspraak ${i}: ${e.message}`);
+    }
+  }
+  console.log(`   ✅ ${apptCreated}/${TARGET_APPOINTMENTS} afspraken aangemaakt`);
+
+  // ── Workflow instances (intake-proces) ──
+  // Bepaal tenant-id uit token (Medplum geeft projectId via /auth/me)
+  // In plaats daarvan: de workflow-bridge zet tenantId zelf via X-Tenant-ID header.
+  // We hebben de tenantId in de context nodig. Die halen we via de Medplum profile.
+  console.log(`\n⚙️  ${TARGET_INTAKES} workflow-intakes starten...`);
+  try {
+    const meRes = await fetch(`${MEDPLUM}/auth/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const meData = await meRes.json();
+    const tenantId = meData.project?.reference?.replace('Project/', '') ?? meData.project?.id;
+
+    if (!tenantId) {
+      console.log('   ⚠️  Kon tenant-id niet vinden, skip workflow-intakes');
+    } else {
+      let intakesCreated = 0;
+      for (let i = 0; i < TARGET_INTAKES && i < patientIds.length; i++) {
+        try {
+          const clientId = patientIds[i];
+          const res = await fetch(`${WORKFLOW_BRIDGE}/api/processen/intake-proces/start`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Tenant-ID': tenantId,
+            },
+            body: JSON.stringify({
+              variables: {
+                clientId,
+                clientNaam: `Test cliënt ${i + 1}`,
+              },
+            }),
+          });
+          if (res.ok) intakesCreated++;
+        } catch (e) {
+          errors.push(`Intake ${i}: ${e.message}`);
+        }
+      }
+      console.log(`   ✅ ${intakesCreated}/${TARGET_INTAKES} intake-processen gestart (taken in werkbak)`);
+    }
+  } catch (e) {
+    console.log(`   ⚠️  Workflow-intakes overgeslagen: ${e.message}`);
+  }
+
+  console.log(`\n✅ Klaar!`);
+  console.log(`   Totaal errors: ${errors.length}`);
   if (errors.length > 0 && errors.length < 10) {
     console.log('\n⚠️  Fouten:');
     errors.forEach((e) => console.log(`   - ${e}`));
