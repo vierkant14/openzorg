@@ -2,6 +2,28 @@
 
 Alle wijzigingen sinds 14 april 16:00, in testbare volgorde. Vink af wat werkt, markeer wat stuk is en stuur screenshots.
 
+## 🔥 Fixes middag-sessie 15 april (test deze EERST)
+
+Na deze middag-sessie zijn een aantal blockers opgelost. Verifieer in deze volgorde — alles hieronder moet werken voor de andere tests zin hebben.
+
+- [ ] **Medewerkers lijst** (http://192.168.1.10:13000/admin/medewerkers) — moet **21 medewerkers** (Horizon) of ~20 (De Linde) tonen. Was leeg door een routing-bug waarbij vragenlijsten `/:id` catch-all `/api/medewerkers` opving.
+- [ ] **Organisatie lijst** (http://192.168.1.10:13000/admin/organisatie) — moet **9 organisaties** tonen. Zelfde routing-bug.
+- [ ] **Rooster pagina** (http://192.168.1.10:13000/rooster) — medewerker-dropdown moet gevuld zijn met 21 namen; niet meer "geen medewerkers".
+- [ ] **Contracten** (http://192.168.1.10:13000/admin/contracten) — mag leeg zijn (0 geseed) maar **geen foutmelding**. Was `Invalid search chain: _has:extension:url` van Medplum.
+- [ ] **Clientenlijst** (http://192.168.1.10:13000/ecd) — alle cliënten zichtbaar inclusief inactieve wanneer je "Toon inactief" aanzet. Was `Boolean search value must be 'true' or 'false'` van Medplum.
+- [ ] **Validatieregels** (http://192.168.1.10:13000/admin/validatie) — maak een regel, refresh, regel is er nog. Was duplicate-route bug waarbij oude handlers in configuratie.ts de nieuwe shadowen.
+- [ ] **State-machines** (http://192.168.1.10:13000/admin/state-machines) — dropdown toont **10 resource-types**: Patient, Practitioner, Appointment, CarePlan, Task, MedicationRequest, ServiceRequest, Encounter, Consent, RiskAssessment.
+- [ ] **Zorgplan verantwoordelijke** (http://192.168.1.10:13000/ecd/{id}/zorgplan) — "Verantwoordelijke behandelaar" is nu een **dropdown** (PractitionerPicker), geen vrij tekstveld meer. Dit werkte pas nadat medewerkers-endpoint weer data gaf.
+- [ ] **MDO deelnemers** — zelfde PractitionerPicker.
+- [ ] **Medicatie voorschrijver** — zelfde PractitionerPicker.
+- [ ] **Workflow canvas** (http://192.168.1.10:13000/admin/workflows/canvas) — na laden van een template is het **start-event al geselecteerd** en zie je direct het "Trigger-type" panel rechts (api/form/timer/event). Was discoverability-bug.
+- [ ] **Workflow quick-insert** — 5 gekleurde knoppen boven het canvas (User Task / Beslissing / Parallel / Service / Einde). Klik toevoegt een shape naast het start-event of de huidige selectie.
+
+Als iets van het bovenstaande NIET werkt, stop met testen en rapporteer — er zit dan een regressie in die de rest van de test ook blokkeert.
+
+---
+
+
 **Test-omgeving:** http://192.168.1.10:13000
 **Login:** `admin@openzorg.nl` / `Oz!Adm1n#2026mXq7` (master) of `jan@horizon.nl` / `Hz!J4n#2026pKw8` (tenant beheerder)
 
@@ -173,3 +195,12 @@ docker exec openzorg-ecd-1 wget -qO- "http://localhost:4001/api/admin/rollen" --
 | Dashboard persoon | `/dashboard` | Begroeting met naam |
 
 Meld alles dat niet groen is, ik fix het.
+
+## Bevindingen
+1. Na inactief maken van client verdwijnd die van de clientenlijst, hij moet wel nog vindbaar zijn om hem eventueel te heractiveren. 
+2. Verantwoordelijk behandelaar bij client onder zorgplan nog altijd geen LookUp alles naar medewerker of client en andere velden moet een lookup worden. Zo min mogelijk vrij text velden
+3. Workflow: ik kan niet dezelfde opties kiezen in de UI als de voorbeeld processen, dus geen user of decision flow.
+3. Workflow: ik kan geen start event kiezen hoe moet ik wten wat de start event zou kunnen zijn? Ah als je direct op het bolletje kklikt zie je meer maar er zou en lijst moeten komen met alle opties? 
+4. Workflow: UI is niet heel vriendelijk
+5. Workflow: UserTask is geen optie
+6. #8: Opslaan mislukt: Internal Server Error
