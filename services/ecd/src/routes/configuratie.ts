@@ -183,71 +183,7 @@ configuratieRoutes.delete("/custom-fields/:id", async (c) => {
 });
 
 // --- Validation Rules ---
-
-configuratieRoutes.get("/validation-rules", async (c) => {
-  const tenantId = c.get("tenantId");
-  const tenantUuid = await getTenantUuid(tenantId);
-  if (!tenantUuid) return c.json({ validationRules: [] });
-
-  const rules = await loadValidationRules(tenantUuid);
-  return c.json({ validationRules: rules });
-});
-
-configuratieRoutes.post("/validation-rules", async (c) => {
-  const tenantId = c.get("tenantId");
-  const tenantUuid = await getTenantUuid(tenantId);
-  if (!tenantUuid) return c.json({ error: `Tenant niet gevonden voor ID '${tenantId}'. Controleer of de tenant correct is aangemaakt.` }, 404);
-
-  const body = await c.req.json<{
-    resourceType: string;
-    fieldPath: string;
-    operator: ValidationRule["operator"];
-    value: ValidationRule["value"];
-    errorMessage: string;
-  }>();
-
-  if (!body.resourceType || !body.fieldPath || !body.operator || !body.errorMessage) {
-    return c.json({ error: "resourceType, fieldPath, operator en errorMessage zijn verplicht" }, 400);
-  }
-
-  const validOperators = ["required", "min", "max", "pattern", "in", "minLength", "maxLength"];
-  if (!validOperators.includes(body.operator)) {
-    return c.json({ error: `operator moet een van ${validOperators.join(", ")} zijn` }, 400);
-  }
-
-  const configData = {
-    resourceType: body.resourceType,
-    fieldPath: body.fieldPath,
-    operator: body.operator,
-    value: body.value,
-    errorMessage: body.errorMessage,
-  };
-
-  const res = await pool.query(
-    "INSERT INTO openzorg.tenant_configurations (tenant_id, config_type, config_data) VALUES ($1, 'validation_rule', $2) RETURNING id",
-    [tenantUuid, JSON.stringify(configData)],
-  );
-
-  const newRule: ValidationRule = {
-    id: res.rows[0]?.id as string,
-    ...configData,
-    layer: "uitbreiding",
-  };
-
-  return c.json({ validationRule: newRule }, 201);
-});
-
-configuratieRoutes.delete("/validation-rules/:id", async (c) => {
-  const tenantId = c.get("tenantId");
-  const ruleId = c.req.param("id");
-  const tenantUuid = await getTenantUuid(tenantId);
-  if (!tenantUuid) return c.json({ error: `Tenant niet gevonden voor ID '${tenantId}'. Controleer of de tenant correct is aangemaakt.` }, 404);
-
-  const res = await pool.query(
-    "DELETE FROM openzorg.tenant_configurations WHERE id = $1 AND tenant_id = $2 AND config_type = 'validation_rule'",
-    [ruleId, tenantUuid],
-  );
-
-  if (res.rowCount === 0) return c.json({ error: "Validatieregel niet gevonden" }, 404);
-  return c.json({ deleted: true });
-});
+// De canonical routes voor /api/admin/validation-rules staan in
+// routes/validation-rules.ts met CRUD + test-endpoint. Deze oude
+// handlers zijn verwijderd in Plan 2D fase 3. De LOAD-helper blijft
+// bestaan omdat andere code hem mogelijk nog aanroept.
