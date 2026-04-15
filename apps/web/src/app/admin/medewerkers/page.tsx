@@ -27,6 +27,11 @@ interface FhirQualification {
   code?: { text?: string };
 }
 
+interface FhirExtension {
+  url?: string;
+  valueString?: string;
+}
+
 interface Practitioner {
   id: string;
   resourceType: "Practitioner";
@@ -35,6 +40,19 @@ interface Practitioner {
   identifier?: FhirIdentifier[];
   telecom?: FhirTelecom[];
   qualification?: FhirQualification[];
+  extension?: FhirExtension[];
+}
+
+const MEDEWERKER_STATUS_LABELS: Record<string, { label: string; color: string }> = {
+  onboarding:  { label: "Onboarding", color: "bg-blue-100 text-blue-800 dark:bg-blue-950/30 dark:text-blue-300" },
+  actief:      { label: "Actief",     color: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300" },
+  ziek:        { label: "Ziek",       color: "bg-amber-100 text-amber-800 dark:bg-amber-950/30 dark:text-amber-300" },
+  verlof:      { label: "Met verlof", color: "bg-navy-100 text-navy-800 dark:bg-navy-950/30 dark:text-navy-300" },
+  "uit-dienst": { label: "Uit dienst", color: "bg-surface-200 text-fg-muted dark:bg-surface-800" },
+};
+
+function getMedewerkerStatus(p: Practitioner): string {
+  return p.extension?.find((e) => e.url === "https://openzorg.nl/extensions/medewerkerStatus")?.valueString ?? "";
 }
 
 interface PractitionerBundle {
@@ -397,15 +415,28 @@ export default function MedewerkersPage() {
                         </td>
                         <td className="py-2 pr-4">{getEmail(p) || <span className="text-fg-subtle">&mdash;</span>}</td>
                         <td className="py-2 pr-4">
-                          <span
-                            className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
-                              isActive
-                                ? "bg-brand-50 text-brand-700"
-                                : "bg-surface-100 dark:bg-surface-800 text-fg-subtle"
-                            }`}
-                          >
-                            {isActive ? "Actief" : "Inactief"}
-                          </span>
+                          {(() => {
+                            const statusSlug = getMedewerkerStatus(p);
+                            const statusCfg = MEDEWERKER_STATUS_LABELS[statusSlug];
+                            if (statusCfg) {
+                              return (
+                                <span className={`inline-flex items-center rounded-lg px-2.5 py-0.5 text-xs font-semibold ${statusCfg.color}`}>
+                                  {statusCfg.label}
+                                </span>
+                              );
+                            }
+                            return (
+                              <span
+                                className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                                  isActive
+                                    ? "bg-brand-50 text-brand-700"
+                                    : "bg-surface-100 dark:bg-surface-800 text-fg-subtle"
+                                }`}
+                              >
+                                {isActive ? "Actief" : "Inactief"}
+                              </span>
+                            );
+                          })()}
                         </td>
                         <td className="py-2 pr-4">
                           {isDeleting ? (
