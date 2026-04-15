@@ -3,6 +3,7 @@
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
+import { PractitionerPicker } from "../../../../components/PractitionerPicker";
 import { ecdFetch } from "../../../../lib/api";
 
 /* -------------------------------------------------------------------------- */
@@ -367,7 +368,11 @@ export default function ZorgplanPage() {
             </div>
             <div className="sm:col-span-2">
               <label className="mb-1 block text-sm font-medium text-fg-muted">Verantwoordelijk behandelaar</label>
-              <input type="text" value={verantwoordelijke} onChange={(e) => setVerantwoordelijke(e.target.value)} placeholder="Naam verantwoordelijke zorgverlener" className={inputCls} />
+              <PractitionerPicker
+                value={verantwoordelijke}
+                onChange={(_id, displayName) => setVerantwoordelijke(displayName)}
+                placeholder="Zoek een medewerker..."
+              />
             </div>
           </div>
           <div className="mt-3 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/10 px-3 py-2">
