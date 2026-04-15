@@ -3,6 +3,7 @@
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
+import { CodelijstPicker } from "../../../../components/CodelijstPicker";
 import { ecdFetch } from "../../../../lib/api";
 
 interface FhirBundle<T> {
@@ -108,16 +109,12 @@ export default function AllergieenPage() {
 
       {showForm && (
         <div className="bg-raised rounded-xl border border-default p-4 mb-4 space-y-3">
-          {codelijst.length > 0 ? (
-            <select value={naam} onChange={(e) => setNaam(e.target.value)}
-              className="w-full border border-default rounded-lg px-3 py-2 text-sm bg-raised text-fg">
-              <option value="">Selecteer allergie/intolerantie</option>
-              {codelijst.map((c) => <option key={c.code} value={c.display}>{c.display}</option>)}
-            </select>
-          ) : (
-            <input placeholder="Naam allergie/intolerantie" value={naam} onChange={(e) => setNaam(e.target.value)}
-              className="w-full border border-default rounded-lg px-3 py-2 text-sm bg-raised text-fg" />
-          )}
+          <CodelijstPicker
+            type="allergieen"
+            value={naam}
+            onChange={(display) => setNaam(display)}
+            placeholder="Zoek allergie/intolerantie (SNOMED)…"
+          />
           <div className="grid grid-cols-2 gap-3">
             <select value={categorie} onChange={(e) => setCategorie(e.target.value)}
               className="border border-default rounded-lg px-3 py-2 text-sm bg-raised text-fg">
