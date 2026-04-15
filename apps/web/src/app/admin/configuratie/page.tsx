@@ -65,6 +65,16 @@ const TILES: ConfigTile[] = [
     status: "stable",
   },
   {
+    href: "/admin/vragenlijsten",
+    label: "Vragenlijsten",
+    description:
+      "FHIR Questionnaire templates (screenings, monitoring, intake). Zorgmedewerkers vullen deze in per cliënt. Standaard-voorbeelden: Valrisico, Pijnregistratie, SNAQ ondervoeding, Intake.",
+    samenhang:
+      "Questionnaires → QuestionnaireResponse per cliënt, koppelbaar aan CarePlan. Toegankelijk in cliëntdossier onder de Vragenlijsten-tab.",
+    icon: "📋",
+    status: "stable",
+  },
+  {
     href: "/admin/workflows",
     label: "Workflows (BPMN)",
     description:

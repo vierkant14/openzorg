@@ -82,6 +82,7 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { href: "/admin/configuratie", label: "Overzicht", icon: IconSettings, permission: "configuratie:read" },
       { href: "/admin/workflows", label: "Workflows", icon: IconFlow, permission: "workflows:read", featureFlag: "workflow-engine" },
+      { href: "/admin/vragenlijsten", label: "Vragenlijsten", icon: IconClipboard, permission: "configuratie:read" },
       { href: "/admin/codelijsten", label: "Codelijsten", icon: IconList, permission: "configuratie:read" },
       { href: "/admin/validatie", label: "Validatieregels", icon: IconShield, permission: "configuratie:read" },
       { href: "/admin/state-machines", label: "State-machines", icon: IconFlow, permission: "configuratie:read" },
