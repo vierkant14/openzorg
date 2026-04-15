@@ -135,7 +135,12 @@ export default function DagplanningPage() {
           return { id: e.resource.id ?? "", naam };
         }).filter((p) => p.id);
         setPractitioners(items);
+        // Auto-select eerste medewerker zodat de pagina niet leeg blijft
+        if (items.length > 0 && !practitionerId) {
+          setPractitionerId(items[0]!.id);
+        }
       });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadAfspraken = useCallback(() => {
