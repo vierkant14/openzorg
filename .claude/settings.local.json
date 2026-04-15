@@ -1,5 +1,6 @@
 {
   "permissions": {
+    "defaultMode": "bypassPermissions",
     "allow": [
       "Bash(find /c/Users/kevin/Documents/ClaudeCode/openzorg/apps/web/src/app/ecd/[id] -type f)",
       "Bash(git push:*)",

@@ -189,7 +189,7 @@ export default function ZorgplanPage() {
         start: periodStart,
         ...(periodEnd ? { end: periodEnd } : {}),
       },
-      ...(verantwoordelijke ? { author: [{ display: verantwoordelijke }] } : {}),
+      ...(verantwoordelijke ? { author: { display: verantwoordelijke } } : {}),
     };
 
     const { error: err } = await ecdFetch(`/api/clients/${clientId}/zorgplan`, {

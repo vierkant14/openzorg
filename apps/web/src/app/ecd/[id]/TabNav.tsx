@@ -16,6 +16,8 @@ const TABS = [
   { slug: "diagnoses", label: "Diagnoses" },
   { slug: "risicoscreening", label: "Risicoscreening" },
   { slug: "mdo", label: "MDO" },
+  { slug: "signaleringen", label: "Signaleringen" },
+  { slug: "mic-meldingen", label: "MIC-meldingen" },
   { slug: "vragenlijsten", label: "Vragenlijsten" },
   { slug: "wilsverklaringen", label: "Wilsverklaringen" },
   { slug: "vbm", label: "VBM" },
