@@ -9,8 +9,8 @@
  * Configuration is always data, never code. Layer boundaries are enforced in code.
  */
 
-import type { TenantConfiguration, ValidationRule } from "./configuration";
-import { validateKern } from "./kern-validatie";
+import type { TenantConfiguration, ValidationRule } from "./configuration.js";
+import { validateKern } from "./kern-validatie.js";
 
 export interface ValidationError {
   readonly field: string;

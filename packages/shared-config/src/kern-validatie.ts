@@ -10,7 +10,7 @@
 
 import { isValidBSN } from "@openzorg/shared-domain";
 
-import type { ValidationError } from "./validation-engine";
+import type { ValidationError } from "./validation-engine.js";
 
 /**
  * AGB code validation.
