@@ -134,8 +134,10 @@ app.route("/api/vbm", vbmRoutes);
 app.route("/api/mic-meldingen", micMeldingRoutes);
 
 // Vragenlijsten (Questionnaire + QuestionnaireResponse)
+// NB: dubbele mount op /api moet NA alle single-segment /api/* routes
+// staan, anders vangt vragenlijsten' /:id catch-all bv /api/medewerkers
+// en /api/organisatie op. Zie app.ts onderkant.
 app.route("/api/vragenlijsten", vragenlijstenRoutes);
-app.route("/api", vragenlijstenRoutes);
 
 // Admin configuratie (custom fields, validation rules)
 app.route("/api/admin", configuratieRoutes);
@@ -177,6 +179,11 @@ app.route("/api/admin/state-machines", stateMachinesRoutes);
 // Sprint 6: API docs, Integraties (webhooks + API keys)
 app.route("/api/docs", apiDocsRoutes);
 app.route("/api/admin/integraties", integratieRoutes);
+
+// Vragenlijsten: dubbele mount op /api voor /clients/:id/responses routes.
+// Moet NA alle single-segment /api/* mounts, anders vangt /:id catch-all
+// deze bovenliggende routes op.
+app.route("/api", vragenlijstenRoutes);
 
 // Master admin check-admin endpoint (no auth required, called during login)
 app.get("/api/master/check-admin", async (c) => {
