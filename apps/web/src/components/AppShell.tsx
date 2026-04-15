@@ -76,6 +76,7 @@ const NAV_SECTIONS: NavSection[] = [
       { href: "/admin/facturatie", label: "Facturatie", icon: IconReceipt, permission: "configuratie:read", featureFlag: "facturatie-module" },
       { href: "/admin/codelijsten", label: "Codelijsten", icon: IconList, permission: "configuratie:read" },
       { href: "/admin/workflows", label: "Workflows", icon: IconFlow, permission: "workflows:read", featureFlag: "workflow-engine" },
+      { href: "/admin/workflows/dmn", label: "DMN tabellen (bèta)", icon: IconList, permission: "workflows:read", featureFlag: "dmn-editor" },
       { href: "/admin/configuratie", label: "Configuratie", icon: IconSettings, permission: "configuratie:read" },
       { href: "/admin/validatie", label: "Validatieregels", icon: IconShield, permission: "configuratie:read" },
       { href: "/admin/task-form-options", label: "Taak-formulieren", icon: IconList, permission: "configuratie:read" },
