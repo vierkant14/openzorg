@@ -98,11 +98,33 @@ services:
       POSTGRES_USER: openzorg
       POSTGRES_PASSWORD: openzorg_dev_password
       MASTER_ADMIN_KEY: ${MASTER_ADMIN_KEY:-dev-master-key}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
+      OLLAMA_DEFAULT_MODEL: ${OLLAMA_DEFAULT_MODEL:-gemma3:4b}
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:4001/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
+
+  # ── Ollama (lokale LLM runtime) ─────────────────────────────
+  # Start apart aan: `docker compose -f docker-compose.unraid.yml --profile ai up -d ollama`
+  # Eerste keer: `docker exec openzorg-ollama-1 ollama pull gemma3:4b`
+  ollama:
+    profiles: ["ai"]
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    # GPU-acceleratie: ontkoppel de volgende lines als je een NVIDIA GPU hebt
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
 
   # ── Flowable Community REST (BPMN engine) ──────────────────
   flowable:
@@ -258,3 +280,4 @@ services:
 volumes:
   postgres_data:
   medplum_data:
+  ollama_data:

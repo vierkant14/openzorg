@@ -6,6 +6,7 @@ import { pool } from "./lib/db.js";
 import { auditMiddleware } from "./middleware/audit.js";
 import { rbacMiddleware } from "./middleware/rbac.js";
 import { tenantMiddleware } from "./middleware/tenant.js";
+import { aiRoutes } from "./routes/ai.js";
 import { allergieRoutes } from "./routes/allergie.js";
 import { apiDocsRoutes } from "./routes/api-docs.js";
 import { berichtenRoutes } from "./routes/berichten.js";
@@ -179,6 +180,9 @@ app.route("/api/admin/state-machines", stateMachinesRoutes);
 // Sprint 6: API docs, Integraties (webhooks + API keys)
 app.route("/api/docs", apiDocsRoutes);
 app.route("/api/admin/integraties", integratieRoutes);
+
+// AI-assistant (Ollama integration) — data blijft lokaal
+app.route("/api/ai", aiRoutes);
 
 // Vragenlijsten: dubbele mount op /api voor /clients/:id/responses routes.
 // Moet NA alle single-segment /api/* mounts, anders vangt /:id catch-all
