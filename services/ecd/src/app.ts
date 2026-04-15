@@ -19,6 +19,7 @@ import { contractenRoutes } from "./routes/contracten.js";
 import { diagnoseRoutes } from "./routes/diagnose.js";
 import { documentenRoutes } from "./routes/documenten.js";
 import { healthRoutes } from "./routes/health.js";
+import { indicatieRoutes } from "./routes/indicaties.js";
 import { integratieRoutes } from "./routes/integraties.js";
 import { masterAdminRoutes } from "./routes/master-admins.js";
 import { mdoRoutes } from "./routes/mdo.js";
@@ -183,6 +184,9 @@ app.route("/api/admin/integraties", integratieRoutes);
 
 // AI-assistant (Ollama integration) — data blijft lokaal
 app.route("/api/ai", aiRoutes);
+
+// Indicaties (CIZ / Wlz / Zvw / Wmo / Jeugdwet) als FHIR Coverage
+app.route("/api", indicatieRoutes);
 
 // Vragenlijsten: dubbele mount op /api voor /clients/:id/responses routes.
 // Moet NA alle single-segment /api/* mounts, anders vangt /:id catch-all

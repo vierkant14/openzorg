@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 
 const TABS = [
   { slug: "dashboard", label: "Dashboard" },
+  { slug: "indicaties", label: "Indicaties" },
   { slug: "rapportages", label: "Rapportages" },
   { slug: "zorgplan", label: "Zorgplan" },
   { slug: "contactpersonen", label: "Contactpersonen" },
