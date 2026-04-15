@@ -146,10 +146,10 @@ export default function EcdPage() {
     async function fetchClients() {
       setLoading(true);
       setError(null);
-      // Expliciet active=true,false zodat Medplum zowel actieve als
-      // inactieve (soft-deleted) cliënten teruggeeft. Front-end filter
-      // via 'Toon inactief'-toggle regelt de zichtbaarheid.
-      const { data, error: fetchError } = await ecdFetch<FhirBundle>("/api/clients?active=true,false&_count=200");
+      // Medplum accepteert geen comma-separated booleans; laat active-param
+      // weg zodat zowel actieve als inactieve cliënten terugkomen. De
+      // 'Toon inactief'-toggle filtert client-side.
+      const { data, error: fetchError } = await ecdFetch<FhirBundle>("/api/clients?_count=200");
       if (fetchError) {
         setError(fetchError);
         setPatients([]);
