@@ -114,6 +114,176 @@ function ensureFlowRefs(xml: string): string {
   return new XMLSerializer().serializeToString(doc);
 }
 
+/* ── No-code conditie-builder voor gateway flows ── */
+
+type Operator = "==" | "!=" | ">" | "<" | ">=" | "<=";
+
+interface ParsedCondition {
+  variable: string;
+  operator: Operator;
+  value: string;
+}
+
+/**
+ * Parse een Flowable-expressie zoals `${goedgekeurd == true}` naar {variable, op, value}.
+ * Lukt het niet, dan returnen we null en valt de UI terug op de raw-editor.
+ */
+function parseFlowable(expr: string | undefined | null): ParsedCondition | null {
+  if (!expr) return null;
+  const match = expr.match(/^\$\{([a-zA-Z_][\w.]*)\s*(==|!=|>=|<=|>|<)\s*(.+?)\}$/);
+  if (!match) return null;
+  const [, variable, rawOp, rawValue] = match;
+  if (!variable || !rawOp) return null;
+  // Strip aanhalingstekens rond strings
+  const value = (rawValue ?? "").trim().replace(/^["'](.*)["']$/, "$1");
+  return { variable, operator: rawOp as Operator, value };
+}
+
+function buildFlowable(parsed: ParsedCondition): string {
+  const { variable, operator, value } = parsed;
+  // Boolean of getal? Geen quotes. Anders wel.
+  const isNumberOrBool = /^(true|false|-?\d+(\.\d+)?)$/.test(value);
+  const quoted = isNumberOrBool ? value : `'${value.replace(/'/g, "\\'")}'`;
+  return `\${${variable} ${operator} ${quoted}}`;
+}
+
+interface FlowLike {
+  id: string;
+  condition?: string | null;
+  targetName?: string;
+  targetId?: string;
+}
+
+function ConditionBuilder({
+  flow,
+  onChange,
+}: {
+  flow: FlowLike;
+  onChange: (expr: string) => void;
+}) {
+  const parsed = parseFlowable(flow.condition);
+  const [mode, setMode] = useState<"builder" | "raw">(parsed || !flow.condition ? "builder" : "raw");
+  const [variable, setVariable] = useState(parsed?.variable ?? "");
+  const [operator, setOperator] = useState<Operator>(parsed?.operator ?? "==");
+  const [value, setValue] = useState(parsed?.value ?? "");
+  const [rawExpr, setRawExpr] = useState(flow.condition ?? "");
+
+  function updateFromBuilder(next: Partial<ParsedCondition>) {
+    const nextVar = next.variable !== undefined ? next.variable : variable;
+    const nextOp = next.operator !== undefined ? next.operator : operator;
+    const nextVal = next.value !== undefined ? next.value : value;
+    setVariable(nextVar);
+    setOperator(nextOp);
+    setValue(nextVal);
+    if (!nextVar || nextVal === "") {
+      onChange("");
+      return;
+    }
+    onChange(buildFlowable({ variable: nextVar, operator: nextOp, value: nextVal }));
+  }
+
+  function setPreset(type: "goedgekeurd-ja" | "goedgekeurd-nee" | "leeg") {
+    if (type === "leeg") {
+      onChange("");
+      setVariable("");
+      setValue("");
+      return;
+    }
+    const val = type === "goedgekeurd-ja" ? "true" : "false";
+    setVariable("goedgekeurd");
+    setOperator("==");
+    setValue(val);
+    onChange(buildFlowable({ variable: "goedgekeurd", operator: "==", value: val }));
+  }
+
+  const inputCls =
+    "rounded-md border border-default bg-raised px-2 py-1 text-xs text-fg";
+
+  return (
+    <div className="rounded-lg border border-default bg-page p-3 space-y-2">
+      <div className="flex items-center justify-between text-xs">
+        <span className="font-medium text-fg">
+          → {flow.targetName ?? flow.targetId ?? "(onbekend)"}
+        </span>
+        <button
+          type="button"
+          onClick={() => setMode(mode === "builder" ? "raw" : "builder")}
+          className="text-xs text-brand-600 hover:text-brand-700 underline"
+        >
+          {mode === "builder" ? "geavanceerd" : "eenvoudig"}
+        </button>
+      </div>
+
+      {mode === "builder" ? (
+        <>
+          <div className="flex flex-wrap gap-1 text-xs">
+            <button type="button" onClick={() => setPreset("goedgekeurd-ja")} className="rounded border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-950/20 dark:text-emerald-300 dark:border-emerald-800">
+              ✓ goedgekeurd
+            </button>
+            <button type="button" onClick={() => setPreset("goedgekeurd-nee")} className="rounded border border-coral-300 bg-coral-50 px-2 py-0.5 text-coral-700 hover:bg-coral-100 dark:bg-coral-950/20 dark:text-coral-300 dark:border-coral-800">
+              ✗ afgewezen
+            </button>
+            <button type="button" onClick={() => setPreset("leeg")} className="rounded border border-default bg-sunken px-2 py-0.5 text-fg-muted hover:bg-page">
+              default pad
+            </button>
+          </div>
+          <div className="grid grid-cols-[1fr_auto_1fr] gap-1">
+            <input
+              type="text"
+              value={variable}
+              onChange={(e) => updateFromBuilder({ variable: e.target.value })}
+              placeholder="variabele"
+              className={inputCls}
+              title="Naam van de proces-variabele, bv. goedgekeurd, leeftijd, indicatieType"
+            />
+            <select
+              value={operator}
+              onChange={(e) => updateFromBuilder({ operator: e.target.value as Operator })}
+              className={inputCls}
+            >
+              <option value="==">=</option>
+              <option value="!=">≠</option>
+              <option value=">">&gt;</option>
+              <option value="<">&lt;</option>
+              <option value=">=">≥</option>
+              <option value="<=">≤</option>
+            </select>
+            <input
+              type="text"
+              value={value}
+              onChange={(e) => updateFromBuilder({ value: e.target.value })}
+              placeholder="waarde"
+              className={inputCls}
+              title="Waarde: getal, true/false, of tekst"
+            />
+          </div>
+          {variable && value !== "" && (
+            <div className="text-[10px] font-mono text-fg-subtle">
+              → {buildFlowable({ variable, operator, value })}
+            </div>
+          )}
+        </>
+      ) : (
+        <>
+          <input
+            type="text"
+            value={rawExpr}
+            onChange={(e) => {
+              setRawExpr(e.target.value);
+              onChange(e.target.value);
+            }}
+            placeholder="${goedgekeurd == true}"
+            className="w-full rounded-md border border-default bg-raised px-2 py-1 font-mono text-xs text-fg"
+          />
+          <p className="text-[10px] text-fg-subtle">
+            Vrije Flowable EL-expressie. Zie <code>https://www.flowable.com/open-source/docs/bpmn/ch18-Expressions</code>.
+          </p>
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function BpmnCanvasPage() {
   return (
     <FeatureGate flag="bpmn-canvas">
@@ -632,26 +802,16 @@ function BpmnCanvasInner() {
                     ) : (
                       <div className="space-y-2">
                         {selectedElement.outgoingFlows.map((flow) => (
-                          <div key={flow.id} className="rounded-lg border border-default bg-page p-2">
-                            <div className="mb-1 flex items-center justify-between text-xs">
-                              <span className="font-medium text-fg">
-                                → {flow.targetName ?? flow.targetId ?? "(onbekend)"}
-                              </span>
-                              <span className="font-mono text-fg-subtle">{flow.id}</span>
-                            </div>
-                            <input
-                              type="text"
-                              value={flow.condition ?? ""}
-                              onChange={(e) => applyFlowCondition(flow.id, e.target.value)}
-                              placeholder="${goedgekeurd == true}"
-                              className="w-full rounded-md border border-default bg-raised px-2 py-1 font-mono text-xs text-fg"
-                            />
-                          </div>
+                          <ConditionBuilder
+                            key={flow.id}
+                            flow={flow}
+                            onChange={(expr) => applyFlowCondition(flow.id, expr)}
+                          />
                         ))}
                       </div>
                     )}
                     <p className="mt-2 text-xs text-fg-subtle">
-                      Flowable-expressie, bv. <code className="text-xs">$&#123;goedgekeurd == true&#125;</code>. Leeg = default pad.
+                      Leeg laten = default pad (wordt genomen als geen andere conditie klopt).
                     </p>
                   </div>
                 )}
