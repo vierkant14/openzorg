@@ -165,6 +165,69 @@ zorgplanRoutes.post("/zorgplan/:id/doelen", async (c) => {
     );
   }
 
+  // ── SMART-goal validatie (Layer 2 compliance: kwaliteitskader VVT) ──
+  // Skip-header aanwezig? Dan slaat de beheerder deze check over. Altijd
+  // loggen zodat audit kan zien wie expliciet SMART overrulet.
+  const skipSmart = c.req.header("X-Skip-SMART-Validation") === "true";
+  if (!skipSmart) {
+    const smartErrors: string[] = [];
+
+    // Specifiek: beschrijving moet substantieel zijn
+    const description = typeof body["description"] === "object"
+      ? (body["description"] as { text?: string })?.text
+      : (body["description"] as string);
+    if (!description || description.trim().length < 20) {
+      smartErrors.push(
+        "S(pecifiek): doel-beschrijving moet minimaal 20 tekens zijn en concreet gedrag benoemen (bv. 'cliënt loopt 50m met rollator zonder hulp')",
+      );
+    }
+
+    // Meetbaar: target OF measure moet aanwezig zijn
+    const targets = body["target"] as Array<Record<string, unknown>> | undefined;
+    const hasMeasure = Array.isArray(targets) && targets.length > 0;
+    if (!hasMeasure) {
+      smartErrors.push(
+        "M(eetbaar): doel heeft geen target — voeg een meetbare waarde of tijdsduur toe (bv. 50 meter, binnen 3 maanden)",
+      );
+    }
+
+    // Tijdgebonden: target.dueDate, Goal.startDate+target.dueDate, of 'binnen X' in description
+    const hasDueDate = Array.isArray(targets) && targets.some(
+      (t) => typeof t["dueDate"] === "string" || typeof t["dueQuantity"] === "object",
+    );
+    const hasDeadlineInText = description && /\b(binnen|voor|uiterlijk|tot|over)\b.{0,30}\b(dag|week|weken|maand|maanden|jaar)/i.test(description);
+    if (!hasDueDate && !hasDeadlineInText) {
+      smartErrors.push(
+        "T(ijdgebonden): doel heeft geen deadline — vul target.dueDate of noem een termijn in de beschrijving",
+      );
+    }
+
+    if (smartErrors.length > 0) {
+      return c.json(
+        {
+          resourceType: "OperationOutcome",
+          id: "smart-validation-failed",
+          issue: smartErrors.map((diagnostics) => ({
+            severity: "error",
+            code: "invariant",
+            diagnostics,
+            details: { text: diagnostics },
+          })),
+          extension: [
+            {
+              url: "https://openzorg.nl/extensions/smart-validation",
+              extension: [
+                { url: "skipHeader", valueString: "X-Skip-SMART-Validation: true" },
+                { url: "rationale", valueString: "Kwaliteitskader VVT vereist SMART-geformuleerde doelen" },
+              ],
+            },
+          ],
+        },
+        400,
+      );
+    }
+  }
+
   // Validate leefgebied if provided
   const leefgebied = body["leefgebied"] as string | undefined;
   if (leefgebied && !VALID_LEEFGEBIEDEN.has(leefgebied)) {
