@@ -1,335 +1,448 @@
 "use client";
 
+import { VALIDATABLE_FIELDS, RESOURCE_TYPES } from "@openzorg/shared-config";
 import { useCallback, useEffect, useState } from "react";
 
 import AppShell from "../../../components/AppShell";
 import { ecdFetch } from "../../../lib/api";
 
-/* ---------- Types ---------- */
-
 interface ValidationRule {
-  id: string;
+  id?: string;
   resourceType: string;
   fieldPath: string;
-  operator: string;
-  value: string | number | boolean | string[];
+  operator: "required" | "min" | "max" | "range" | "pattern" | "in" | "minLength" | "maxLength";
+  value: string | number | boolean | string[] | [number, number];
   errorMessage: string;
-  layer: string;
+  active?: boolean;
 }
 
-/* ---------- Constants ---------- */
-
-const RESOURCE_TYPES = [
-  { value: "Patient", label: "Client" },
-  { value: "RelatedPerson", label: "Contactpersoon" },
-  { value: "MedicationRequest", label: "Medicatie" },
-  { value: "Immunization", label: "Vaccinatie" },
-  { value: "Condition", label: "Diagnose" },
-  { value: "CarePlan", label: "Zorgplan" },
-  { value: "Observation", label: "Rapportage" },
-  { value: "Appointment", label: "Afspraak" },
+const OPERATORS: Array<{ slug: ValidationRule["operator"]; label: string; valueType: "none" | "number" | "string" | "array" | "range" }> = [
+  { slug: "required", label: "Verplicht", valueType: "none" },
+  { slug: "min", label: "Minimaal", valueType: "number" },
+  { slug: "max", label: "Maximaal", valueType: "number" },
+  { slug: "range", label: "Bereik", valueType: "range" },
+  { slug: "minLength", label: "Min. lengte", valueType: "number" },
+  { slug: "maxLength", label: "Max. lengte", valueType: "number" },
+  { slug: "pattern", label: "Regex", valueType: "string" },
+  { slug: "in", label: "Toegestaan", valueType: "array" },
 ];
 
-const FIELD_PATHS: Record<string, Array<{ value: string; label: string }>> = {
-  Patient: [
-    { value: "name[0].family", label: "Achternaam" },
-    { value: "name[0].given[0]", label: "Voornaam" },
-    { value: "birthDate", label: "Geboortedatum" },
-    { value: "gender", label: "Geslacht" },
-    { value: "telecom[0].value", label: "Telefoon" },
-    { value: "address[0].postalCode", label: "Postcode" },
-    { value: "address[0].city", label: "Woonplaats" },
-  ],
-  RelatedPerson: [
-    { value: "name[0].family", label: "Achternaam" },
-    { value: "name[0].given[0]", label: "Voornaam" },
-    { value: "telecom[0].value", label: "Telefoon" },
-  ],
-  MedicationRequest: [
-    { value: "medicationCodeableConcept.text", label: "Medicatienaam" },
-    { value: "dosageInstruction[0].text", label: "Dosering" },
-  ],
-  Immunization: [
-    { value: "vaccineCode.text", label: "Vaccin" },
-    { value: "occurrenceDateTime", label: "Datum" },
-  ],
-  Condition: [
-    { value: "code.text", label: "Diagnose" },
-  ],
-  CarePlan: [
-    { value: "title", label: "Titel" },
-  ],
-  Observation: [
-    { value: "valueString", label: "Tekst" },
-  ],
-  Appointment: [
-    { value: "start", label: "Starttijd" },
-    { value: "end", label: "Eindtijd" },
-  ],
-};
-
-const OPERATORS = [
-  { value: "required", label: "Verplicht", needsValue: false },
-  { value: "minLength", label: "Minimum lengte", needsValue: true },
-  { value: "maxLength", label: "Maximum lengte", needsValue: true },
-  { value: "pattern", label: "Patroon (regex)", needsValue: true },
-];
-
-/* ---------- Page ---------- */
+function formatValue(rule: ValidationRule): string {
+  if (rule.operator === "required") return "—";
+  if (Array.isArray(rule.value)) return rule.value.join(", ");
+  return String(rule.value);
+}
 
 export default function ValidatiePage() {
   const [rules, setRules] = useState<ValidationRule[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [showForm, setShowForm] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [selectedRuleId, setSelectedRuleId] = useState<string | null>(null);
+  const [showNew, setShowNew] = useState(false);
+  const [status, setStatus] = useState<{ ok: boolean; text: string } | null>(null);
 
-  // Form state
-  const [resourceType, setResourceType] = useState("Patient");
-  const [fieldPath, setFieldPath] = useState("");
-  const [operator, setOperator] = useState("required");
-  const [ruleValue, setRuleValue] = useState("");
-  const [errorMessage, setErrorMessage] = useState("");
+  // Edit state (also used for new)
+  const [editResourceType, setEditResourceType] = useState<string>("Patient");
+  const [editFieldPath, setEditFieldPath] = useState<string>("");
+  const [editOperator, setEditOperator] = useState<ValidationRule["operator"]>("required");
+  const [editValue, setEditValue] = useState<string>("");
+  const [editValueMin, setEditValueMin] = useState<string>("");
+  const [editValueMax, setEditValueMax] = useState<string>("");
+  const [editMessage, setEditMessage] = useState<string>("");
+  const [editActive, setEditActive] = useState<boolean>(true);
 
-  const loadRules = useCallback(async () => {
+  // Test runner
+  const [testResourceJson, setTestResourceJson] = useState<string>("{\n  \"name\": [{\"family\": \"Jansen\"}],\n  \"birthDate\": \"1940-05-12\"\n}");
+  const [testResult, setTestResult] = useState<{ pass: boolean; failMessage?: string } | null>(null);
+
+  const load = useCallback(async () => {
     setLoading(true);
-    const { data, error: err } = await ecdFetch<{ validationRules: ValidationRule[] }>(
-      "/api/admin/validation-rules",
-    );
-    if (err) setError(err);
-    else setRules(data?.validationRules ?? []);
+    const { data } = await ecdFetch<{ rules: ValidationRule[] }>("/api/admin/validation-rules");
+    setRules(data?.rules ?? []);
     setLoading(false);
   }, []);
 
+  useEffect(() => { load(); }, [load]);
+
+  const selected = rules.find((r) => r.id === selectedRuleId) ?? null;
+  const fieldsForType = VALIDATABLE_FIELDS[editResourceType] ?? [];
+  const operatorDef = OPERATORS.find((op) => op.slug === editOperator);
+
   useEffect(() => {
-    loadRules();
-  }, [loadRules]);
+    if (selected) {
+      setEditResourceType(selected.resourceType);
+      setEditFieldPath(selected.fieldPath);
+      setEditOperator(selected.operator);
+      setEditMessage(selected.errorMessage);
+      setEditActive(selected.active ?? true);
+      if (Array.isArray(selected.value) && selected.value.length === 2 && typeof selected.value[0] === "number") {
+        setEditValueMin(String(selected.value[0]));
+        setEditValueMax(String(selected.value[1]));
+      } else if (Array.isArray(selected.value)) {
+        setEditValue(selected.value.join(", "));
+      } else {
+        setEditValue(String(selected.value ?? ""));
+      }
+    }
+  }, [selected]);
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setSaving(true);
-
-    const selectedField = FIELD_PATHS[resourceType]?.find((f) => f.value === fieldPath);
-    const selectedOp = OPERATORS.find((o) => o.value === operator);
-    const defaultMsg = operator === "required"
-      ? `${selectedField?.label || fieldPath} is verplicht`
-      : `${selectedField?.label || fieldPath}: ${selectedOp?.label || operator} ${ruleValue}`;
-
-    const { error: err } = await ecdFetch("/api/admin/validation-rules", {
-      method: "POST",
-      body: JSON.stringify({
-        resourceType,
-        fieldPath,
-        operator,
-        value: selectedOp?.needsValue ? ruleValue : true,
-        errorMessage: errorMessage.trim() || defaultMsg,
-      }),
-    });
-
-    setSaving(false);
-    if (err) {
-      setError(err);
-    } else {
-      setShowForm(false);
-      setFieldPath("");
-      setOperator("required");
-      setRuleValue("");
-      setErrorMessage("");
-      loadRules();
+  function buildValue(): ValidationRule["value"] {
+    if (!operatorDef) return "";
+    switch (operatorDef.valueType) {
+      case "none": return true;
+      case "number": return parseFloat(editValue) || 0;
+      case "array": return editValue.split(",").map((s) => s.trim()).filter(Boolean);
+      case "range": return [parseFloat(editValueMin) || 0, parseFloat(editValueMax) || 0];
+      default: return editValue;
     }
   }
 
-  async function handleDelete(id: string) {
-    if (!confirm("Weet je zeker dat je deze validatieregel wilt verwijderen?")) return;
-    setDeletingId(id);
-    const { error: err } = await ecdFetch(`/api/admin/validation-rules/${id}`, {
-      method: "DELETE",
-    });
-    setDeletingId(null);
-    if (err) setError(err);
-    else loadRules();
+  function buildRule(): ValidationRule {
+    return {
+      resourceType: editResourceType,
+      fieldPath: editFieldPath,
+      operator: editOperator,
+      value: buildValue(),
+      errorMessage: editMessage,
+      active: editActive,
+    };
   }
 
-  const inputCls = "w-full rounded-lg border border-default bg-raised px-3 py-2 text-sm text-fg focus:border-brand-400 focus:ring-2 focus:ring-brand-500/20 outline-none transition-[border-color,box-shadow] duration-200 ease-out";
-  const availableFields = FIELD_PATHS[resourceType] ?? [];
-  const selectedOp = OPERATORS.find((o) => o.value === operator);
+  async function saveRule() {
+    const rule = buildRule();
+    const url = showNew ? "/api/admin/validation-rules" : `/api/admin/validation-rules/${selected?.id}`;
+    const method = showNew ? "POST" : "PUT";
+    const { error } = await ecdFetch(url, { method, body: JSON.stringify(rule) });
+    if (error) {
+      setStatus({ ok: false, text: `Opslaan mislukt: ${error}` });
+    } else {
+      setStatus({ ok: true, text: "Opgeslagen" });
+      setShowNew(false);
+      setTestResult(null);
+      await load();
+      setTimeout(() => setStatus(null), 2500);
+    }
+  }
+
+  async function deleteRule(id: string) {
+    if (!confirm("Regel verwijderen?")) return;
+    const { error } = await ecdFetch(`/api/admin/validation-rules/${id}`, { method: "DELETE" });
+    if (error) {
+      setStatus({ ok: false, text: error });
+    } else {
+      setSelectedRuleId(null);
+      load();
+    }
+  }
+
+  async function testRule() {
+    let resource: Record<string, unknown>;
+    try {
+      resource = JSON.parse(testResourceJson);
+    } catch {
+      setStatus({ ok: false, text: "Ongeldige JSON in voorbeeld-resource" });
+      return;
+    }
+    const { data, error } = await ecdFetch<{ pass: boolean; failMessage?: string }>(
+      "/api/admin/validation-rules/test",
+      {
+        method: "POST",
+        body: JSON.stringify({ rule: buildRule(), resource }),
+      },
+    );
+    if (error) {
+      setStatus({ ok: false, text: error });
+    } else if (data) {
+      setTestResult(data);
+    }
+  }
+
+  function startNew() {
+    setShowNew(true);
+    setSelectedRuleId(null);
+    setEditResourceType("Patient");
+    setEditFieldPath("");
+    setEditOperator("required");
+    setEditValue("");
+    setEditValueMin("");
+    setEditValueMax("");
+    setEditMessage("");
+    setEditActive(true);
+    setTestResult(null);
+  }
 
   return (
     <AppShell>
-      <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between mb-6">
+      <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+        <div className="mb-6 flex items-start justify-between">
           <div>
             <h1 className="text-2xl font-bold text-fg">Validatieregels</h1>
             <p className="mt-1 text-sm text-fg-muted">
-              Configureer welke velden verplicht zijn per resource type. Deze regels gelden voor alle medewerkers.
+              Laag 2 — definieer extra validaties die bovenop de kern-validatie draaien.
+              Kern-velden (BSN, AGB) zijn gelocked.
             </p>
           </div>
           <button
-            onClick={() => setShowForm(!showForm)}
-            className="rounded-lg bg-brand-700 px-5 py-2 text-sm font-medium text-white hover:bg-brand-800 btn-press"
+            type="button"
+            onClick={startNew}
+            className="rounded-lg bg-brand-700 px-4 py-2 text-sm font-medium text-white hover:bg-brand-800"
           >
-            {showForm ? "Annuleren" : "Regel toevoegen"}
+            + Nieuwe regel
           </button>
         </div>
 
-        {error && (
-          <div className="mb-4 rounded-lg bg-coral-50 dark:bg-coral-950/20 border border-coral-200 dark:border-coral-800 px-4 py-3 text-sm text-coral-700 dark:text-coral-300">
-            {error}
+        {status && (
+          <div
+            className={`mb-4 rounded-lg border px-4 py-3 text-sm ${
+              status.ok
+                ? "border-brand-200 bg-brand-50 text-brand-700 dark:border-brand-800 dark:bg-brand-950/20 dark:text-brand-300"
+                : "border-coral-200 bg-coral-50 text-coral-700 dark:border-coral-800 dark:bg-coral-950/20 dark:text-coral-300"
+            }`}
+          >
+            {status.text}
           </div>
         )}
 
-        {/* Add rule form */}
-        {showForm && (
-          <form onSubmit={handleSubmit} className="mb-6 rounded-xl border border-default bg-raised p-5 animate-[fade-in_300ms_cubic-bezier(0.16,1,0.3,1)]">
-            <h3 className="text-base font-semibold text-fg mb-4">Nieuwe validatieregel</h3>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              <div>
-                <label className="block text-xs font-medium text-fg-muted mb-1">Resource type</label>
-                <select
-                  value={resourceType}
-                  onChange={(e) => { setResourceType(e.target.value); setFieldPath(""); }}
-                  className={inputCls}
-                >
-                  {RESOURCE_TYPES.map((rt) => (
-                    <option key={rt.value} value={rt.value}>{rt.label}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-fg-muted mb-1">Veld</label>
-                <select
-                  value={fieldPath}
-                  onChange={(e) => setFieldPath(e.target.value)}
-                  className={inputCls}
-                  required
-                >
-                  <option value="">Selecteer een veld...</option>
-                  {availableFields.map((f) => (
-                    <option key={f.value} value={f.value}>{f.label}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-fg-muted mb-1">Regel</label>
-                <select
-                  value={operator}
-                  onChange={(e) => setOperator(e.target.value)}
-                  className={inputCls}
-                >
-                  {OPERATORS.map((op) => (
-                    <option key={op.value} value={op.value}>{op.label}</option>
-                  ))}
-                </select>
-              </div>
-              {selectedOp?.needsValue && (
-                <div>
-                  <label className="block text-xs font-medium text-fg-muted mb-1">Waarde</label>
-                  <input
-                    type="text"
-                    value={ruleValue}
-                    onChange={(e) => setRuleValue(e.target.value)}
-                    placeholder={operator === "pattern" ? "bijv. ^[0-9]{4}\\s?[A-Z]{2}$" : "bijv. 3"}
-                    className={inputCls}
-                    required
-                  />
+        {loading ? (
+          <div className="py-12 text-center text-fg-muted">Laden...</div>
+        ) : (
+          <div className="grid gap-4 lg:grid-cols-[360px_1fr]">
+            {/* Rules list */}
+            <aside className="rounded-xl border border-default bg-raised p-2">
+              {rules.length === 0 ? (
+                <p className="p-4 text-xs text-fg-subtle">Nog geen regels. Klik "+ Nieuwe regel" om te beginnen.</p>
+              ) : (
+                rules.map((rule) => (
+                  <button
+                    key={rule.id}
+                    type="button"
+                    onClick={() => { setSelectedRuleId(rule.id ?? null); setShowNew(false); }}
+                    className={`w-full rounded-lg px-3 py-2 text-left text-sm transition-colors ${
+                      selectedRuleId === rule.id && !showNew
+                        ? "bg-brand-50 text-brand-700 dark:bg-brand-950/20 dark:text-brand-300"
+                        : "text-fg-muted hover:bg-sunken"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium">{rule.resourceType}.{rule.fieldPath}</span>
+                      {rule.active === false && (
+                        <span className="text-xs text-fg-subtle">uit</span>
+                      )}
+                    </div>
+                    <div className="text-xs text-fg-subtle">
+                      {OPERATORS.find((op) => op.slug === rule.operator)?.label ?? rule.operator}
+                      {" · "}
+                      {formatValue(rule)}
+                    </div>
+                  </button>
+                ))
+              )}
+            </aside>
+
+            {/* Editor */}
+            <div className="rounded-xl border border-default bg-raised p-6">
+              {!selected && !showNew ? (
+                <p className="text-sm text-fg-muted">Kies links een regel of klik "+ Nieuwe regel".</p>
+              ) : (
+                <div className="space-y-4">
+                  <div className="flex items-start justify-between">
+                    <h2 className="text-lg font-semibold text-fg">
+                      {showNew ? "Nieuwe regel" : "Regel bewerken"}
+                    </h2>
+                    {!showNew && selected?.id && (
+                      <button
+                        type="button"
+                        onClick={() => deleteRule(selected.id!)}
+                        className="text-sm text-coral-600 hover:text-coral-800"
+                      >
+                        Verwijderen
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-fg-muted">Resource-type</label>
+                      <select
+                        value={editResourceType}
+                        onChange={(e) => { setEditResourceType(e.target.value); setEditFieldPath(""); }}
+                        className="w-full rounded-lg border border-default bg-raised px-3 py-2 text-sm text-fg"
+                      >
+                        {RESOURCE_TYPES.map((rt) => (
+                          <option key={rt} value={rt}>{rt}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-fg-muted">Veld</label>
+                      <select
+                        value={editFieldPath}
+                        onChange={(e) => setEditFieldPath(e.target.value)}
+                        className="w-full rounded-lg border border-default bg-raised px-3 py-2 text-sm text-fg"
+                      >
+                        <option value="">— kies veld —</option>
+                        {fieldsForType.filter((f) => !f.locked).map((f) => (
+                          <option key={f.path} value={f.path}>{f.label}</option>
+                        ))}
+                      </select>
+                      {fieldsForType.some((f) => f.locked) && (
+                        <p className="mt-1 text-xs text-fg-subtle">
+                          🔒 Kern-velden staan in kern-validatie en kun je niet overschrijven.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-fg-muted">Operator</label>
+                    <select
+                      value={editOperator}
+                      onChange={(e) => setEditOperator(e.target.value as ValidationRule["operator"])}
+                      className="w-full rounded-lg border border-default bg-raised px-3 py-2 text-sm text-fg"
+                    >
+                      {OPERATORS.map((op) => (
+                        <option key={op.slug} value={op.slug}>{op.label}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {operatorDef?.valueType === "number" && (
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-fg-muted">Waarde (getal)</label>
+                      <input
+                        type="number"
+                        value={editValue}
+                        onChange={(e) => setEditValue(e.target.value)}
+                        className="w-full rounded-lg border border-default bg-raised px-3 py-2 text-sm text-fg"
+                      />
+                    </div>
+                  )}
+
+                  {operatorDef?.valueType === "string" && (
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-fg-muted">Patroon (regex)</label>
+                      <input
+                        type="text"
+                        value={editValue}
+                        onChange={(e) => setEditValue(e.target.value)}
+                        placeholder="^[0-9]{4} [A-Z]{2}$"
+                        className="w-full rounded-lg border border-default bg-raised px-3 py-2 font-mono text-xs text-fg"
+                      />
+                    </div>
+                  )}
+
+                  {operatorDef?.valueType === "array" && (
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-fg-muted">Toegestane waarden (comma-separated)</label>
+                      <input
+                        type="text"
+                        value={editValue}
+                        onChange={(e) => setEditValue(e.target.value)}
+                        placeholder="male, female, other"
+                        className="w-full rounded-lg border border-default bg-raised px-3 py-2 text-sm text-fg"
+                      />
+                    </div>
+                  )}
+
+                  {operatorDef?.valueType === "range" && (
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="mb-1 block text-xs font-medium text-fg-muted">Min</label>
+                        <input
+                          type="number"
+                          value={editValueMin}
+                          onChange={(e) => setEditValueMin(e.target.value)}
+                          className="w-full rounded-lg border border-default bg-raised px-3 py-2 text-sm text-fg"
+                        />
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-xs font-medium text-fg-muted">Max</label>
+                        <input
+                          type="number"
+                          value={editValueMax}
+                          onChange={(e) => setEditValueMax(e.target.value)}
+                          className="w-full rounded-lg border border-default bg-raised px-3 py-2 text-sm text-fg"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-fg-muted">Foutbericht</label>
+                    <input
+                      type="text"
+                      value={editMessage}
+                      onChange={(e) => setEditMessage(e.target.value)}
+                      placeholder="bv. Gewicht moet tussen 1 en 300 kg zijn"
+                      className="w-full rounded-lg border border-default bg-raised px-3 py-2 text-sm text-fg"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="flex items-center gap-2 text-sm text-fg-muted">
+                      <input
+                        type="checkbox"
+                        checked={editActive}
+                        onChange={(e) => setEditActive(e.target.checked)}
+                      />
+                      Regel is actief
+                    </label>
+                  </div>
+
+                  {/* Test runner */}
+                  <div className="rounded-lg border border-default bg-page p-3">
+                    <h3 className="mb-2 text-xs font-semibold text-fg">Test deze regel</h3>
+                    <textarea
+                      value={testResourceJson}
+                      onChange={(e) => setTestResourceJson(e.target.value)}
+                      rows={5}
+                      className="w-full rounded-md border border-default bg-raised px-2 py-1 font-mono text-xs text-fg"
+                    />
+                    <div className="mt-2 flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={testRule}
+                        className="rounded-lg border border-default px-3 py-1 text-xs font-medium text-fg-muted hover:bg-sunken"
+                      >
+                        ▶ Run test
+                      </button>
+                      {testResult && (
+                        <span
+                          className={`text-xs font-medium ${
+                            testResult.pass ? "text-brand-600" : "text-coral-600"
+                          }`}
+                        >
+                          {testResult.pass
+                            ? "✅ Regel slaagt"
+                            : `❌ Faalt: ${testResult.failMessage ?? "(geen bericht)"}`}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end gap-2">
+                    {showNew && (
+                      <button
+                        type="button"
+                        onClick={() => setShowNew(false)}
+                        className="text-sm text-fg-muted hover:text-fg"
+                      >
+                        Annuleren
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={saveRule}
+                      disabled={!editFieldPath || !editMessage}
+                      className="rounded-lg bg-brand-700 px-5 py-2 text-sm font-medium text-white hover:bg-brand-800 disabled:opacity-50"
+                    >
+                      {showNew ? "Regel aanmaken" : "Wijzigingen opslaan"}
+                    </button>
+                  </div>
                 </div>
               )}
-              <div className="sm:col-span-2">
-                <label className="block text-xs font-medium text-fg-muted mb-1">
-                  Foutmelding <span className="text-fg-subtle">(optioneel)</span>
-                </label>
-                <input
-                  type="text"
-                  value={errorMessage}
-                  onChange={(e) => setErrorMessage(e.target.value)}
-                  placeholder="Automatisch gegenereerd als leeg"
-                  className={inputCls}
-                />
-              </div>
             </div>
-            <div className="mt-4">
-              <button
-                type="submit"
-                disabled={saving || !fieldPath}
-                className="rounded-lg bg-brand-700 px-5 py-2 text-sm font-medium text-white hover:bg-brand-800 disabled:opacity-50 btn-press"
-              >
-                {saving ? "Opslaan..." : "Regel opslaan"}
-              </button>
-            </div>
-          </form>
-        )}
-
-        {/* Rules list */}
-        {loading ? (
-          <div className="flex items-center justify-center py-12">
-            <div className="h-8 w-8 rounded-full border-4 border-brand-300 border-t-brand-700" style={{ animation: "spin 0.7s linear infinite" }} />
-          </div>
-        ) : rules.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-default bg-raised p-10 text-center">
-            <p className="text-fg-muted">Geen validatieregels geconfigureerd.</p>
-            <p className="mt-1 text-sm text-fg-subtle">
-              Voeg regels toe om velden verplicht te maken voor je medewerkers.
-            </p>
-          </div>
-        ) : (
-          <div className="overflow-hidden rounded-xl border border-default bg-raised">
-            <table className="min-w-full divide-y divide-default text-sm">
-              <thead className="bg-page">
-                <tr>
-                  <th className="px-4 py-3 text-left font-medium text-fg-muted">Resource</th>
-                  <th className="px-4 py-3 text-left font-medium text-fg-muted">Veld</th>
-                  <th className="px-4 py-3 text-left font-medium text-fg-muted">Regel</th>
-                  <th className="px-4 py-3 text-left font-medium text-fg-muted">Foutmelding</th>
-                  <th className="px-4 py-3 text-left font-medium text-fg-muted">Acties</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-subtle">
-                {rules.map((rule) => {
-                  const rtLabel = RESOURCE_TYPES.find((rt) => rt.value === rule.resourceType)?.label ?? rule.resourceType;
-                  const fieldLabel = FIELD_PATHS[rule.resourceType]?.find((f) => f.value === rule.fieldPath)?.label ?? rule.fieldPath;
-                  const opLabel = OPERATORS.find((op) => op.value === rule.operator)?.label ?? rule.operator;
-                  return (
-                    <tr key={rule.id}>
-                      <td className="px-4 py-3">
-                        <span className="inline-flex items-center rounded-lg bg-brand-50 dark:bg-brand-950/20 px-2 py-0.5 text-xs font-semibold text-brand-700 dark:text-brand-300">
-                          {rtLabel}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-fg">{fieldLabel}</td>
-                      <td className="px-4 py-3 text-fg-muted">
-                        {opLabel}
-                        {rule.operator !== "required" && ` (${rule.value})`}
-                      </td>
-                      <td className="px-4 py-3 text-fg-muted text-xs">{rule.errorMessage}</td>
-                      <td className="px-4 py-3">
-                        <button
-                          onClick={() => handleDelete(rule.id)}
-                          disabled={deletingId === rule.id}
-                          className="text-coral-600 hover:text-coral-800 text-xs font-medium btn-press disabled:opacity-50"
-                        >
-                          {deletingId === rule.id ? "..." : "Verwijderen"}
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
           </div>
         )}
-
-        {/* Help text */}
-        <div className="mt-6 rounded-xl border border-default bg-sunken p-4">
-          <h3 className="text-sm font-semibold text-fg mb-2">Hoe werkt het?</h3>
-          <ul className="text-sm text-fg-muted space-y-1">
-            <li>Validatieregels worden gecontroleerd bij het aanmaken en bewerken van gegevens.</li>
-            <li>De <strong>verplicht</strong> regel controleert of een veld is ingevuld.</li>
-            <li><strong>Minimum/maximum lengte</strong> controleert de tekstlengte.</li>
-            <li><strong>Patroon</strong> controleert of de invoer overeenkomt met een regex-patroon.</li>
-            <li>Regels gelden voor alle medewerkers binnen deze organisatie.</li>
-          </ul>
-        </div>
       </div>
     </AppShell>
   );
