@@ -3,6 +3,7 @@
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
+import { CodelijstPicker } from "../../../../components/CodelijstPicker";
 import { PractitionerPicker } from "../../../../components/PractitionerPicker";
 import { ecdFetch } from "../../../../lib/api";
 
@@ -371,26 +372,16 @@ function MedicatieForm({
           <label className="mb-1 block text-sm font-medium text-fg-muted">
             Medicatienaam <span className="text-coral-500">*</span>
           </label>
-          {medCodelijst.length > 0 ? (
-            <select
-              value={naam}
-              onChange={(e) => setNaam(e.target.value)}
-              required
-              className="w-full rounded-md border border-default px-3 py-2 text-sm shadow-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
-            >
-              <option value="">Selecteer medicatie</option>
-              {medCodelijst.map((m) => <option key={m.code} value={m.display}>{m.display}</option>)}
-            </select>
-          ) : (
-            <input
-              type="text"
-              value={naam}
-              onChange={(e) => setNaam(e.target.value)}
-              required
-              placeholder="bijv. Paracetamol 500mg"
-              className="w-full rounded-md border border-default px-3 py-2 text-sm shadow-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
-            />
-          )}
+          <CodelijstPicker
+            type="medicatie"
+            value={naam}
+            onChange={(display) => setNaam(display)}
+            required
+            placeholder="Zoek medicatie (SNOMED)…"
+          />
+          <p className="mt-1 text-xs text-fg-subtle">
+            Zoekt eerst in de tenant-codelijst, daarna in SNOMED CT. Vrije tekst mag als laatste optie.
+          </p>
         </div>
         <div>
           <label className="mb-1 block text-sm font-medium text-fg-muted">Dosering</label>
