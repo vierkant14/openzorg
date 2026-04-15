@@ -2,6 +2,7 @@ import { isValidBSN } from "@openzorg/shared-domain";
 import { Hono } from "hono";
 
 import type { AppEnv } from "../app.js";
+import { errorsToOperationOutcome, validateForSave } from "../lib/fhir-validation.js";
 import {
   medplumFetch,
   medplumProxy,
@@ -105,8 +106,15 @@ clientRoutes.post("/", async (c) => {
 
   const patientBody = {
     ...body,
+    resourceType: "Patient",
     identifier: updatedIdentifiers,
   };
+
+  // Plan 2D fase 4 — tenant validatieregels
+  const validationErrors = await validateForSave(c.get("tenantId"), patientBody);
+  if (validationErrors.length > 0) {
+    return c.json(errorsToOperationOutcome(validationErrors), 400);
+  }
 
   // Create the patient via medplumFetch so we can extract the ID for workflow trigger
   const result = await medplumFetch(c, "/fhir/R4/Patient", {
@@ -160,6 +168,12 @@ clientRoutes.put("/:id", async (c) => {
         400,
       );
     }
+  }
+
+  // Plan 2D fase 4 — tenant validatieregels
+  const validationErrors = await validateForSave(c.get("tenantId"), { ...body, id, resourceType: "Patient" });
+  if (validationErrors.length > 0) {
+    return c.json(errorsToOperationOutcome(validationErrors), 400);
   }
 
   return medplumProxy(c, `/fhir/R4/Patient/${id}`, {

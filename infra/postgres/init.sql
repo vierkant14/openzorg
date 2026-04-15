@@ -275,6 +275,20 @@ SELECT t.id, 'mic-coordinator', 'MIC-coordinator',
   FROM openzorg.tenants t
  WHERE NOT EXISTS (SELECT 1 FROM openzorg.roles r WHERE r.tenant_id = t.id AND r.slug = 'mic-coordinator');
 
+-- Default permissions voor niet-systeem rollen (alleen als nog leeg)
+UPDATE openzorg.roles
+   SET permissions = ARRAY['clients:read','facturatie:read','medewerkers:read','organisatie:read','configuratie:read']
+ WHERE slug = 'controller' AND permissions = '{}';
+UPDATE openzorg.roles
+   SET permissions = ARRAY['clients:read','rapportage:read','mic:read','mic:write','configuratie:read','workflows:read']
+ WHERE slug = 'kwaliteitsmedewerker' AND permissions = '{}';
+UPDATE openzorg.roles
+   SET permissions = ARRAY['clients:read','clients:write','medewerkers:read','organisatie:read','facturatie:read']
+ WHERE slug = 'zorgadministratie' AND permissions = '{}';
+UPDATE openzorg.roles
+   SET permissions = ARRAY['clients:read','mic:read','mic:write','rapportage:read','workflows:read']
+ WHERE slug = 'mic-coordinator' AND permissions = '{}';
+
 -- ──────────────────────────────────────────────────────────────────────────
 -- Plan 2C: Platform-level settings per tenant (feature flags, sessie, branding)
 -- ──────────────────────────────────────────────────────────────────────────
