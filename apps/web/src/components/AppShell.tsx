@@ -49,6 +49,7 @@ const NAV_SECTIONS: NavSection[] = [
     label: "Zorg",
     items: [
       { href: "/ecd", label: "Clienten", icon: IconUsers, permission: "clients:read" },
+      { href: "/zorgplannen", label: "Zorgplannen", icon: IconClipboard, permission: "clients:read" },
       { href: "/overdracht", label: "Overdracht", icon: IconExchange, permission: "clients:read" },
     ],
   },

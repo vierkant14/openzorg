@@ -88,6 +88,20 @@ const VALID_LEEFGEBIEDEN: ReadonlyMap<string, string> = new Map([
 export const zorgplanRoutes = new Hono<AppEnv>();
 
 /**
+ * GET /api/zorgplannen — List all CarePlans across the tenant.
+ *
+ * Gebruikt voor een top-level zorgplan overzicht (welke clienten
+ * hebben een zorgplan, welke status, wanneer laatste update).
+ * Include de Patient voor naam-resolutie in één request.
+ */
+zorgplanRoutes.get("/zorgplannen", async (c) => {
+  return medplumProxy(
+    c,
+    "/fhir/R4/CarePlan?_sort=-_lastUpdated&_count=100&_include=CarePlan:subject",
+  );
+});
+
+/**
  * GET /api/clients/:clientId/zorgplan — Get the CarePlan for a client.
  */
 zorgplanRoutes.get("/clients/:clientId/zorgplan", async (c) => {
