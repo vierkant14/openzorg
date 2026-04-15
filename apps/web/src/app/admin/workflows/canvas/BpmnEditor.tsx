@@ -246,6 +246,21 @@ export const BpmnEditor = forwardRef<BpmnEditorHandle, BpmnEditorProps>(function
           try {
             await modelerRef.current.importXML(xml);
             (modelerRef.current.get("canvas") as BpmnCanvas).zoom("fit-viewport");
+            // Auto-selecteer start-event na (her)laden
+            try {
+              const registry = modelerRef.current.get("elementRegistry") as BpmnElementRegistry;
+              const all = Object.values((registry as unknown as { _elements: Record<string, { element: BpmnElement }> })._elements ?? {});
+              for (const wrapper of all) {
+                const el = (wrapper as { element?: BpmnElement }).element ?? (wrapper as unknown as BpmnElement);
+                if (el && typeof el === "object" && (el as BpmnElement).type?.endsWith("StartEvent")) {
+                  const selection = modelerRef.current.get("selection") as BpmnSelection & { select: (el: BpmnElement) => void };
+                  selection.select(el as BpmnElement);
+                  break;
+                }
+              }
+            } catch {
+              // niet kritiek
+            }
           } catch (err) {
             setError(err instanceof Error ? err.message : "Kon BPMN niet laden");
           }
@@ -379,6 +394,23 @@ export const BpmnEditor = forwardRef<BpmnEditorHandle, BpmnEditorProps>(function
 
         await modeler.importXML(initialXml ?? EMPTY_DIAGRAM);
         (modeler.get("canvas") as BpmnCanvas).zoom("fit-viewport");
+
+        // Auto-selecteer het start-event zodat het trigger-panel direct
+        // zichtbaar is zonder dat de gebruiker op het bolletje hoeft te klikken
+        try {
+          const registry = modeler.get("elementRegistry") as BpmnElementRegistry;
+          const all = Object.values((registry as unknown as { _elements: Record<string, { element: BpmnElement }> })._elements ?? {});
+          for (const wrapper of all) {
+            const el = (wrapper as { element?: BpmnElement }).element ?? (wrapper as unknown as BpmnElement);
+            if (el && typeof el === "object" && (el as BpmnElement).type?.endsWith("StartEvent")) {
+              const selection = modeler.get("selection") as BpmnSelection & { select: (el: BpmnElement) => void };
+              selection.select(el as BpmnElement);
+              break;
+            }
+          }
+        } catch {
+          // niet kritiek
+        }
 
         // Selectie-events doorgeven aan de parent
         const eventBus = modeler.get("eventBus") as BpmnEventBus;
