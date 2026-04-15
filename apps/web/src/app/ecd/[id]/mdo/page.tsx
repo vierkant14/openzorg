@@ -48,17 +48,61 @@ function ErrorMsg({ msg }: { msg: string }) {
   return <p className="my-2 text-sm text-coral-600">{msg}</p>;
 }
 
+interface Deelnemer {
+  id: string;        // lokale ID voor react keys
+  naam: string;      // display van de practitioner
+  rol: string;       // rol in het MDO
+}
+
+const STANDAARD_ROLLEN = [
+  "Voorzitter",
+  "Verpleegkundige",
+  "Verzorgende",
+  "Arts",
+  "Psycholoog",
+  "Fysiotherapeut",
+  "Ergotherapeut",
+  "Logopedist",
+  "Dietist",
+  "Maatschappelijk werker",
+  "Geestelijk verzorger",
+  "Familie / contactpersoon",
+  "Overig",
+] as const;
+
 function MdoForm({ clientId, onSaved }: { clientId: string; onSaved: () => void }) {
   const [datum, setDatum] = useState(new Date().toISOString().slice(0, 10));
   const [onderwerp, setOnderwerp] = useState("");
-  const [deelnemerNaam, setDeelnemerNaam] = useState("");
+  const [deelnemers, setDeelnemers] = useState<Deelnemer[]>([]);
+  const [nieuweDeelnemer, setNieuweDeelnemer] = useState("");
+  const [nieuweRol, setNieuweRol] = useState<string>(STANDAARD_ROLLEN[0]);
   const [besluiten, setBesluiten] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  function addDeelnemer() {
+    if (!nieuweDeelnemer.trim()) return;
+    setDeelnemers((prev) => [
+      ...prev,
+      { id: crypto.randomUUID(), naam: nieuweDeelnemer.trim(), rol: nieuweRol },
+    ]);
+    setNieuweDeelnemer("");
+  }
+
+  function removeDeelnemer(id: string) {
+    setDeelnemers((prev) => prev.filter((d) => d.id !== id));
+  }
+
+  function updateDeelnemerRol(id: string, rol: string) {
+    setDeelnemers((prev) => prev.map((d) => (d.id === id ? { ...d, rol } : d)));
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!deelnemerNaam.trim()) { setError("Voeg minimaal 1 deelnemer toe"); return; }
+    if (deelnemers.length === 0) {
+      setError("Voeg minimaal 1 deelnemer toe");
+      return;
+    }
     setSaving(true);
     setError(null);
     const { error: err } = await ecdFetch(`/api/clients/${clientId}/mdo`, {
@@ -66,7 +110,11 @@ function MdoForm({ clientId, onSaved }: { clientId: string; onSaved: () => void 
       body: JSON.stringify({
         datum,
         onderwerp,
-        deelnemers: [{ practitionerId: "unknown", naam: deelnemerNaam }],
+        deelnemers: deelnemers.map((d) => ({
+          practitionerId: "unknown",
+          naam: d.naam,
+          rol: d.rol,
+        })),
         status: "planned",
         besluiten: besluiten.trim() || undefined,
       }),
@@ -89,25 +137,79 @@ function MdoForm({ clientId, onSaved }: { clientId: string; onSaved: () => void 
           <input type="date" value={datum} onChange={(e) => setDatum(e.target.value)} required className={inputCls} />
         </div>
         <div>
-          <label className="mb-1 block text-sm font-medium text-fg-muted">Deelnemer *</label>
-          <PractitionerPicker
-            value={deelnemerNaam}
-            onChange={(_id, displayName) => setDeelnemerNaam(displayName)}
-            placeholder="Zoek een medewerker..."
-          />
-        </div>
-        <div className="sm:col-span-2">
           <label className="mb-1 block text-sm font-medium text-fg-muted">Onderwerp *</label>
           <input type="text" value={onderwerp} onChange={(e) => setOnderwerp(e.target.value)} required className={inputCls} />
         </div>
-        <div className="sm:col-span-2">
-          <label className="mb-1 block text-sm font-medium text-fg-muted">Besluiten / actiepunten</label>
-          <textarea rows={3} value={besluiten} onChange={(e) => setBesluiten(e.target.value)} placeholder="Vastleggen van besluiten en actiepunten uit het MDO..." className={inputCls} />
+      </div>
+
+      {/* Deelnemers-lijst */}
+      <div className="mt-4">
+        <label className="mb-2 block text-sm font-medium text-fg-muted">
+          Deelnemers * ({deelnemers.length})
+        </label>
+
+        {deelnemers.length > 0 && (
+          <div className="mb-3 space-y-2 rounded-lg border border-default bg-page p-3">
+            {deelnemers.map((d) => (
+              <div key={d.id} className="flex items-center gap-2">
+                <span className="flex-1 text-sm text-fg">{d.naam}</span>
+                <select
+                  value={d.rol}
+                  onChange={(e) => updateDeelnemerRol(d.id, e.target.value)}
+                  className="rounded-md border border-default bg-raised px-2 py-1 text-xs text-fg-muted"
+                >
+                  {STANDAARD_ROLLEN.map((r) => (
+                    <option key={r} value={r}>{r}</option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={() => removeDeelnemer(d.id)}
+                  className="rounded-md border border-coral-200 bg-coral-50 px-2 py-1 text-xs text-coral-600 hover:bg-coral-100 dark:bg-coral-950/20 dark:border-coral-800 dark:text-coral-400"
+                  title="Verwijder deelnemer"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <div className="flex-1">
+            <PractitionerPicker
+              value={nieuweDeelnemer}
+              onChange={(_id, displayName) => setNieuweDeelnemer(displayName)}
+              placeholder="Zoek een medewerker…"
+            />
+          </div>
+          <select
+            value={nieuweRol}
+            onChange={(e) => setNieuweRol(e.target.value)}
+            className="rounded-md border border-default bg-raised px-3 py-2 text-sm text-fg sm:w-48"
+          >
+            {STANDAARD_ROLLEN.map((r) => (
+              <option key={r} value={r}>{r}</option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={addDeelnemer}
+            disabled={!nieuweDeelnemer.trim()}
+            className="rounded-md border border-brand-300 bg-brand-50 px-4 py-2 text-sm font-medium text-brand-700 hover:bg-brand-100 disabled:opacity-50 dark:bg-brand-950/20 dark:text-brand-300 dark:border-brand-700"
+          >
+            + Toevoegen
+          </button>
         </div>
       </div>
 
+      <div className="mt-4">
+        <label className="mb-1 block text-sm font-medium text-fg-muted">Besluiten / actiepunten</label>
+        <textarea rows={3} value={besluiten} onChange={(e) => setBesluiten(e.target.value)} placeholder="Vastleggen van besluiten en actiepunten uit het MDO..." className={inputCls} />
+      </div>
+
       <div className="mt-4 flex justify-end">
-        <button type="submit" disabled={saving} className="rounded-md bg-brand-700 px-5 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-800 disabled:opacity-50 btn-press">
+        <button type="submit" disabled={saving || deelnemers.length === 0} className="rounded-md bg-brand-700 px-5 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-800 disabled:opacity-50 btn-press">
           {saving ? "Opslaan..." : "MDO plannen"}
         </button>
       </div>
