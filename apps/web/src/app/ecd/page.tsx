@@ -138,6 +138,7 @@ export default function EcdPage() {
   const [zoekterm, setZoekterm] = useState("");
   const [filterLocatie, setFilterLocatie] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
+  const [showInactief, setShowInactief] = useState(false);
   const [sortKey, setSortKey] = useState<"naam" | "bsn" | "geboortedatum" | "locatie">("naam");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
@@ -145,7 +146,10 @@ export default function EcdPage() {
     async function fetchClients() {
       setLoading(true);
       setError(null);
-      const { data, error: fetchError } = await ecdFetch<FhirBundle>("/api/clients");
+      // Expliciet active=true,false zodat Medplum zowel actieve als
+      // inactieve (soft-deleted) cliënten teruggeeft. Front-end filter
+      // via 'Toon inactief'-toggle regelt de zichtbaarheid.
+      const { data, error: fetchError } = await ecdFetch<FhirBundle>("/api/clients?active=true,false&_count=200");
       if (fetchError) {
         setError(fetchError);
         setPatients([]);
@@ -168,6 +172,11 @@ export default function EcdPage() {
 
   const gefilterdeClienten = useMemo(() => {
     let result = patients;
+
+    // Active-filter: standaard alleen actieve cliënten, toggle voor inactief
+    if (!showInactief) {
+      result = result.filter((p) => p.active !== false);
+    }
 
     // Locatie filter
     if (filterLocatie) {
@@ -207,7 +216,7 @@ export default function EcdPage() {
     });
 
     return result;
-  }, [patients, zoekterm, filterLocatie, filterStatus, sortKey, sortDir]);
+  }, [patients, zoekterm, filterLocatie, filterStatus, showInactief, sortKey, sortDir]);
 
   return (
     <AppShell>
@@ -270,6 +279,15 @@ export default function EcdPage() {
               <option key={key} value={key}>{label}</option>
             ))}
           </select>
+          <label className="flex items-center gap-2 rounded-xl border border-default bg-raised px-4 py-3 text-body-sm text-fg cursor-pointer hover:bg-sunken transition-colors">
+            <input
+              type="checkbox"
+              checked={showInactief}
+              onChange={(e) => setShowInactief(e.target.checked)}
+              className="rounded"
+            />
+            <span>Toon inactief</span>
+          </label>
         </div>
 
         {/* ── Content ── */}
