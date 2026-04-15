@@ -3,6 +3,7 @@
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
+import { PractitionerPicker } from "../../../../components/PractitionerPicker";
 import { ecdFetch } from "../../../../lib/api";
 
 /* -------------------------------------------------------------------------- */
@@ -440,24 +441,11 @@ function MedicatieForm({
         </div>
         <div>
           <label className="mb-1 block text-sm font-medium text-fg-muted">Voorschrijver</label>
-          {practitioners.length > 0 ? (
-            <select
-              value={voorschrijver}
-              onChange={(e) => setVoorschrijver(e.target.value)}
-              className="w-full rounded-md border border-default px-3 py-2 text-sm shadow-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
-            >
-              <option value="">Selecteer voorschrijver</option>
-              {practitioners.map((p) => <option key={p.id} value={p.name}>{p.name}</option>)}
-            </select>
-          ) : (
-            <input
-              type="text"
-              value={voorschrijver}
-              onChange={(e) => setVoorschrijver(e.target.value)}
-              placeholder="bijv. Dr. Jansen"
-              className="w-full rounded-md border border-default px-3 py-2 text-sm shadow-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
-            />
-          )}
+          <PractitionerPicker
+            value={voorschrijver}
+            onChange={(_id, displayName) => setVoorschrijver(displayName)}
+            placeholder="Zoek een voorschrijver..."
+          />
         </div>
         <div>
           <label className="mb-1 block text-sm font-medium text-fg-muted">Startdatum</label>
