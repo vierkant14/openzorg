@@ -137,6 +137,19 @@ function geslachtLabel(gender?: string): string {
 /*  Main page component                                                       */
 /* -------------------------------------------------------------------------- */
 
+interface StateDef { slug: string; label: string; color: string; terminal?: boolean }
+interface TransitionDef { from: string; to: string; label?: string; requiredRole?: string; guard?: string }
+interface StateMachine { resourceType: string; initialState: string; states: StateDef[]; transitions: TransitionDef[] }
+
+const STATE_COLOR_MAP: Record<string, string> = {
+  blue: "bg-blue-100 text-blue-800 dark:bg-blue-950/30 dark:text-blue-300",
+  amber: "bg-amber-100 text-amber-800 dark:bg-amber-950/30 dark:text-amber-300",
+  emerald: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300",
+  navy: "bg-navy-100 text-navy-800 dark:bg-navy-950/30 dark:text-navy-300",
+  gray: "bg-surface-200 text-fg-muted dark:bg-surface-800",
+  coral: "bg-coral-100 text-coral-800 dark:bg-coral-950/30 dark:text-coral-300",
+};
+
 export default function ClientDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -146,6 +159,7 @@ export default function ClientDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
+  const [stateMachine, setStateMachine] = useState<StateMachine | null>(null);
 
   const loadClient = useCallback(() => {
     setLoading(true);
@@ -158,6 +172,9 @@ export default function ClientDetailPage() {
 
   useEffect(() => {
     loadClient();
+    ecdFetch<{ machine: StateMachine }>("/api/admin/state-machines/Patient").then(({ data }) => {
+      if (data?.machine) setStateMachine(data.machine);
+    });
   }, [loadClient]);
 
   if (loading) {
@@ -252,22 +269,18 @@ export default function ClientDetailPage() {
             </div>
             <div className="flex items-center gap-2">
               {(() => {
+                if (!stateMachine) return null;
                 const c = client;
                 const statusExt = c.extension?.find((e) => e.url === "https://openzorg.nl/extensions/trajectStatus");
-                const currentStatus = statusExt?.valueString;
-                const STATUS_LABELS: Record<string, { label: string; color: string; next: string[] }> = {
-                  aangemeld:      { label: "Aangemeld",      color: "bg-blue-100 text-blue-800 dark:bg-blue-950/30 dark:text-blue-300", next: ["in-intake", "uitgeschreven"] },
-                  "in-intake":    { label: "In intake",      color: "bg-amber-100 text-amber-800 dark:bg-amber-950/30 dark:text-amber-300", next: ["in-zorg", "uitgeschreven"] },
-                  "in-zorg":      { label: "In zorg",        color: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300", next: ["overdracht", "uitgeschreven", "overleden"] },
-                  overdracht:     { label: "Overdracht",     color: "bg-navy-100 text-navy-800 dark:bg-navy-950/30 dark:text-navy-300", next: ["in-zorg", "uitgeschreven"] },
-                  uitgeschreven:  { label: "Uitgeschreven",  color: "bg-surface-200 text-fg-muted dark:bg-surface-800", next: ["aangemeld"] },
-                  overleden:      { label: "Overleden",      color: "bg-coral-100 text-coral-800 dark:bg-coral-950/30 dark:text-coral-300", next: [] },
-                };
-                const cfg = currentStatus ? STATUS_LABELS[currentStatus] : null;
-                async function transitionTo(newStatus: string) {
-                  if (!confirm(`Status wijzigen naar '${STATUS_LABELS[newStatus]?.label ?? newStatus}'?`)) return;
+                const currentStatus = statusExt?.valueString ?? stateMachine.initialState;
+                const currentStateDef = stateMachine.states.find((s) => s.slug === currentStatus);
+                const colorClass = currentStateDef ? STATE_COLOR_MAP[currentStateDef.color] ?? STATE_COLOR_MAP.gray : STATE_COLOR_MAP.gray;
+                const nextTransitions = stateMachine.transitions.filter((t) => t.from === currentStatus);
+                async function transitionTo(transition: TransitionDef) {
+                  const target = stateMachine!.states.find((s) => s.slug === transition.to);
+                  if (!confirm(`Status wijzigen naar '${target?.label ?? transition.to}'?${transition.requiredRole ? `\nVereist rol: ${transition.requiredRole}` : ""}${transition.guard ? `\nGuard: ${transition.guard}` : ""}`)) return;
                   const otherExt = (c.extension ?? []).filter((e) => e.url !== "https://openzorg.nl/extensions/trajectStatus");
-                  const newExt = [...otherExt, { url: "https://openzorg.nl/extensions/trajectStatus", valueString: newStatus }];
+                  const newExt = [...otherExt, { url: "https://openzorg.nl/extensions/trajectStatus", valueString: transition.to }];
                   const { error: err } = await ecdFetch(`/api/clients/${c.id}`, {
                     method: "PUT",
                     body: JSON.stringify({ ...c, extension: newExt }),
@@ -275,23 +288,31 @@ export default function ClientDetailPage() {
                   if (err) { alert(err); return; }
                   loadClient();
                 }
-                if (!cfg) return null;
                 return (
-                  <div className="relative inline-flex" data-testid="traject-status">
-                    <span className={`inline-flex items-center rounded-lg px-3 py-1 text-caption font-semibold ${cfg.color}`}>
-                      {cfg.label}
+                  <div className="relative inline-flex items-center" data-testid="traject-status">
+                    <span className={`inline-flex items-center rounded-lg px-3 py-1 text-caption font-semibold ${colorClass}`}>
+                      {currentStateDef?.label ?? currentStatus}
                     </span>
-                    {cfg.next.length > 0 && (
+                    {nextTransitions.length > 0 && !currentStateDef?.terminal && (
                       <select
                         aria-label="Status wijzigen"
-                        onChange={(e) => e.target.value && transitionTo(e.target.value)}
+                        onChange={(e) => {
+                          const transition = nextTransitions.find((t) => t.to === e.target.value);
+                          if (transition) transitionTo(transition);
+                          e.target.value = "";
+                        }}
                         value=""
                         className="ml-1 rounded-lg border border-default bg-raised px-2 py-1 text-caption text-fg-muted cursor-pointer"
                       >
                         <option value="">→ wijzig</option>
-                        {cfg.next.map((s) => (
-                          <option key={s} value={s}>{STATUS_LABELS[s]?.label ?? s}</option>
-                        ))}
+                        {nextTransitions.map((t) => {
+                          const target = stateMachine.states.find((s) => s.slug === t.to);
+                          return (
+                            <option key={`${t.from}-${t.to}`} value={t.to}>
+                              {t.label ?? target?.label ?? t.to}
+                            </option>
+                          );
+                        })}
                       </select>
                     )}
                   </div>

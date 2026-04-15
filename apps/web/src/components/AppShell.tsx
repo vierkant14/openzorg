@@ -79,6 +79,7 @@ const NAV_SECTIONS: NavSection[] = [
       { href: "/admin/configuratie", label: "Configuratie", icon: IconSettings, permission: "configuratie:read" },
       { href: "/admin/validatie", label: "Validatieregels", icon: IconShield, permission: "configuratie:read" },
       { href: "/admin/task-form-options", label: "Taak-formulieren", icon: IconList, permission: "configuratie:read" },
+      { href: "/admin/state-machines", label: "State-machines", icon: IconFlow, permission: "configuratie:read" },
       { href: "/admin/rollen", label: "Rollen", icon: IconShield, permission: "rollen:read" },
       { href: "/admin/client-dashboard-config", label: "Client dashboard", icon: IconGrid, permission: "configuratie:read" },
     ],

@@ -32,6 +32,7 @@ import { risicoscreeningRoutes } from "./routes/risicoscreening.js";
 import { rollenRoutes } from "./routes/rollen.js";
 import { roosterRoutes } from "./routes/rooster.js";
 import { signaleringRoutes } from "./routes/signaleringen.js";
+import { stateMachinesRoutes } from "./routes/state-machines.js";
 import { tenantSettingsRoutes } from "./routes/tenant-settings.js";
 import { taskFormOptionsRoutes } from "./routes/task-form-options.js";
 import { loadTenantFeatures, tenantRoutes } from "./routes/tenants.js";
@@ -171,6 +172,7 @@ app.route("/api/admin/workflow-triggers", workflowTriggerRoutes);
 app.route("/api/task-form-options", taskFormOptionsRoutes);
 app.route("/api/admin/validation-rules", validationRulesRoutes);
 app.route("/api/admin/rollen", rollenRoutes);
+app.route("/api/admin/state-machines", stateMachinesRoutes);
 
 // Sprint 6: API docs, Integraties (webhooks + API keys)
 app.route("/api/docs", apiDocsRoutes);
