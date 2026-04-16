@@ -9,6 +9,7 @@
 import type { Context } from "hono";
 
 import type { AppEnv } from "../app.js";
+
 import { medplumFetch } from "./medplum-client.js";
 
 /* ── Layer 1: Static knowledge ── */
