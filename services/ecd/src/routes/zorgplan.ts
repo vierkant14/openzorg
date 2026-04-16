@@ -145,10 +145,69 @@ zorgplanRoutes.post("/clients/:clientId/zorgplan", async (c) => {
     ],
   };
 
-  return medplumProxy(c, "/fhir/R4/CarePlan", {
+  const createdRes = await medplumFetch(c, "/fhir/R4/CarePlan", {
     method: "POST",
     body: JSON.stringify(resource),
   });
+
+  if (!createdRes.ok) {
+    return c.json(await createdRes.json() as Record<string, unknown>, createdRes.status as 200);
+  }
+
+  const createdPlan = (await createdRes.json()) as { id?: string };
+
+  // ── Automatische 6-maandelijkse evaluatie-scheduler ──
+  // Maak een FHIR Task die over 6 maanden dueDate heeft. De werkbak
+  // toont deze als "Evalueer zorgplan" en teamleider kan 'm oppakken.
+  // Kwaliteitskader VVT vereist minimaal een halfjaarlijkse evaluatie.
+  if (createdPlan.id) {
+    const now = new Date();
+    const dueDate = new Date(now);
+    dueDate.setMonth(dueDate.getMonth() + 6);
+
+    const evalTask = {
+      resourceType: "Task",
+      status: "requested",
+      intent: "plan",
+      priority: "routine",
+      code: {
+        coding: [
+          {
+            system: "https://openzorg.nl/CodeSystem/task-type",
+            code: "zorgplan-evaluatie",
+            display: "Zorgplan evaluatie",
+          },
+        ],
+        text: "Evalueer zorgplan (6-maandelijks)",
+      },
+      description: `Halfjaarlijkse evaluatie van '${body["title"]}' conform kwaliteitskader VVT.`,
+      authoredOn: now.toISOString(),
+      executionPeriod: { end: dueDate.toISOString() },
+      focus: { reference: `CarePlan/${createdPlan.id}` },
+      for: { reference: `Patient/${clientId}` },
+      restriction: { period: { end: dueDate.toISOString() } },
+      extension: [
+        {
+          url: "https://openzorg.nl/extensions/task-category",
+          valueString: "zorgplan",
+        },
+        {
+          url: "https://openzorg.nl/extensions/auto-generated",
+          valueBoolean: true,
+        },
+      ],
+    };
+
+    // Fire-and-forget: als de task-creatie faalt blijft het zorgplan geldig
+    medplumFetch(c, "/fhir/R4/Task", {
+      method: "POST",
+      body: JSON.stringify(evalTask),
+    }).catch((err) => {
+      console.error("[zorgplan] Auto-evaluatie task creation failed:", err);
+    });
+  }
+
+  return c.json(createdPlan as Record<string, unknown>, 201);
 });
 
 /**
