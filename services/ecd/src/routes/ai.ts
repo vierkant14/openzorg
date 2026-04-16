@@ -12,15 +12,25 @@
  */
 
 import { Hono } from "hono";
+import { streamSSE } from "hono/streaming";
 
 import type { AppEnv } from "../app.js";
+import {
+  buildClientContext,
+  matchWikiSection,
+  STATIC_KNOWLEDGE,
+} from "../lib/ai-system-prompt.js";
 import { pool } from "../lib/db.js";
 import {
   DEFAULT_MODEL,
+  getTenantAiSettings,
   OLLAMA_BASE_URL,
   ollamaChat,
+  ollamaChatStream,
   ollamaHealth,
   type OllamaMessage,
+  resolveModel,
+  resolveOllamaUrl,
 } from "../lib/ollama-client.js";
 
 export const aiRoutes = new Hono<AppEnv>();
@@ -322,6 +332,131 @@ Schrijf in het Nederlands, feitelijk, zonder jargon. Noem nooit iets dat niet le
         error: "Samenvatting mislukt",
         details: msg,
         hint: "Ollama bereikbaar? Model geladen? Zie GET /api/ai/health",
+      },
+      503,
+    );
+  }
+});
+
+/**
+ * POST /chat — Contextual AI chat with SSE streaming.
+ */
+aiRoutes.post("/chat", async (c) => {
+  const tenantId = c.get("tenantId");
+  const tenantUuid = await resolveTenantUuid(tenantId);
+  const userId = c.req.header("X-User-Id") ?? "anonymous";
+
+  const aiSettings = await getTenantAiSettings(tenantId);
+  if (aiSettings && !aiSettings.enabled) {
+    return c.json({ error: "AI is niet ingeschakeld voor deze organisatie" }, 403);
+  }
+
+  const body = await c.req.json<{
+    message: string;
+    context: { page: string; clientId?: string; tab?: string };
+    history?: Array<{ role: "user" | "assistant"; content: string }>;
+  }>();
+
+  if (!body.message) {
+    return c.json({ error: "Bericht is vereist" }, 400);
+  }
+
+  const ollamaUrl = resolveOllamaUrl(aiSettings);
+  const model = resolveModel(aiSettings);
+
+  // Build system prompt (3 layers)
+  let systemPrompt = STATIC_KNOWLEDGE;
+
+  const wikiMatch = matchWikiSection(body.message);
+  if (wikiMatch) {
+    systemPrompt += "\n" + wikiMatch;
+  }
+
+  if (aiSettings?.tenantPrompt) {
+    systemPrompt += `\n\n## Over deze organisatie\n${aiSettings.tenantPrompt}`;
+  }
+
+  if (body.context.clientId) {
+    const clientContext = await buildClientContext(c, body.context.clientId);
+    if (clientContext) {
+      systemPrompt += "\n" + clientContext;
+    }
+  }
+
+  systemPrompt += `\n\n## Huidige pagina\nDe gebruiker bekijkt: ${body.context.page}`;
+  if (body.context.tab) {
+    systemPrompt += ` (tab: ${body.context.tab})`;
+  }
+
+  const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
+    { role: "system", content: systemPrompt },
+    ...(body.history ?? []).slice(-18).map((m) => ({
+      role: m.role as "user" | "assistant",
+      content: m.content,
+    })),
+    { role: "user", content: body.message },
+  ];
+
+  const startTime = Date.now();
+
+  try {
+    const stream = await ollamaChatStream(messages, {
+      model,
+      baseUrl: ollamaUrl,
+      maxTokens: 2048,
+    });
+
+    return streamSSE(c, async (sseStream) => {
+      const reader = stream.getReader();
+      const decoder = new TextDecoder();
+      let fullResponse = "";
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const text = decoder.decode(value, { stream: true });
+          const lines = text.split("\n").filter(Boolean);
+
+          for (const line of lines) {
+            try {
+              const parsed = JSON.parse(line) as { message?: { content: string }; done: boolean };
+              if (parsed.message?.content) {
+                fullResponse += parsed.message.content;
+                await sseStream.writeSSE({
+                  data: JSON.stringify({ chunk: parsed.message.content }),
+                });
+              }
+              if (parsed.done) {
+                await sseStream.writeSSE({
+                  data: JSON.stringify({ done: true }),
+                });
+              }
+            } catch {
+              // Partial JSON line, skip
+            }
+          }
+        }
+      } finally {
+        reader.releaseLock();
+      }
+
+      if (tenantUuid) {
+        const durationMs = Date.now() - startTime;
+        logAiCall(tenantUuid, userId, "ai.chat", model, durationMs, {
+          page: body.context.page,
+          clientId: body.context.clientId ?? null,
+          responseLength: fullResponse.length,
+        }).catch(() => {});
+      }
+    });
+  } catch (err) {
+    return c.json(
+      {
+        error: "AI niet bereikbaar",
+        hint: `Controleer of Ollama draait op ${ollamaUrl}`,
+        details: err instanceof Error ? err.message : "Onbekende fout",
       },
       503,
     );
