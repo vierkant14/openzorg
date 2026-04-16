@@ -286,6 +286,21 @@ services:
       POSTGRES_PASSWORD: openzorg_dev_password
     restart: "no"
 
+  # ── Seed Codelijsten (runs after seed, adds rich test data) ──
+  seed-codelijsten:
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile.seed
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+    environment:
+      MEDPLUM_BASE_URL: http://medplum:8103
+    volumes:
+      - ./infra/scripts/seed-codelijsten.sh:/seed-codelijsten.sh
+    command: sh /seed-codelijsten.sh
+    restart: "no"
+
 volumes:
   postgres_data:
   medplum_data:

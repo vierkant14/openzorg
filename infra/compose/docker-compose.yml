@@ -245,6 +245,19 @@ services:
     command: sh /seed.sh
     restart: "no"
 
+  # ── Seed Codelijsten (runs after seed, adds rich test data) ──
+  seed-codelijsten:
+    image: node:20-alpine
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+    environment:
+      MEDPLUM_BASE_URL: http://medplum:8103
+    volumes:
+      - ../scripts/seed-codelijsten.sh:/seed-codelijsten.sh
+    command: sh /seed-codelijsten.sh
+    restart: "no"
+
 volumes:
   postgres_data:
   medplum_data:
