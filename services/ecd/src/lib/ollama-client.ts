@@ -10,8 +10,41 @@
  * redelijk Nederlands.
  */
 
+import { pool } from "./db.js";
+
 const OLLAMA_BASE_URL = process.env["OLLAMA_BASE_URL"] ?? "http://ollama:11434";
 const DEFAULT_MODEL = process.env["OLLAMA_DEFAULT_MODEL"] ?? "gemma3:4b";
+
+interface TenantAiSettings {
+  enabled: boolean;
+  ollamaUrl: string;
+  model: string;
+  tenantPrompt: string;
+}
+
+export async function getTenantAiSettings(tenantIdOrProjectId: string): Promise<TenantAiSettings | null> {
+  const tenantResult = await pool.query<{ id: string }>(
+    "SELECT id FROM openzorg.tenants WHERE id::text = $1 OR medplum_project_id = $1 LIMIT 1",
+    [tenantIdOrProjectId],
+  );
+  const tenantUuid = tenantResult.rows[0]?.id;
+  if (!tenantUuid) return null;
+
+  const result = await pool.query<{ config_data: TenantAiSettings }>(
+    `SELECT config_data FROM openzorg.tenant_configurations
+      WHERE tenant_id = $1 AND config_type = 'ai_settings' LIMIT 1`,
+    [tenantUuid],
+  );
+  return result.rows[0]?.config_data ?? null;
+}
+
+export function resolveOllamaUrl(tenantSettings: TenantAiSettings | null): string {
+  return tenantSettings?.ollamaUrl || OLLAMA_BASE_URL;
+}
+
+export function resolveModel(tenantSettings: TenantAiSettings | null): string {
+  return tenantSettings?.model || DEFAULT_MODEL;
+}
 
 export interface OllamaMessage {
   role: "system" | "user" | "assistant";
@@ -92,6 +125,43 @@ export async function ollamaChat(
   }
 
   return (await res.json()) as OllamaChatResponse;
+}
+
+/**
+ * Streaming chat. Returns a ReadableStream of chunks from Ollama.
+ * Ollama streams newline-delimited JSON, each line is an OllamaChatResponse.
+ */
+export async function ollamaChatStream(
+  messages: OllamaMessage[],
+  options: { model?: string; temperature?: number; maxTokens?: number; baseUrl?: string } = {},
+): Promise<ReadableStream<Uint8Array>> {
+  const url = options.baseUrl ?? OLLAMA_BASE_URL;
+  const body: OllamaChatRequest = {
+    model: options.model ?? DEFAULT_MODEL,
+    messages,
+    stream: true,
+    options: {
+      temperature: options.temperature ?? 0.3,
+      num_predict: options.maxTokens ?? 2048,
+    },
+  };
+
+  const res = await fetch(`${url}/api/chat`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Ollama stream faalde (${res.status}): ${text}`);
+  }
+
+  if (!res.body) {
+    throw new Error("Ollama response heeft geen body stream");
+  }
+
+  return res.body;
 }
 
 /** Check whether the Ollama server is reachable and which models are loaded. */
