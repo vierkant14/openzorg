@@ -90,7 +90,10 @@ export type Permission =
   | "feature-flags:read"
   | "feature-flags:write"
   | "api-keys:read"
-  | "api-keys:write";
+  | "api-keys:write"
+  | "ai-config:read"
+  | "ai-config:write"
+  | "ai-chat:read";
 
 /**
  * Permission matrix: which role has which permissions.
@@ -114,6 +117,7 @@ export const ROLE_PERMISSIONS: Record<OpenZorgRole, readonly Permission[]> = {
     "state-machines:read", "state-machines:write",
     "feature-flags:read", "feature-flags:write",
     "api-keys:read", "api-keys:write",
+    "ai-config:read", "ai-config:write", "ai-chat:read",
   ],
   beheerder: [
     "clients:read", "clients:write", "clients:delete",
@@ -128,6 +132,7 @@ export const ROLE_PERMISSIONS: Record<OpenZorgRole, readonly Permission[]> = {
     "organisatie:read", "organisatie:write",
     "configuratie:read", "configuratie:write",
     "workflows:read", "workflows:write",
+    "ai-chat:read",
   ],
   zorgmedewerker: [
     "clients:read", "clients:write",
@@ -138,6 +143,7 @@ export const ROLE_PERMISSIONS: Record<OpenZorgRole, readonly Permission[]> = {
     "mic:read", "mic:write",
     "planning:read",
     "berichten:read", "berichten:write",
+    "ai-chat:read",
   ],
   planner: [
     "clients:read",
@@ -156,6 +162,7 @@ export const ROLE_PERMISSIONS: Record<OpenZorgRole, readonly Permission[]> = {
     "berichten:read", "berichten:write",
     "medewerkers:read",
     "organisatie:read",
+    "ai-chat:read",
   ],
 } as const;
 
@@ -206,6 +213,8 @@ export const ROUTE_PERMISSIONS: ReadonlyArray<{
   { pattern: "/api/admin/state-machines", GET: "state-machines:read", POST: "state-machines:write", PUT: "state-machines:write", DELETE: "state-machines:write" },
   { pattern: "/api/admin/feature-flags", GET: "feature-flags:read", POST: "feature-flags:write", PUT: "feature-flags:write" },
   { pattern: "/api/admin/api-keys", GET: "api-keys:read", POST: "api-keys:write", DELETE: "api-keys:write" },
+  { pattern: "/api/admin/ai-settings", GET: "ai-config:read", PUT: "ai-config:write", POST: "ai-config:write" },
+  { pattern: "/api/ai/chat", POST: "ai-chat:read" },
 ] as const;
 
 /**
@@ -238,4 +247,5 @@ export const NAV_PERMISSIONS = {
   "/admin/state-machines": "state-machines:read" as Permission,
   "/admin/feature-flags": "feature-flags:read" as Permission,
   "/admin/api-keys": "api-keys:read" as Permission,
+  "/admin/ai-instellingen": "ai-config:read" as Permission,
 } as const;
