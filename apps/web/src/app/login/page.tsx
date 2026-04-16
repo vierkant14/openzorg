@@ -6,7 +6,8 @@ import { Suspense, useState } from "react";
 import { refreshFeatureFlags } from "../../lib/features";
 
 const ROLES = [
-  { value: "beheerder", label: "Beheerder" },
+  { value: "tenant-admin", label: "Tenant admin" },
+  { value: "beheerder", label: "Functioneel beheerder" },
   { value: "zorgmedewerker", label: "Zorgmedewerker" },
   { value: "planner", label: "Planner" },
   { value: "teamleider", label: "Teamleider" },
