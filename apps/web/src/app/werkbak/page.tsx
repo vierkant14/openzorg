@@ -182,9 +182,9 @@ function WerkbakInner() {
 
   const role = typeof window !== "undefined" ? getUserRole() : "";
 
-  // Teamleider en beheerder zien taken van alle rollen (oversight)
-  const isOversight = role === "teamleider" || role === "beheerder";
-  const ALL_ROLES = ["zorgmedewerker", "planner", "teamleider", "beheerder"];
+  // Teamleider, beheerder en tenant-admin zien taken van alle rollen (oversight)
+  const isOversight = role === "teamleider" || role === "beheerder" || role === "tenant-admin";
+  const ALL_ROLES = ["zorgmedewerker", "planner", "teamleider", "beheerder", "tenant-admin"];
 
   const loadTasks = useCallback(async () => {
     if (!role) return;
