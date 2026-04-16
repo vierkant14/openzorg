@@ -2,9 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-import AppShell from "../../../../components/AppShell";
 import { ecdFetch } from "../../../../lib/api";
-import { TabNav } from "../TabNav";
 
 interface ReferentieData {
   financiering: Array<{ code: string; display: string }>;
@@ -143,11 +141,9 @@ export default function IndicatiesPage({ params }: { params: Promise<{ id: strin
     "w-full rounded-md border border-default bg-raised px-3 py-2 text-sm text-fg shadow-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500";
 
   return (
-    <AppShell>
-      <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
-        <TabNav clientId={clientId} />
-        <div className="mt-8">
-          <div className="flex items-start justify-between gap-4 mb-4">
+    <>
+      <div>
+        <div className="flex items-start justify-between gap-4 mb-4">
             <div>
               <h1 className="text-2xl font-bold text-fg">Indicaties</h1>
               <p className="text-sm text-fg-muted mt-1">
@@ -329,8 +325,7 @@ export default function IndicatiesPage({ params }: { params: Promise<{ id: strin
             zorgplan passen binnen de bandbreedte van de ZZP-klasse. De validatie-engine zal in een
             volgende versie dit automatisch controleren en bij overschrijding een waarschuwing geven.
           </div>
-        </div>
       </div>
-    </AppShell>
+    </>
   );
 }

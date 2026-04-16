@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import AppShell from "../../components/AppShell";
 import { FeatureGate } from "../../components/FeatureGate";
-import { getUserRole } from "../../lib/api";
+import { ecdFetch, getUserRole } from "../../lib/api";
 import { workflowFetch } from "../../lib/workflow-api";
 
 /* ---------- Types ---------- */
@@ -50,6 +50,47 @@ function formatDueDate(iso?: string | null): { label: string; color: string } | 
 interface TasksResponse {
   data: WorkflowTask[];
   total: number;
+}
+
+/** FHIR Task resource (from Medplum, e.g. auto-generated zorgplan-evaluatie). */
+interface FhirTask {
+  resourceType: "Task";
+  id?: string;
+  status?: string;
+  code?: {
+    coding?: Array<{ system?: string; code?: string; display?: string }>;
+    text?: string;
+  };
+  description?: string;
+  authoredOn?: string;
+  executionPeriod?: { end?: string };
+  focus?: { reference?: string };
+  for?: { reference?: string };
+  extension?: Array<{ url?: string; valueString?: string; valueBoolean?: boolean }>;
+}
+
+interface FhirBundle<T> {
+  resourceType: "Bundle";
+  entry?: Array<{ resource: T }>;
+}
+
+/** Convert a FHIR Task to a WorkflowTask shape so it fits the werkbak UI. */
+function fhirTaskToWorkflow(task: FhirTask): WorkflowTask {
+  const code = task.code?.coding?.[0]?.code ?? "fhir-task";
+  return {
+    id: `fhir-${task.id ?? ""}`,
+    name: task.code?.text ?? task.code?.coding?.[0]?.display ?? "FHIR Taak",
+    description: task.description,
+    createTime: task.authoredOn ?? new Date().toISOString(),
+    dueDate: task.executionPeriod?.end ?? null,
+    processDefinitionId: `${code}:fhir:1`,
+    taskDefinitionKey: code,
+    variables: [
+      ...(task.for?.reference
+        ? [{ name: "clientRef", value: task.for.reference }]
+        : []),
+    ],
+  };
 }
 
 /* ---------- Process variable definitions ---------- */
@@ -150,6 +191,11 @@ function WerkbakInner() {
     setLoading(true);
     setError(null);
 
+    // Fetch FHIR Tasks (e.g. auto-generated zorgplan-evaluatie) in parallel
+    const fhirTasksPromise = ecdFetch<FhirBundle<FhirTask>>("/api/fhir-taken").then(
+      ({ data }) => (data?.entry ?? []).map((e) => fhirTaskToWorkflow(e.resource)),
+    ).catch(() => [] as WorkflowTask[]);
+
     if (isOversight) {
       // Fetch tasks for all roles and merge
       const allTasks: WorkflowTask[] = [];
@@ -165,15 +211,30 @@ function WerkbakInner() {
           }
         }
       }
+      // Merge FHIR Tasks
+      const fhirTasks = await fhirTasksPromise;
+      for (const ft of fhirTasks) {
+        if (!seenIds.has(ft.id)) {
+          seenIds.add(ft.id);
+          allTasks.push(ft);
+        }
+      }
       setTasks(allTasks);
     } else {
       const { data, error: err } = await workflowFetch<TasksResponse>(
         `/api/taken?userId=${encodeURIComponent(role)}`,
       );
+      // Merge FHIR Tasks
+      const fhirTasks = await fhirTasksPromise;
       if (err) {
-        setError(err);
+        // Even if workflow fails, show FHIR tasks
+        if (fhirTasks.length > 0) {
+          setTasks(fhirTasks);
+        } else {
+          setError(err);
+        }
       } else {
-        setTasks(data?.data ?? []);
+        setTasks([...(data?.data ?? []), ...fhirTasks]);
       }
     }
     setLoading(false);

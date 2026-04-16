@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import AppShell from "../../../components/AppShell";
 import { ecdFetch } from "../../../lib/api";
@@ -123,8 +123,11 @@ export default function DagplanningPage() {
   const [practitionerId, setPractitionerId] = useState("");
   const [practitioners, setPractitioners] = useState<Practitioner[]>([]);
   const [appointments, setAppointments] = useState<FhirAppointment[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Track whether user has manually selected a medewerker
+  const userSelected = useRef(false);
 
   useEffect(() => {
     ecdFetch<{ resourceType: string; entry?: Array<{ resource: { id?: string; name?: Array<{ family?: string; given?: string[] }> } }> }>("/api/medewerkers?_count=100")
@@ -135,12 +138,18 @@ export default function DagplanningPage() {
           return { id: e.resource.id ?? "", naam };
         }).filter((p) => p.id);
         setPractitioners(items);
-        // Auto-select eerste medewerker zodat de pagina niet leeg blijft
-        if (items.length > 0 && !practitionerId) {
+        // Auto-select eerste medewerker zodat de pagina niet leeg blijft.
+        // Loading stays true until loadAfspraken completes (triggered by
+        // the practitionerId change). If no practitioners exist, clear loading.
+        if (items.length > 0 && !userSelected.current) {
           setPractitionerId(items[0]!.id);
+        } else {
+          setLoading(false);
         }
+      })
+      .catch(() => {
+        setLoading(false);
       });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadAfspraken = useCallback(() => {
@@ -193,7 +202,10 @@ export default function DagplanningPage() {
               </label>
               <select
                 value={practitionerId}
-                onChange={(e) => setPractitionerId(e.target.value)}
+                onChange={(e) => {
+                  userSelected.current = true;
+                  setPractitionerId(e.target.value);
+                }}
                 className="w-72 rounded-md border border-default px-3 py-2 text-sm shadow-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
               >
                 <option value="">Selecteer medewerker...</option>

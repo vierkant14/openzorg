@@ -819,3 +819,16 @@ zorgplanRoutes.post("/zorgplan/:planId/evaluaties", async (c) => {
   const evalBody = await evalRes.json();
   return c.json(evalBody, 201);
 });
+
+/**
+ * GET /api/fhir-taken — List FHIR Tasks (e.g. auto-generated zorgplan-evaluatie tasks).
+ *
+ * Returns tasks with status "requested" or "in-progress" so the werkbak can
+ * display them alongside Flowable workflow tasks.
+ */
+zorgplanRoutes.get("/fhir-taken", async (c) => {
+  return medplumProxy(
+    c,
+    "/fhir/R4/Task?status=requested,accepted,in-progress&_sort=-_lastUpdated&_count=100",
+  );
+});

@@ -187,6 +187,22 @@ indicatieRoutes.post("/clients/:clientId/indicaties", async (c) => {
     });
   }
 
+  // Resolve the tenant Organization to use as payor (required by FHIR R4 Coverage).
+  // Fallback to a display-only reference so the resource is always valid.
+  let payorReference: Record<string, string> = { display: "Zorginstelling (tenant)" };
+  const tenantId = c.get("tenantId");
+  const orgRes = await medplumFetch(
+    c,
+    `/fhir/R4/Organization?identifier=https://openzorg.nl/NamingSystem/tenant|${tenantId}&_count=1`,
+  );
+  if (orgRes.ok) {
+    const orgBundle = (await orgRes.json()) as { entry?: Array<{ resource: { id?: string; name?: string } }> };
+    const org = orgBundle.entry?.[0]?.resource;
+    if (org?.id) {
+      payorReference = { reference: `Organization/${org.id}`, display: org.name ?? "Zorginstelling" };
+    }
+  }
+
   const resource = {
     resourceType: "Coverage",
     status: "active",
@@ -200,6 +216,7 @@ indicatieRoutes.post("/clients/:clientId/indicaties", async (c) => {
       ],
     },
     beneficiary: { reference: `Patient/${clientId}` },
+    payor: [payorReference],
     period: {
       start: body.startdatum,
       ...(body.einddatum ? { end: body.einddatum } : {}),

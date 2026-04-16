@@ -119,6 +119,7 @@ export default function ZorgplanPage() {
   const [goalSituatieschets, setGoalSituatieschets] = useState("");
   const [goalDueDate, setGoalDueDate] = useState("");
   const [goalSaving, setGoalSaving] = useState(false);
+  const [goalSmartErrors, setGoalSmartErrors] = useState<string[]>([]);
 
   // Leefgebied sections collapse state (track which are expanded)
   const [expandedLeefgebieden, setExpandedLeefgebieden] = useState<Set<string>>(new Set());
@@ -234,6 +235,7 @@ export default function ZorgplanPage() {
 
   async function handleAddGoal(planId: string) {
     setGoalSaving(true);
+    setGoalSmartErrors([]);
     const body: Record<string, unknown> = {
       description: { text: goalDescription },
       leefgebied: goalLeefgebied,
@@ -241,20 +243,35 @@ export default function ZorgplanPage() {
       ...(goalDueDate ? { target: [{ dueDate: goalDueDate }] } : {}),
     };
 
-    const { error: err } = await ecdFetch(`/api/zorgplan/${planId}/doelen`, {
+    const res = await ecdFetch<{
+      resourceType?: string;
+      id?: string;
+      issue?: Array<{ diagnostics?: string; details?: { text?: string } }>;
+    }>(`/api/zorgplan/${planId}/doelen`, {
       method: "POST",
       body: JSON.stringify(body),
     });
 
     setGoalSaving(false);
-    if (!err) {
-      setShowGoalForm(null);
-      setGoalDescription("");
-      setGoalSituatieschets("");
-      setGoalDueDate("");
-      setGoalLeefgebied(LEEFGEBIEDEN[0]!.key);
-      loadPlanDetails(planId);
+
+    // Parse SMART-validation errors from OperationOutcome
+    if (res.error) {
+      if (res.data?.id === "smart-validation-failed" && Array.isArray(res.data.issue)) {
+        setGoalSmartErrors(
+          res.data.issue.map((iss) => iss.diagnostics ?? iss.details?.text ?? "Onbekende validatiefout"),
+        );
+      } else {
+        setGoalSmartErrors([res.error]);
+      }
+      return;
     }
+
+    setShowGoalForm(null);
+    setGoalDescription("");
+    setGoalSituatieschets("");
+    setGoalDueDate("");
+    setGoalLeefgebied(LEEFGEBIEDEN[0]!.key);
+    loadPlanDetails(planId);
   }
 
   async function handleAddInterventie(planId: string) {
@@ -481,6 +498,19 @@ export default function ZorgplanPage() {
                           <label className="block text-xs font-medium text-fg-muted mb-1">Situatieschets (huidige situatie)</label>
                           <textarea rows={2} value={goalSituatieschets} onChange={(e) => setGoalSituatieschets(e.target.value)} placeholder="Beschrijf de huidige situatie van de client bij dit leefgebied" className={inputCls} />
                         </div>
+                        {goalSmartErrors.length > 0 && (
+                          <div className="rounded-md border border-coral-200 bg-coral-50 dark:border-coral-800 dark:bg-coral-950/20 p-3 space-y-1">
+                            <p className="text-xs font-semibold text-coral-800 dark:text-coral-300">SMART-validatiefouten:</p>
+                            <ul className="list-disc list-inside space-y-1">
+                              {goalSmartErrors.map((msg, i) => (
+                                <li key={i} className="text-xs text-coral-700 dark:text-coral-300">{msg}</li>
+                              ))}
+                            </ul>
+                            <p className="text-xs text-coral-600 dark:text-coral-400 mt-2">
+                              Pas het doel aan zodat het voldoet aan de SMART-criteria (Specifiek, Meetbaar, Tijdgebonden).
+                            </p>
+                          </div>
+                        )}
                         <div className="flex justify-end">
                           <button onClick={() => handleAddGoal(cp.id!)} disabled={goalSaving || !goalDescription || !goalLeefgebied} className="rounded-md bg-brand-700 px-4 py-2 text-xs font-medium text-white shadow-sm hover:bg-brand-800 disabled:opacity-50 btn-press">
                             {goalSaving ? "Opslaan..." : "Doel opslaan"}
