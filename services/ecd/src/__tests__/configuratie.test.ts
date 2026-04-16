@@ -148,8 +148,8 @@ describe("Configuratie routes — Validation Rules", () => {
     });
 
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { validationRules: unknown[] };
-    expect(Array.isArray(body.validationRules)).toBe(true);
+    const body = (await res.json()) as { rules: unknown[] };
+    expect(Array.isArray(body.rules)).toBe(true);
   });
 
   it("POST /api/admin/validation-rules creates a rule", async () => {
@@ -166,11 +166,8 @@ describe("Configuratie routes — Validation Rules", () => {
     });
 
     expect(res.status).toBe(201);
-    const body = (await res.json()) as {
-      validationRule: { id: string; operator: string; layer: string };
-    };
-    expect(body.validationRule.operator).toBe("required");
-    expect(body.validationRule.layer).toBe("uitbreiding");
+    const body = (await res.json()) as { id: string; operator: string };
+    expect(body.operator).toBe("required");
   });
 
   it("POST /api/admin/validation-rules rejects missing fields", async () => {

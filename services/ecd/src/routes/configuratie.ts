@@ -55,7 +55,7 @@ async function loadCustomFields(tenantUuid: string): Promise<CustomFieldDefiniti
   }));
 }
 
-async function loadValidationRules(tenantUuid: string): Promise<ValidationRule[]> {
+async function _loadValidationRules(tenantUuid: string): Promise<ValidationRule[]> {
   const res = await pool.query(
     "SELECT id, config_data FROM openzorg.tenant_configurations WHERE tenant_id = $1 AND config_type = 'validation_rule' ORDER BY created_at",
     [tenantUuid],
