@@ -85,11 +85,16 @@ const NAV_SECTIONS: NavSection[] = [
       { href: "/admin/vragenlijsten", label: "Vragenlijsten", icon: IconClipboard, permission: "configuratie:read" },
       { href: "/admin/codelijsten", label: "Codelijsten", icon: IconList, permission: "configuratie:read" },
       { href: "/admin/validatie", label: "Validatieregels", icon: IconShield, permission: "configuratie:read" },
-      { href: "/admin/state-machines", label: "State-machines", icon: IconFlow, permission: "configuratie:read" },
-      { href: "/admin/rollen", label: "Rollen & rechten", icon: IconShield, permission: "rollen:read" },
       { href: "/admin/task-form-options", label: "Taak-formulieren", icon: IconList, permission: "configuratie:read" },
       { href: "/admin/client-dashboard-config", label: "Client dashboard", icon: IconGrid, permission: "configuratie:read" },
       { href: "/admin/workflows/dmn", label: "DMN tabellen (bèta)", icon: IconList, permission: "workflows:read", featureFlag: "dmn-editor" },
+    ],
+  },
+  {
+    label: "Systeem",
+    items: [
+      { href: "/admin/state-machines", label: "State-machines", icon: IconFlow, permission: "state-machines:read" },
+      { href: "/admin/rollen", label: "Rollen & rechten", icon: IconShield, permission: "rollen:read" },
     ],
   },
   {
