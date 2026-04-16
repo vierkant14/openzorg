@@ -59,6 +59,12 @@ export default function ZorgplannenOverzichtPage() {
   const [filterStatus, setFilterStatus] = useState<FilterStatus>("alle");
   const [zoekterm, setZoekterm] = useState("");
 
+  // Nieuw zorgplan: client-kiezer
+  const [showClientKiezer, setShowClientKiezer] = useState(false);
+  const [allClients, setAllClients] = useState<FhirPatient[]>([]);
+  const [clientZoek, setClientZoek] = useState("");
+  const [clientsLoading, setClientsLoading] = useState(false);
+
   useEffect(() => {
     setLoading(true);
     ecdFetch<FhirBundle>("/api/zorgplannen").then(({ data, error: err }) => {
@@ -80,6 +86,30 @@ export default function ZorgplannenOverzichtPage() {
       setLoading(false);
     });
   }, []);
+
+  // Laad cliënten als de kiezer opent
+  useEffect(() => {
+    if (!showClientKiezer) return;
+    setClientsLoading(true);
+    ecdFetch<{ entry?: Array<{ resource: FhirPatient }> }>("/api/clients?_count=200&_sort=family").then(({ data }) => {
+      if (data?.entry) {
+        setAllClients(data.entry.map((e) => e.resource));
+      }
+      setClientsLoading(false);
+    });
+  }, [showClientKiezer]);
+
+  const filteredClients = useMemo(() => {
+    if (!clientZoek) return allClients;
+    const q = clientZoek.toLowerCase();
+    return allClients.filter((p) => getPatientNaam(p).toLowerCase().includes(q));
+  }, [allClients, clientZoek]);
+
+  // Cliënten die al een zorgplan hebben
+  const clientsMetPlan = useMemo(() => {
+    const refs = new Set(plans.map((p) => p.subject?.reference).filter(Boolean));
+    return refs;
+  }, [plans]);
 
   const filtered = useMemo(() => {
     return plans.filter((p) => {
@@ -112,12 +142,63 @@ export default function ZorgplannenOverzichtPage() {
   return (
     <AppShell>
       <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold text-fg">Zorgplan-overzicht</h1>
-          <p className="mt-2 text-fg-muted">
-            Alle zorgplannen binnen je tenant. Monitor status, evaluatie-deadlines en welke cliënten nog geen plan hebben.
-          </p>
+        <div className="mb-6 flex items-start justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-fg">Zorgplan-overzicht</h1>
+            <p className="mt-2 text-fg-muted">
+              Alle zorgplannen binnen je tenant. Monitor status, evaluatie-deadlines en welke cliënten nog geen plan hebben.
+            </p>
+          </div>
+          <button
+            onClick={() => setShowClientKiezer(true)}
+            className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"
+          >
+            + Nieuw zorgplan
+          </button>
         </div>
+
+        {/* Client-kiezer modal */}
+        {showClientKiezer && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+            <div className="w-full max-w-md rounded-xl border border-default bg-raised p-6 shadow-xl">
+              <div className="mb-4 flex items-center justify-between">
+                <h2 className="text-lg font-semibold text-fg">Kies een cliënt</h2>
+                <button onClick={() => { setShowClientKiezer(false); setClientZoek(""); }} className="text-fg-muted hover:text-fg">&times;</button>
+              </div>
+              <input
+                type="text"
+                value={clientZoek}
+                onChange={(e) => setClientZoek(e.target.value)}
+                placeholder="Zoek op naam…"
+                className="mb-3 w-full rounded-lg border border-default bg-page px-3 py-2 text-sm text-fg"
+                autoFocus
+              />
+              {clientsLoading && <p className="text-sm text-fg-muted">Laden…</p>}
+              {!clientsLoading && filteredClients.length === 0 && (
+                <p className="text-sm text-fg-muted">Geen cliënten gevonden.</p>
+              )}
+              <ul className="max-h-64 overflow-y-auto">
+                {filteredClients.map((p) => {
+                  const heeftPlan = clientsMetPlan.has(`Patient/${p.id}`);
+                  return (
+                    <li key={p.id}>
+                      <Link
+                        href={`/ecd/${p.id}/zorgplan`}
+                        onClick={() => setShowClientKiezer(false)}
+                        className="flex items-center justify-between rounded-lg px-3 py-2 text-sm hover:bg-sunken"
+                      >
+                        <span className="font-medium text-fg">{getPatientNaam(p)}</span>
+                        {heeftPlan && (
+                          <span className="text-xs text-fg-subtle">heeft al een plan</span>
+                        )}
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          </div>
+        )}
 
         {/* Stats */}
         <div className="mb-6 grid grid-cols-2 md:grid-cols-4 gap-3">
