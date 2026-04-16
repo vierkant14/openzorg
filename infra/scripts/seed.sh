@@ -105,7 +105,7 @@ async function seedTenantData(token, tenantName) {
   // ── Practitioners (20 medewerkers) ──
   const practitioners = [
     // Original 6
-    { family: 'de Vries', given: ['Jan'], role: 'beheerder', qualification: 'Wijkverpleegkundige' },
+    { family: 'de Vries', given: ['Jan'], role: 'tenant-admin', qualification: 'Applicatiebeheerder' },
     { family: 'Bakker', given: ['Annemarie'], role: 'zorgmedewerker', qualification: 'Verzorgende IG' },
     { family: 'van Dijk', given: ['Peter'], role: 'teamleider', qualification: 'Teamleider zorg' },
     { family: 'Smit', given: ['Lisa'], role: 'planner', qualification: 'Planner' },
@@ -1056,7 +1056,7 @@ deploy_bpmn "intake-proces" '<?xml version="1.0" encoding="UTF-8"?>
     <userTask id="intakeGesprekPlannen" name="Intake gesprek plannen" flowable:candidateGroups="zorgmedewerker" />
     <sequenceFlow id="f5" sourceRef="intakeGesprekPlannen" targetRef="endGoedgekeurd" />
     <endEvent id="endGoedgekeurd" name="Intake afgerond" />
-    <userTask id="afwijzingCommuniceren" name="Afwijzing communiceren" flowable:candidateGroups="beheerder" />
+    <userTask id="afwijzingCommuniceren" name="Afwijzing communiceren" flowable:candidateGroups="beheerder,tenant-admin" />
     <sequenceFlow id="f6" sourceRef="afwijzingCommuniceren" targetRef="endAfgewezen" />
     <endEvent id="endAfgewezen" name="Aanmelding afgewezen" />
   </process>
@@ -1141,7 +1141,7 @@ deploy_bpmn "herindicatie" '<?xml version="1.0" encoding="UTF-8"?>
       <documentation>Werk het zorgplan bij, actualiseer diagnoses en zorgzwaarte.</documentation>
     </userTask>
     <sequenceFlow id="f5" sourceRef="gegevensActualiseren" targetRef="aanvraagIndienen" />
-    <userTask id="aanvraagIndienen" name="Herindicatie aanvragen bij CIZ" flowable:candidateGroups="beheerder">
+    <userTask id="aanvraagIndienen" name="Herindicatie aanvragen bij CIZ" flowable:candidateGroups="beheerder,tenant-admin">
       <documentation>Dien de herindicatie-aanvraag in bij het CIZ of de gemeente.</documentation>
     </userTask>
     <sequenceFlow id="f6" sourceRef="aanvraagIndienen" targetRef="besluitVerwerken" />
@@ -1186,7 +1186,7 @@ deploy_bpmn "mic-afhandeling" '<?xml version="1.0" encoding="UTF-8"?>
     </userTask>
     <sequenceFlow id="f5" sourceRef="maatregelenRegistreren" targetRef="endLaag" />
     <endEvent id="endLaag" name="MIC afgehandeld (laag)" />
-    <userTask id="maatregelenBepalen" name="Verbetermaatregelen bepalen" flowable:candidateGroups="beheerder">
+    <userTask id="maatregelenBepalen" name="Verbetermaatregelen bepalen" flowable:candidateGroups="beheerder,tenant-admin">
       <documentation>Bepaal structurele verbetermaatregelen voor dit hoog-risico incident.</documentation>
     </userTask>
     <sequenceFlow id="f6" sourceRef="maatregelenBepalen" targetRef="maatregelenUitvoeren" />
