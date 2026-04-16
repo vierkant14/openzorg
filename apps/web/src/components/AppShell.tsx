@@ -8,6 +8,7 @@ import { useEffect, useMemo, useState } from "react";
 import { clearSession, getUserRole, isMasterAdmin, isLoggedIn } from "../lib/api";
 import { isFeatureEnabled, type FeatureFlagSlug } from "../lib/features";
 
+import { ChatPanel, useAiChatAvailable } from "./ChatPanel";
 import TenantSwitcher from "./TenantSwitcher";
 
 /* ── Navigation items ── */
@@ -115,6 +116,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [authChecked, setAuthChecked] = useState(false);
 
+  const [chatOpen, setChatOpen] = useState(false);
+  const aiAvailable = useAiChatAvailable();
   const [sessionWarning, setSessionWarning] = useState(false);
   // Counter die wordt verhoogd wanneer feature-flags vernieuwd worden;
   // triggert re-render van filteredSections zodat UI live reageert.
@@ -130,6 +133,19 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       window.removeEventListener("storage", bump);
     };
   }, []);
+
+  /* Keyboard shortcut: Ctrl+. toggles AI chat panel */
+  useEffect(() => {
+    if (!aiAvailable) return;
+    function handleKey(e: KeyboardEvent) {
+      if (e.ctrlKey && e.key === ".") {
+        e.preventDefault();
+        setChatOpen((prev) => !prev);
+      }
+    }
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [aiAvailable]);
 
   /* Auth guard — redirect to login if not authenticated */
   useEffect(() => {
@@ -373,6 +389,17 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           {/* Tenant switcher (master admin only) */}
           {masterAdmin && <TenantSwitcher />}
 
+          {/* AI Chat toggle */}
+          {aiAvailable && (
+            <button
+              onClick={() => setChatOpen(!chatOpen)}
+              className={`p-2 rounded-lg transition-colors ${chatOpen ? "bg-brand-100 text-brand-700 dark:bg-brand-900 dark:text-brand-300" : "text-fg-muted hover:text-fg hover:bg-sunken"}`}
+              title="AI Assistent (Ctrl+.)"
+            >
+              <IconChat className="w-5 h-5" />
+            </button>
+          )}
+
           {/* User */}
           <div className="flex items-center gap-3 ml-4">
             <div className="text-right hidden sm:block">
@@ -398,10 +425,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         )}
 
-        {/* Page content */}
-        <main className="flex-1 overflow-y-auto">
-          {children}
-        </main>
+        {/* Page content + AI chat panel */}
+        <div className="flex-1 flex overflow-hidden">
+          <main className="flex-1 overflow-y-auto">
+            {children}
+          </main>
+          <ChatPanel open={chatOpen} onClose={() => setChatOpen(false)} />
+        </div>
       </div>
     </div>
   );
@@ -651,6 +681,14 @@ function IconClipboard({ className }: { className?: string }) {
       <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
       <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
       <path d="M9 14l2 2 4-4" />
+    </svg>
+  );
+}
+
+function IconChat({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
     </svg>
   );
 }
