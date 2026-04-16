@@ -93,8 +93,7 @@ export default function IndicatiesPage({ params }: { params: Promise<{ id: strin
 
   useEffect(() => {
     if (clientId) load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clientId]);
+  }, [clientId]); // load is stable (defined in component scope)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();

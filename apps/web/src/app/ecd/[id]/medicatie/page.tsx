@@ -286,7 +286,7 @@ function MedicatieForm({
   clientId,
   onSaved,
   onCancel,
-  medCodelijst = [],
+  medCodelijst: _medCodelijst = [],
   editItem,
 }: {
   clientId: string;

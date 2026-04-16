@@ -46,7 +46,7 @@ export default function AllergieenPage() {
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [naam, setNaam] = useState("");
-  const [codelijst, setCodelijst] = useState<Array<{ code: string; display: string }>>([]);
+  const [_codelijst, setCodelijst] = useState<Array<{ code: string; display: string }>>([]);
 
   useEffect(() => {
     ecdFetch<{ items: Array<{ code: string; display: string }> }>("/api/admin/codelijsten/allergieen")

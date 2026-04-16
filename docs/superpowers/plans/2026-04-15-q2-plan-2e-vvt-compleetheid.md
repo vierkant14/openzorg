@@ -189,7 +189,7 @@ Zonder dit plan blijft OpenZorg een "speelgoed-ECD". Mét dit plan is het een se
 ## Stappen hierna (na 2E)
 
 - **Plan 2F — JSONForms per state-transitie**: als een cliënt van "in-intake" → "in-zorg" gaat, toon een formulier dat de zorgplan-velden afdwingt
-- **Plan 2G — Bulk-import uit concurrenten**: CSV/JSON-importer die ONSDB / Caress data converteert naar FHIR
+- **Plan 2G — Bulk-import uit concurrenten**: CSV/JSON-importer die legacy ECD-data converteert naar FHIR
 - **Plan 3A — SAML/SSO** koppeling aan Entra ID / Google Workspace van de VVT
 - **Plan 3B — Mobile-web voor zorgmedewerkers**: compact responsive dashboard voor onderweg
 - **Plan 3C — Kwaliteitsdashboard** per locatie: HKZ-indicatoren, aantal MIC's, val-incidenten, rapportage-compliance
