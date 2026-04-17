@@ -1,9 +1,11 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import AppShell from "../../../components/AppShell";
+import { RoosterGrid } from "../../../components/planning/RoosterGrid";
+import { RoosterToolbar } from "../../../components/planning/RoosterToolbar";
+import type { FhirAppointment } from "../../../components/planning/AfspraakBlock";
 import { ecdFetch } from "../../../lib/api";
 import { planningFetch } from "../../../lib/planning-api";
 
@@ -20,35 +22,18 @@ interface PractitionerBundle {
   entry?: Array<{ resource: Practitioner }>;
 }
 
-interface SlotResource {
-  id?: string;
-  status: string;
-  start: string;
-  end: string;
-  comment?: string;
-}
-
-interface BeschikbaarheidResponse {
-  schedule?: { id?: string; active?: boolean };
-  slots?: {
-    entry?: Array<{ resource: SlotResource }>;
-  };
-}
-
-interface FhirAppointment {
-  id?: string;
-  status?: string;
-  start?: string;
-  end?: string;
-  description?: string;
-  participant?: Array<{
-    actor?: { reference?: string; display?: string };
-    status?: string;
-  }>;
-}
-
 interface AppointmentBundle {
   entry?: Array<{ resource: FhirAppointment }>;
+}
+
+interface ContractInfo {
+  medewerkerId: string;
+  urenPerWeek: number;
+  contractType: string;
+}
+
+interface ContractsResponse {
+  contracts: ContractInfo[];
 }
 
 /* ---------- Helpers ---------- */
@@ -58,14 +43,6 @@ function getNaam(p: Practitioner): string {
   if (!name) return "(onbekend)";
   const given = name.given?.join(" ") ?? "";
   return `${given} ${name.family ?? ""}`.trim() || "(onbekend)";
-}
-
-function formatTijd(iso: string): string {
-  try {
-    return new Date(iso).toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" });
-  } catch {
-    return iso;
-  }
 }
 
 function getWeekDays(startDate: Date): Date[] {
@@ -87,34 +64,25 @@ function dateString(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
-function formatDagKort(d: Date): string {
-  return d.toLocaleDateString("nl-NL", { weekday: "short", day: "numeric", month: "short" });
+function formatWeekLabel(days: Date[]): string {
+  if (days.length === 0) return "";
+  const first = days[0]!;
+  const last = days[6]!;
+  const optFirst: Intl.DateTimeFormatOptions = { day: "numeric", month: "long" };
+  const optLast: Intl.DateTimeFormatOptions = { day: "numeric", month: "long", year: "numeric" };
+  return `${first.toLocaleDateString("nl-NL", optFirst)} — ${last.toLocaleDateString("nl-NL", optLast)}`;
 }
-
-const STATUS_COLORS: Record<string, string> = {
-  free: "bg-brand-100 dark:bg-brand-900/30 text-brand-700 dark:text-brand-300 border-brand-200 dark:border-brand-800",
-  busy: "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300 border-yellow-200 dark:border-yellow-800",
-  "busy-unavailable": "bg-coral-100 dark:bg-coral-900/30 text-coral-700 dark:text-coral-300 border-coral-200 dark:border-coral-800",
-};
-
-const STATUS_LABELS: Record<string, string> = {
-  free: "Beschikbaar",
-  busy: "Bezet",
-  "busy-unavailable": "Niet beschikbaar",
-  "busy-tentative": "Voorlopig",
-};
 
 /* ---------- Page ---------- */
 
 export default function RoosterPage() {
-  const [practitioners, setPractitioners] = useState<Practitioner[]>([]);
+  const [practitioners, setPractitioners] = useState<Array<{ id: string; naam: string }>>([]);
   const [weekOffset, setWeekOffset] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  // Slots keyed by "practitionerId:date"
-  const [slotsMap, setSlotsMap] = useState<Record<string, SlotResource[]>>({});
-  const [appointmentsMap, setAppointmentsMap] = useState<Record<string, FhirAppointment[]>>({});
+  const [afsprakenMap, setAfsprakenMap] = useState<Record<string, FhirAppointment[]>>({});
+  const [contractMap, setContractMap] = useState<Record<string, ContractInfo>>({});
+  const [refreshKey, setRefreshKey] = useState(0);
 
   const baseDate = new Date();
   baseDate.setDate(baseDate.getDate() + weekOffset * 7);
@@ -128,123 +96,96 @@ export default function RoosterPage() {
       setError(status === 0 ? err : null);
       if (status === 0) return [];
     }
-    const pracs = (data?.entry?.map((e) => e.resource) ?? []).filter((p) => p.active !== false);
+    const pracs = (data?.entry?.map((e) => e.resource) ?? [])
+      .filter((p) => p.active !== false)
+      .map((p) => ({ id: p.id, naam: getNaam(p) }));
     setPractitioners(pracs);
     return pracs;
   }, []);
 
-  const loadWeekData = useCallback(async (pracs: Practitioner[], days: Date[]) => {
-    setLoading(true);
-    setError(null);
-
-    const newSlots: Record<string, SlotResource[]> = {};
-    const newAppointments: Record<string, FhirAppointment[]> = {};
-
-    // Load beschikbaarheid for each practitioner for the week
-    const promises = pracs.map(async (prac) => {
-      for (const day of days) {
-        const key = `${prac.id}:${dateString(day)}`;
-        const res = await planningFetch<BeschikbaarheidResponse>(
-          `/api/beschikbaarheid/medewerker/${prac.id}?datum=${dateString(day)}`,
-        );
-        if (!res.error && res.data) {
-          newSlots[key] = res.data.slots?.entry?.map((e) => e.resource) ?? [];
-        }
+  const loadContracts = useCallback(async (pracIds: string[]) => {
+    if (pracIds.length === 0) return;
+    const { data } = await planningFetch<ContractsResponse>(
+      `/api/medewerkers/contracts?ids=${pracIds.join(",")}`,
+    );
+    if (data?.contracts) {
+      const map: Record<string, ContractInfo> = {};
+      for (const c of data.contracts) {
+        map[c.medewerkerId] = c;
       }
-    });
+      setContractMap(map);
+    }
+  }, []);
 
-    // Load appointments for the week
+  const loadAfspraken = useCallback(async (days: Date[], pracs: Array<{ id: string }>) => {
+    if (days.length === 0 || pracs.length === 0) return;
     const weekStart = dateString(days[0]!);
     const weekEnd = dateString(days[6]!);
-    const apptRes = await planningFetch<AppointmentBundle>(
-      `/api/afspraken?date=ge${weekStart}&date=le${weekEnd}&_count=200`,
+
+    const { data } = await planningFetch<AppointmentBundle>(
+      `/api/afspraken?date=ge${weekStart}&date=le${weekEnd}&_count=500`,
     );
 
-    if (!apptRes.error && apptRes.data?.entry) {
-      for (const entry of apptRes.data.entry) {
+    const map: Record<string, FhirAppointment[]> = {};
+    // Initialize all practitioners with empty arrays
+    for (const prac of pracs) {
+      map[prac.id] = [];
+    }
+
+    if (data?.entry) {
+      for (const entry of data.entry) {
         const appt = entry.resource;
         if (!appt.start) continue;
-        const apptDate = appt.start.slice(0, 10);
 
-        // Find which practitioner this belongs to
         const pracRef = appt.participant?.find((p) =>
           p.actor?.reference?.startsWith("Practitioner/"),
         )?.actor?.reference;
 
         if (pracRef) {
           const pracId = pracRef.replace("Practitioner/", "");
-          const key = `${pracId}:${apptDate}`;
-          if (!newAppointments[key]) newAppointments[key] = [];
-          newAppointments[key].push(appt);
+          if (!map[pracId]) map[pracId] = [];
+          map[pracId]!.push(appt);
         }
       }
     }
 
-    await Promise.allSettled(promises);
-    setSlotsMap(newSlots);
-    setAppointmentsMap(newAppointments);
-    setLoading(false);
+    setAfsprakenMap(map);
   }, []);
 
   useEffect(() => {
     (async () => {
+      setLoading(true);
+      setError(null);
+
       const pracs = await loadPractitioners();
       if (pracs.length > 0) {
-        await loadWeekData(pracs, weekDays);
-      } else {
-        setLoading(false);
+        await Promise.all([
+          loadAfspraken(weekDays, pracs),
+          loadContracts(pracs.map((p) => p.id)),
+        ]);
       }
-    })();
-  }, [weekOffset]);
 
-  const isToday = (d: Date) => dateString(d) === dateString(new Date());
+      setLoading(false);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [weekOffset, refreshKey]);
+
+  const handleRefresh = useCallback(() => {
+    setRefreshKey((k) => k + 1);
+  }, []);
+
+  const weekLabel = formatWeekLabel(weekDays);
 
   return (
     <AppShell>
-      <main className="max-w-[1600px] mx-auto px-6 py-8">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <div className="flex items-center gap-3 mb-1">
-              <Link
-                href="/planning"
-                className="text-sm text-brand-700 hover:text-brand-900"
-              >
-                &larr; Planning
-              </Link>
-            </div>
-            <h1 className="text-2xl font-bold text-fg">Rooster</h1>
-            <p className="text-sm text-fg-muted mt-1">
-              Weekoverzicht beschikbaarheid en afspraken per medewerker
-            </p>
-          </div>
-
-          {/* Week navigation */}
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setWeekOffset((w) => w - 1)}
-              className="p-2 rounded-lg hover:bg-sunken transition-colors text-fg-muted"
-            >
-              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M15 18l-6-6 6-6" />
-              </svg>
-            </button>
-            <button
-              onClick={() => setWeekOffset(0)}
-              className="px-3 py-1.5 text-sm font-medium rounded-lg hover:bg-sunken transition-colors text-fg"
-            >
-              Vandaag
-            </button>
-            <button
-              onClick={() => setWeekOffset((w) => w + 1)}
-              className="p-2 rounded-lg hover:bg-sunken transition-colors text-fg-muted"
-            >
-              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M9 18l6-6-6-6" />
-              </svg>
-            </button>
-          </div>
-        </div>
+      <main className="max-w-[1800px] mx-auto px-6 py-8">
+        <RoosterToolbar
+          weekOffset={weekOffset}
+          onPrevWeek={() => setWeekOffset((w) => w - 1)}
+          onNextWeek={() => setWeekOffset((w) => w + 1)}
+          onToday={() => setWeekOffset(0)}
+          weekLabel={weekLabel}
+        />
 
         {error && (
           <div className="p-3 bg-coral-50 dark:bg-coral-950/20 border border-coral-200 dark:border-coral-800 rounded-xl text-coral-600 dark:text-coral-400 text-sm mb-6">
@@ -267,109 +208,14 @@ export default function RoosterPage() {
             </p>
           </div>
         ) : (
-          <div className="bg-raised rounded-2xl border border-default overflow-hidden shadow-soft">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-default">
-                    <th className="text-left px-4 py-3 text-overline text-fg-subtle uppercase tracking-wider font-semibold w-48 sticky left-0 bg-raised z-10">
-                      Medewerker
-                    </th>
-                    {weekDays.map((day) => (
-                      <th
-                        key={dateString(day)}
-                        className={`text-left px-3 py-3 text-overline uppercase tracking-wider font-semibold min-w-[140px] ${
-                          isToday(day) ? "text-brand-600 dark:text-brand-400" : "text-fg-subtle"
-                        }`}
-                      >
-                        <span className="block">{formatDagKort(day)}</span>
-                        {isToday(day) && (
-                          <span className="block w-1.5 h-1.5 rounded-full bg-brand-500 mt-1" />
-                        )}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {practitioners.map((prac) => (
-                    <tr key={prac.id} className="border-b border-subtle last:border-0 hover:bg-sunken/50 transition-colors">
-                      <td className="px-4 py-3 font-medium text-fg sticky left-0 bg-raised z-10">
-                        {getNaam(prac)}
-                      </td>
-                      {weekDays.map((day) => {
-                        const key = `${prac.id}:${dateString(day)}`;
-                        const slots = slotsMap[key] ?? [];
-                        const appointments = appointmentsMap[key] ?? [];
-                        const isWeekend = day.getDay() === 0 || day.getDay() === 6;
-
-                        return (
-                          <td
-                            key={dateString(day)}
-                            className={`px-3 py-2 align-top ${isWeekend ? "bg-sunken/30" : ""}`}
-                          >
-                            {/* Slots (beschikbaarheid) */}
-                            {slots.map((slot, i) => (
-                              <div
-                                key={slot.id ?? i}
-                                className={`text-xs rounded-lg px-2 py-1 mb-1 border ${STATUS_COLORS[slot.status] ?? "bg-surface-100 text-fg-muted border-default"}`}
-                              >
-                                <span className="font-medium">
-                                  {formatTijd(slot.start)}–{formatTijd(slot.end)}
-                                </span>
-                                <span className="block text-[10px] opacity-75">
-                                  {STATUS_LABELS[slot.status] ?? slot.status}
-                                </span>
-                              </div>
-                            ))}
-
-                            {/* Afspraken */}
-                            {appointments.map((appt) => (
-                              <div
-                                key={appt.id}
-                                className="text-xs rounded-lg px-2 py-1 mb-1 border bg-navy-50 dark:bg-navy-900/30 text-navy-700 dark:text-navy-300 border-navy-200 dark:border-navy-800"
-                              >
-                                <span className="font-medium">
-                                  {appt.start ? formatTijd(appt.start) : ""}
-                                  {appt.end ? `–${formatTijd(appt.end)}` : ""}
-                                </span>
-                                <span className="block text-[10px] opacity-75 truncate max-w-[120px]">
-                                  {appt.description ?? "Afspraak"}
-                                </span>
-                              </div>
-                            ))}
-
-                            {slots.length === 0 && appointments.length === 0 && (
-                              <span className="text-xs text-fg-subtle">—</span>
-                            )}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Legend */}
-            <div className="px-4 py-3 border-t border-subtle flex flex-wrap gap-4">
-              <div className="flex items-center gap-1.5">
-                <span className="w-3 h-3 rounded bg-brand-100 dark:bg-brand-900/30 border border-brand-200 dark:border-brand-800" />
-                <span className="text-caption text-fg-subtle">Beschikbaar</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="w-3 h-3 rounded bg-yellow-100 dark:bg-yellow-900/30 border border-yellow-200 dark:border-yellow-800" />
-                <span className="text-caption text-fg-subtle">Bezet</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="w-3 h-3 rounded bg-coral-100 dark:bg-coral-900/30 border border-coral-200 dark:border-coral-800" />
-                <span className="text-caption text-fg-subtle">Niet beschikbaar</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="w-3 h-3 rounded bg-navy-50 dark:bg-navy-900/30 border border-navy-200 dark:border-navy-800" />
-                <span className="text-caption text-fg-subtle">Afspraak</span>
-              </div>
-            </div>
-          </div>
+          <RoosterGrid
+            practitioners={practitioners}
+            afsprakenMap={afsprakenMap}
+            contractMap={contractMap}
+            weekDays={weekDays}
+            onAfspraakMoved={handleRefresh}
+            onAfspraakCreated={handleRefresh}
+          />
         )}
       </main>
     </AppShell>
