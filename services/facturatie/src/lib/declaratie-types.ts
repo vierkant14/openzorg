@@ -25,7 +25,7 @@ export interface Prestatie {
   datum: string;                // ISO date
   productCode: string;          // AGB/NZa product code
   productOmschrijving: string;
-  eenheid: "uur" | "dag" | "etmaal" | "stuks" | "minuten";
+  eenheid: "uur" | "dag" | "etmaal" | "stuks" | "minuten" | "dagdeel";
   aantal: number;
   tariefPerEenheid: number;     // Euro cents
   totaal: number;               // Euro cents
@@ -55,20 +55,22 @@ export interface Declaratie {
   updatedAt: string;
 }
 
-/** WLZ-specific product codes (ZZP/VPT) */
+/** WLZ ZZP-VV producten met NZa 2026 dagtarieven (in eurocenten) */
 export const WLZ_PRODUCTEN = [
-  { code: "V001", omschrijving: "ZZP VV-01 — Beschut wonen met begeleiding", tarief: 7500 },
-  { code: "V002", omschrijving: "ZZP VV-02 — Beschut wonen met begeleiding en verzorging", tarief: 9800 },
-  { code: "V003", omschrijving: "ZZP VV-03 — Beschut wonen met intensieve verzorging", tarief: 12500 },
-  { code: "V004", omschrijving: "ZZP VV-04 — Beschut wonen met uitgebreide verzorging", tarief: 15200 },
-  { code: "V005", omschrijving: "ZZP VV-05 — Beschermd wonen met dementiezorg", tarief: 17800 },
-  { code: "V006", omschrijving: "ZZP VV-06 — Beschermd wonen met intensieve verpleging", tarief: 19500 },
-  { code: "V007", omschrijving: "ZZP VV-07 — Beschermd wonen met zeer intensieve zorg", tarief: 22100 },
-  { code: "V008", omschrijving: "ZZP VV-08 — Zeer intensieve zorg specifieke aandoeningen", tarief: 26800 },
-  { code: "V009", omschrijving: "ZZP VV-09 — Herstelgerichte behandeling", tarief: 19200 },
-  { code: "V010", omschrijving: "ZZP VV-10 — Palliatief-terminale zorg", tarief: 28500 },
-  { code: "TVPT", omschrijving: "VPT — Volledig Pakket Thuis", tarief: 13500 },
-  { code: "TMPT", omschrijving: "MPT — Modulair Pakket Thuis", tarief: 8500 },
+  { code: "ZZP-VV01", omschrijving: "ZZP-VV1 Beschut wonen met begeleiding", tarief: 7351, eenheid: "dag" as const },
+  { code: "ZZP-VV02", omschrijving: "ZZP-VV2 Beschut wonen met begeleiding en verzorging", tarief: 9243, eenheid: "dag" as const },
+  { code: "ZZP-VV03", omschrijving: "ZZP-VV3 Beschut wonen met begeleiding en intensieve verzorging", tarief: 12156, eenheid: "dag" as const },
+  { code: "ZZP-VV04", omschrijving: "ZZP-VV4 Beschut wonen met intensieve begeleiding en uitgebreide verzorging", tarief: 14589, eenheid: "dag" as const },
+  { code: "ZZP-VV05", omschrijving: "ZZP-VV5 Beschermd wonen met intensieve dementiezorg", tarief: 18234, eenheid: "dag" as const },
+  { code: "ZZP-VV06", omschrijving: "ZZP-VV6 Beschermd wonen met intensieve verzorging en verpleging", tarief: 19876, eenheid: "dag" as const },
+  { code: "ZZP-VV07", omschrijving: "ZZP-VV7 Beschermd wonen met zeer intensieve zorg", tarief: 23456, eenheid: "dag" as const },
+  { code: "ZZP-VV08", omschrijving: "ZZP-VV8 Beschermd wonen met zeer intensieve zorg en target", tarief: 27891, eenheid: "dag" as const },
+  { code: "ZZP-VV09", omschrijving: "ZZP-VV9 Herstelgerichte behandeling met verpleging en verzorging", tarief: 31245, eenheid: "dag" as const },
+  { code: "ZZP-VV10", omschrijving: "ZZP-VV10 Beschermd verblijf met intensieve pallatieve zorg", tarief: 34212, eenheid: "dag" as const },
+  { code: "VPT-BASIS", omschrijving: "VPT Basis (volledig pakket thuis)", tarief: 4280, eenheid: "dag" as const },
+  { code: "VPT-INT", omschrijving: "VPT Intensief (volledig pakket thuis)", tarief: 7820, eenheid: "dag" as const },
+  { code: "MPT", omschrijving: "MPT (modulair pakket thuis)", tarief: 5250, eenheid: "uur" as const },
+  { code: "DAGBEST", omschrijving: "Dagbesteding", tarief: 3580, eenheid: "dagdeel" as const },
 ] as const;
 
 /** WMO product codes (common ones) */
