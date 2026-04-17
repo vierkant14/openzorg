@@ -237,6 +237,20 @@ export default function NieuweClientPage() {
     }
 
     if (data?.id) {
+      // Create Coverage resource if verzekeraar or polisnummer provided
+      if (verzekeraar || polisnummer) {
+        await ecdFetch(`/api/clients/${data.id}/verzekering`, {
+          method: "POST",
+          body: JSON.stringify({
+            verzekeraar: verzekeraar || undefined,
+            polisnummer: polisnummer || undefined,
+            financieringstype: indicatieType || undefined,
+            ingangsdatum: indicatieStartdatum || undefined,
+            einddatum: indicatieEinddatum || undefined,
+            zzpKlasse: zorgprofiel || undefined,
+          }),
+        });
+      }
       router.push(`/ecd/${data.id}`);
     }
   }
