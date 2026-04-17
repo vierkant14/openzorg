@@ -23,6 +23,7 @@ const TABS = [
   { slug: "wilsverklaringen", label: "Wilsverklaringen" },
   { slug: "vbm", label: "VBM" },
   { slug: "documenten", label: "Documenten" },
+  { slug: "verzekering", label: "Verzekering" },
   { slug: "extra-velden", label: "Extra velden" },
 ] as const;
 
