@@ -16,6 +16,7 @@ import { clientRoutes } from "./routes/client.js";
 import { codelijstenRoutes } from "./routes/codelijsten.js";
 import { configuratieRoutes } from "./routes/configuratie.js";
 import { contactpersoonRoutes } from "./routes/contactpersoon.js";
+import { coverageRoutes } from "./routes/coverage.js";
 import { contractenRoutes } from "./routes/contracten.js";
 import { diagnoseRoutes } from "./routes/diagnose.js";
 import { documentenRoutes } from "./routes/documenten.js";
@@ -132,6 +133,9 @@ app.route("/api/clients", mdoRoutes);
 // Vrijheidsbeperkende maatregelen (Procedure)
 app.route("/api/clients", vbmRoutes);
 app.route("/api/vbm", vbmRoutes);
+
+// Coverage / Verzekeringsdekking (FHIR Coverage for billing)
+app.route("/api/clients", coverageRoutes);
 
 // MIC Meldingen (Incident reports)
 app.route("/api/mic-meldingen", micMeldingRoutes);
