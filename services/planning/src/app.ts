@@ -8,6 +8,7 @@ import { beschikbaarheidRoutes } from "./routes/beschikbaarheid.js";
 import { dagplanningRoutes } from "./routes/dagplanning.js";
 import { healthRoutes } from "./routes/health.js";
 import { herhalingRoutes } from "./routes/herhaling.js";
+import { contractRoutes } from "./routes/contract.js";
 import { wachtlijstRoutes } from "./routes/wachtlijst.js";
 
 export type AppEnv = {
@@ -49,3 +50,6 @@ app.route("/api/beschikbaarheid", beschikbaarheidRoutes);
 
 // PLN-05: Wachtlijst (Waiting list)
 app.route("/api/wachtlijst", wachtlijstRoutes);
+
+// PLN-06: Contract-uren (Medewerker contract info)
+app.route("/api/medewerkers", contractRoutes);
