@@ -119,7 +119,6 @@ export default function VerzekeringPage() {
 
   useEffect(() => {
     loadCoverages();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clientId]);
 
   function resetForm() {

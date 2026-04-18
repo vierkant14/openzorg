@@ -3,9 +3,9 @@
 import { useCallback, useEffect, useState } from "react";
 
 import AppShell from "../../../components/AppShell";
+import type { FhirAppointment } from "../../../components/planning/AfspraakBlock";
 import { RoosterGrid } from "../../../components/planning/RoosterGrid";
 import { RoosterToolbar } from "../../../components/planning/RoosterToolbar";
-import type { FhirAppointment } from "../../../components/planning/AfspraakBlock";
 import { ecdFetch } from "../../../lib/api";
 import { planningFetch } from "../../../lib/planning-api";
 
@@ -167,7 +167,6 @@ export default function RoosterPage() {
 
       setLoading(false);
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [weekOffset, refreshKey]);
 
   const handleRefresh = useCallback(() => {

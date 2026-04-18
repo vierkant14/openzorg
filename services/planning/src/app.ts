@@ -5,10 +5,10 @@ import { logger } from "hono/logger";
 import { tenantMiddleware } from "./middleware/tenant.js";
 import { afspraakRoutes } from "./routes/afspraak.js";
 import { beschikbaarheidRoutes } from "./routes/beschikbaarheid.js";
+import { contractRoutes } from "./routes/contract.js";
 import { dagplanningRoutes } from "./routes/dagplanning.js";
 import { healthRoutes } from "./routes/health.js";
 import { herhalingRoutes } from "./routes/herhaling.js";
-import { contractRoutes } from "./routes/contract.js";
 import { wachtlijstRoutes } from "./routes/wachtlijst.js";
 
 export type AppEnv = {

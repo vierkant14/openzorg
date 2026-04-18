@@ -14,6 +14,7 @@ import { useCallback, useState } from "react";
 import type { CaoViolation, Shift } from "../../lib/cao-engine";
 import { validateAllCaoRules } from "../../lib/cao-engine";
 import { planningFetch } from "../../lib/planning-api";
+
 import type { FhirAppointment } from "./AfspraakBlock";
 import { CaoWarning } from "./CaoWarning";
 import { InlineAfspraakForm } from "./InlineAfspraakForm";
@@ -209,7 +210,6 @@ export function RoosterGrid({
     } else {
       onAfspraakMoved();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [localAfspraken, practitioners, contractMap, onAfspraakMoved]);
 
   function handleSlotClick(practitionerId: string, datum: string, time: string) {
