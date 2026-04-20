@@ -135,11 +135,11 @@ const PRESTATIES = [
   { product_code: 'VPT-BASIS', product_naam: 'VPT Basis (volledig pakket thuis)', financieringstype: 'wlz', eenheid: 'dag', aantal: 31, tarief: 4280 },
   { product_code: 'MPT', product_naam: 'MPT (modulair pakket thuis)', financieringstype: 'wlz', eenheid: 'uur', aantal: 40, tarief: 5250 },
   { product_code: 'DAGBEST', product_naam: 'Dagbesteding', financieringstype: 'wlz', eenheid: 'dagdeel', aantal: 20, tarief: 3580 },
-  { product_code: 'PV-01', product_naam: 'Persoonlijke verzorging', financieringstype: 'wmo', eenheid: 'uur', aantal: 16, tarief: 4250 },
-  { product_code: 'HH-01', product_naam: 'Huishoudelijke hulp', financieringstype: 'wmo', eenheid: 'uur', aantal: 12, tarief: 3180 },
-  { product_code: 'BG-01', product_naam: 'Individuele begeleiding', financieringstype: 'wmo', eenheid: 'uur', aantal: 8, tarief: 5680 },
-  { product_code: 'WV-01', product_naam: 'Wijkverpleging', financieringstype: 'zvw', eenheid: 'uur', aantal: 20, tarief: 7950 },
-  { product_code: 'WV-02', product_naam: 'Gespecialiseerde verpleging', financieringstype: 'zvw', eenheid: 'uur', aantal: 10, tarief: 9850 },
+  { product_code: 'ZZP-VV01', financieringstype: 'wlz', aantal: 30 },
+  { product_code: 'ZZP-VV04', financieringstype: 'wlz', aantal: 14 },
+  { product_code: 'VPT-INT', financieringstype: 'wlz', aantal: 21 },
+  { product_code: 'ZZP-VV06', financieringstype: 'wlz', aantal: 10 },
+  { product_code: 'ZZP-VV02', financieringstype: 'wlz', aantal: 25 },
   { product_code: 'ZZP-VV08', product_naam: 'ZZP-VV8 Beschermd wonen met zeer intensieve zorg', financieringstype: 'wlz', eenheid: 'dag', aantal: 14, tarief: 27891 },
   { product_code: 'ZZP-VV10', product_naam: 'ZZP-VV10 Beschermd verblijf met intensieve palliatieve zorg', financieringstype: 'wlz', eenheid: 'dag', aantal: 7, tarief: 34212 },
 ];
@@ -187,7 +187,7 @@ async function seedTenant(email, password, label) {
       aantal: p.aantal,
       opmerking: 'Testdata seed',
     });
-    if (result.id) {
+    if (result.id || result.prestatie?.id) {
       prestatieCount++;
     }
   }
@@ -205,10 +205,10 @@ async function seedTenant(email, password, label) {
 
     const result = await factPost(projectId, '/api/declaraties', {
       financieringstype: ft,
-      periode_van: periodeVan.toISOString().split('T')[0],
-      periode_tot: periodeTot.toISOString().split('T')[0],
+      periodeVan: periodeVan.toISOString().split('T')[0],
+      periodeTot: periodeTot.toISOString().split('T')[0],
     });
-    if (result.id || result.nummer) {
+    if (result.id || result.nummer || result.declaratie) {
       declCount++;
       console.log('  Declaratie: ' + (result.nummer || result.id) + ' (' + ft + ')');
     }
