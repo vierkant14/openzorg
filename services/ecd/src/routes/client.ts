@@ -251,6 +251,101 @@ clientRoutes.delete("/:id/foto", async (c) => {
   });
 });
 
+const LOCATIE_EXTENSION_URL = "https://openzorg.nl/extensions/locatie-toewijzing";
+
+type FhirExtension = {
+  url: string;
+  valueString?: string;
+  extension?: FhirExtension[];
+};
+
+type FhirPatient = Record<string, unknown> & {
+  extension?: FhirExtension[];
+  managingOrganization?: { reference: string };
+};
+
+/**
+ * GET /api/clients/:clientId/locatie — Get current location assignment for a client.
+ */
+clientRoutes.get("/:clientId/locatie", async (c) => {
+  const clientId = c.req.param("clientId");
+
+  const current = await medplumFetch(c, `/fhir/R4/Patient/${clientId}`);
+  if (!current.ok) {
+    return proxyMedplumResponse(c, current);
+  }
+
+  const patient = (await current.json()) as FhirPatient;
+
+  const locatieExt = patient.extension?.find((e) => e.url === LOCATIE_EXTENSION_URL);
+
+  if (!locatieExt) {
+    return c.json(null);
+  }
+
+  const orgId = locatieExt.extension?.find((e) => e.url === "orgId")?.valueString ?? null;
+  const afdelingNaam = locatieExt.extension?.find((e) => e.url === "afdelingNaam")?.valueString ?? null;
+  const kamer = locatieExt.extension?.find((e) => e.url === "kamer")?.valueString ?? null;
+
+  return c.json({ orgId, afdelingNaam, kamer });
+});
+
+/**
+ * PUT /api/clients/:clientId/locatie — Set location assignment for a client.
+ *
+ * Body: { orgId: string, afdelingNaam?: string, kamer?: string }
+ */
+clientRoutes.put("/:clientId/locatie", async (c) => {
+  const clientId = c.req.param("clientId");
+  const body = await c.req.json<{ orgId: string; afdelingNaam?: string; kamer?: string }>();
+
+  if (!body.orgId) {
+    return c.json(
+      operationOutcome("error", "required", "orgId is verplicht"),
+      400,
+    );
+  }
+
+  const current = await medplumFetch(c, `/fhir/R4/Patient/${clientId}`);
+  if (!current.ok) {
+    return proxyMedplumResponse(c, current);
+  }
+
+  const patient = (await current.json()) as FhirPatient;
+
+  // Build the new locatie-toewijzing extension sub-extensions
+  const subExtensions: FhirExtension[] = [
+    { url: "orgId", valueString: body.orgId },
+  ];
+  if (body.afdelingNaam !== undefined) {
+    subExtensions.push({ url: "afdelingNaam", valueString: body.afdelingNaam });
+  }
+  if (body.kamer !== undefined) {
+    subExtensions.push({ url: "kamer", valueString: body.kamer });
+  }
+
+  const locatieExtension: FhirExtension = {
+    url: LOCATIE_EXTENSION_URL,
+    extension: subExtensions,
+  };
+
+  // Replace or add the locatie-toewijzing extension
+  const otherExtensions = (patient.extension ?? []).filter(
+    (e) => e.url !== LOCATIE_EXTENSION_URL,
+  );
+
+  const updatedPatient: FhirPatient = {
+    ...patient,
+    extension: [...otherExtensions, locatieExtension],
+    managingOrganization: { reference: `Organization/${body.orgId}` },
+  };
+
+  return medplumProxy(c, `/fhir/R4/Patient/${clientId}`, {
+    method: "PUT",
+    body: JSON.stringify(updatedPatient),
+  });
+});
+
 /**
  * DELETE /api/clients/:id — Soft delete: sets Patient.active = false.
  */
