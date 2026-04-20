@@ -452,7 +452,8 @@ async function main() {
         : patient.id;
 
       const ok = await putEcd(token, tenantId, '/api/clients/' + patient.id + '/locatie', {
-        organisatieId: afdelingId,
+        orgId: afdelingId,
+        afdelingNaam: assign.afdelingName,
         kamer: String(kamer),
       });
       if (ok) {
