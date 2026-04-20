@@ -13,7 +13,8 @@ interface AiSettings {
 }
 
 interface TestResult {
-  ok: boolean;
+  ok?: boolean;
+  healthy?: boolean;
   models?: string[];
   error?: string;
 }
@@ -54,7 +55,7 @@ export default function AiInstellingenPage() {
       setTestResult({ ok: false, error: error ?? "Onbekende fout" });
     } else {
       setTestResult(data);
-      if (data.ok && data.models && data.models.length > 0 && !settings.model) {
+      if ((data.ok || data.healthy) && data.models && data.models.length > 0 && !settings.model) {
         setSettings((prev) => ({ ...prev, model: data.models![0] ?? "" }));
       }
     }
@@ -77,7 +78,7 @@ export default function AiInstellingenPage() {
     setSaving(false);
   }
 
-  const modelsAvailable = testResult?.ok && testResult.models && testResult.models.length > 0;
+  const modelsAvailable = testResult?.ok || testResult?.healthy && testResult.models && testResult.models.length > 0;
 
   return (
     <AppShell>
