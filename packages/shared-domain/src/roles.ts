@@ -93,7 +93,13 @@ export type Permission =
   | "api-keys:write"
   | "ai-config:read"
   | "ai-config:write"
-  | "ai-chat:read";
+  | "ai-chat:read"
+  | "competenties:read"
+  | "competenties:write"
+  | "bezetting:read"
+  | "bezetting:write"
+  | "dienst-config:read"
+  | "dienst-config:write";
 
 /**
  * Permission matrix: which role has which permissions.
@@ -118,6 +124,9 @@ export const ROLE_PERMISSIONS: Record<OpenZorgRole, readonly Permission[]> = {
     "feature-flags:read", "feature-flags:write",
     "api-keys:read", "api-keys:write",
     "ai-config:read", "ai-config:write", "ai-chat:read",
+    "competenties:read", "competenties:write",
+    "bezetting:read", "bezetting:write",
+    "dienst-config:read", "dienst-config:write",
   ],
   beheerder: [
     "clients:read", "clients:write", "clients:delete",
@@ -133,6 +142,9 @@ export const ROLE_PERMISSIONS: Record<OpenZorgRole, readonly Permission[]> = {
     "configuratie:read", "configuratie:write",
     "workflows:read", "workflows:write",
     "ai-chat:read",
+    "competenties:read", "competenties:write",
+    "bezetting:read", "bezetting:write",
+    "dienst-config:read", "dienst-config:write",
   ],
   zorgmedewerker: [
     "clients:read", "clients:write",
