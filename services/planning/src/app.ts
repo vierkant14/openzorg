@@ -7,6 +7,7 @@ import { afspraakRoutes } from "./routes/afspraak.js";
 import { beschikbaarheidRoutes } from "./routes/beschikbaarheid.js";
 import { contractRoutes } from "./routes/contract.js";
 import { dagplanningRoutes } from "./routes/dagplanning.js";
+import { dienstConfigRoutes } from "./routes/dienst-config.js";
 import { healthRoutes } from "./routes/health.js";
 import { herhalingRoutes } from "./routes/herhaling.js";
 import { wachtlijstRoutes } from "./routes/wachtlijst.js";
@@ -53,3 +54,6 @@ app.route("/api/wachtlijst", wachtlijstRoutes);
 
 // PLN-06: Contract-uren (Medewerker contract info)
 app.route("/api/medewerkers", contractRoutes);
+
+// PLN-07: Dienst-configuratie (Shift type config with inheritance)
+app.route("/api/dienst-config", dienstConfigRoutes);
