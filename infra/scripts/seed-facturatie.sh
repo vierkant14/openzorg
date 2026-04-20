@@ -99,16 +99,26 @@ async function ecdPost(token, projectId, path, body) {
   return res.json();
 }
 
+// Map Medplum projectId to tenant UUID (from openzorg.tenants init.sql)
+const TENANT_UUID_MAP = {
+  'medplum-project-horizon': 'a0000000-0000-0000-0000-000000000001',
+  'medplum-project-linde': 'b0000000-0000-0000-0000-000000000002',
+};
+
 async function factPost(projectId, path, body) {
+  // Facturatie service needs the tenant UUID, not the Medplum project ID
+  const tenantId = TENANT_UUID_MAP[projectId] || projectId;
   const res = await fetch(FACTURATIE + path, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-Tenant-ID': projectId,
+      'X-Tenant-ID': tenantId,
     },
     body: JSON.stringify(body),
   });
-  return res.json();
+  const data = await res.json();
+  if (!res.ok) console.log('    factPost error:', JSON.stringify(data).substring(0, 150));
+  return data;
 }
 
 const COVERAGES = [
