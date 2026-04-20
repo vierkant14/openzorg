@@ -11,6 +11,7 @@ import { dagplanningRoutes } from "./routes/dagplanning.js";
 import { dienstConfigRoutes } from "./routes/dienst-config.js";
 import { healthRoutes } from "./routes/health.js";
 import { herhalingRoutes } from "./routes/herhaling.js";
+import { planningEngineRoutes } from "./routes/planning-engine.js";
 import { wachtlijstRoutes } from "./routes/wachtlijst.js";
 
 export type AppEnv = {
@@ -61,3 +62,6 @@ app.route("/api/dienst-config", dienstConfigRoutes);
 
 // PLN-08: Bezettingsprofiel (Staffing requirements per afdeling per dienst)
 app.route("/api/bezetting", bezettingRoutes);
+
+// PLN-09: Planning engine (constraint solver: validate, optimaliseer, genereer)
+app.route("/api/planning-engine", planningEngineRoutes);
