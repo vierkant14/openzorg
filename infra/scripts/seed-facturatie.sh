@@ -170,14 +170,11 @@ async function seedTenant(email, password, label) {
     datum.setDate(datum.getDate() - (i * 3)); // spread over last ~36 days
 
     const result = await factPost(projectId, '/api/prestaties', {
-      client_id: patientIds[clientIdx],
+      clientId: patientIds[clientIdx],
       datum: datum.toISOString().split('T')[0],
-      product_code: p.product_code,
-      product_naam: p.product_naam,
+      productCode: p.product_code,
       financieringstype: p.financieringstype,
-      eenheid: p.eenheid,
       aantal: p.aantal,
-      tarief: p.tarief,
       opmerking: 'Testdata seed',
     });
     if (result.id) {
