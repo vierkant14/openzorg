@@ -15,6 +15,32 @@ OpenZorg heeft een basisplanning (afspraken, beschikbaarheid, wachtlijst) maar m
 
 Intramuraal (bezettingsrooster) en Extramuraal (routeplanning) worden als aparte feature-flag modules gebouwd. Ze delen een gemeenschappelijke basis: contracten, beschikbaarheid, CAO-engine, competenties. Dit spec behandelt uitsluitend het intramurale deel. Feature-flag: `planning.intramuraal` in tenant-configuratie.
 
+### 1b. Sector-uitbreidbaarheid (alle zorgmodules)
+
+Dit systeem is de eerste implementatie (VVT intramuraal), maar de architectuur moet werken voor alle zorgsectoren op de OpenZorg roadmap. Elk concept is bewust sector-neutraal ontworpen:
+
+| Concept | VVT Intramuraal | GGZ | GHZ | Ziekenhuis | Revalidatie |
+|---|---|---|---|---|---|
+| **Organisatie-eenheid** | Afdeling/verdieping | Behandelgroep/unit | Woongroep | Afdeling/station | Revalidatie-unit |
+| **Dienst** | Vroeg/Laat/Nacht | Dagbehandeling/klinisch | 24-uurs begeleiding | Dag/Avond/Nacht/Piket | Therapieblok |
+| **Zorgzwaarte** | ZZP-VV klasse | DBBC-zwaarte | ZZP-GHZ klasse | DBC-zorgproduct | DBC-GRZ |
+| **Competentie (kern)** | Voorbehouden handelingen | BIG + GGZ-specialisatie | AVG-arts, orthopedagoog | Specialisme | Paramedisch |
+| **Bezettingseis** | Min. per dienst | Behandelaar/client ratio | Begeleider/bewoner ratio | Verpleegkundige/bed ratio | Therapeut/client ratio |
+
+**Implementatieprincipes voor uitbreidbaarheid:**
+
+1. **Zorgzwaarte als interface, niet als VVT-formule.** De `zorgzwaarte.ts` module definieert een interface `ZorgzwaarteCalculator` met methode `berekenFTE(clienten, sector)`. VVT implementeert dit met ZZP-klassen. GGZ implementeert het later met DBBC-zwaarte. De planning-engine roept alleen de interface aan.
+
+2. **Competenties sector-getagd.** Elke competentie krijgt een `sector: string[]` veld. Kern-competenties als "voorbehouden handelingen" gelden cross-sector. Sector-specifieke competenties (bv. "GGZ agoog") zijn getagd met `["ggz"]` en verschijnen alleen bij GGZ-tenants.
+
+3. **Dienst-templates per sector.** De standaard diensttypen worden per sector geladen. Een GGZ-tenant krijgt andere defaults (Dagbehandeling 09:00-17:00, Klinische dienst 07:00-23:00) dan een VVT-tenant. De tenant kan altijd overschrijven.
+
+4. **Bezettingsformule configureerbaar.** De formule "ZZP VV1-3 = 0.5 FTE/client" is een VVT-default. De formule-parameters worden opgeslagen in `tenant_configurations` zodat GGZ een andere formule kan gebruiken.
+
+5. **Feature-flags per sector-module.** `planning.intramuraal` (deze spec), `planning.extramuraal` (thuiszorg), `planning.dagbehandeling` (GGZ/revalidatie). Elke module activeert de bijbehorende views en configuratie.
+
+**Wat dit betekent voor deze implementatie:** we bouwen nu VVT intramuraal, maar elke hardcoded VVT-term (ZZP, verpleegkundige, verzorgende) wordt achter een configuratie-laag gezet. De UI toont wat de tenant heeft geconfigureerd, niet wat wij hardcoden.
+
 ### 2. Flexibele organisatie-hierarchie
 
 De bestaande n-niveau hierarchie (holding -> regio -> cluster -> locatie -> team) wordt hergebruikt via het FHIR Organization resource met `partOf`-referenties. Bezettingsprofiel en dienst-configuratie kan op elk niveau worden ingesteld. De UI biedt een tree-picker om het juiste niveau te selecteren.
