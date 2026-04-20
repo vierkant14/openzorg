@@ -156,8 +156,8 @@ export default function AiInstellingenPage() {
               </button>
 
               {testResult && (
-                <div className={`mt-2 text-sm ${testResult.ok ? "text-emerald-600" : "text-coral-600"}`}>
-                  {testResult.ok ? (
+                <div className={`mt-2 text-sm ${(testResult.ok || testResult.healthy) ? "text-emerald-600" : "text-coral-600"}`}>
+                  {(testResult.ok || testResult.healthy) ? (
                     <>
                       Verbinding geslaagd &mdash;{" "}
                       {testResult.models && testResult.models.length > 0
