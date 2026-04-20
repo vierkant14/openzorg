@@ -41,10 +41,15 @@ async function resolveTenantUuid(tenantIdOrProjectId: string): Promise<string | 
  */
 aiSettingsRoutes.get("/", async (c) => {
   const tenantHeader = c.get("tenantId");
+  console.log("[AI-SETTINGS] GET tenantHeader:", tenantHeader);
   const tenantUuid = await resolveTenantUuid(tenantHeader);
+  console.log("[AI-SETTINGS] resolved UUID:", tenantUuid);
   if (!tenantUuid) {
     return c.json({ settings: DEFAULT_SETTINGS });
   }
+
+  // Set RLS context for tenant_configurations access
+  await pool.query("SELECT set_config('openzorg.current_tenant_id', $1, true)", [tenantUuid]);
 
   const result = await pool.query<{ config_data: AiSettings }>(
     `SELECT config_data
