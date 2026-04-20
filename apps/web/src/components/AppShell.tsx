@@ -58,6 +58,7 @@ const NAV_SECTIONS: NavSection[] = [
     label: "Planning",
     items: [
       { href: "/planning", label: "Overzicht", icon: IconCalendar, permission: "planning:read" },
+      { href: "/planning/bezetting", label: "Bezettingsrooster", icon: IconGrid, permission: "bezetting:read" },
       { href: "/planning/dagplanning", label: "Dagplanning", icon: IconCalendarDay, permission: "planning:read" },
       { href: "/planning/rooster", label: "Rooster", icon: IconClock, permission: "planning:read" },
       { href: "/planning/herhalingen", label: "Herhalingen", icon: IconRepeat, permission: "planning:write" },
