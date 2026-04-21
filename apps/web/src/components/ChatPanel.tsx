@@ -66,7 +66,7 @@ export function useAiChatAvailable(): boolean {
       try {
         const token = localStorage.getItem("openzorg_token");
         const tenantId = localStorage.getItem("openzorg_tenant_id");
-        const res = await fetch("/api/ecd/admin/ai-settings", {
+        const res = await fetch("/api/ecd/api/admin/ai-settings", {
           headers: {
             Authorization: `Bearer ${token ?? ""}`,
             "X-Tenant-ID": tenantId ?? "",
@@ -74,9 +74,9 @@ export function useAiChatAvailable(): boolean {
           },
         });
         if (!res.ok) return;
-        const data = (await res.json()) as { enabled?: boolean };
+        const data = (await res.json()) as { settings?: { enabled?: boolean } };
         if (!cancelled) {
-          setTenantEnabled(data.enabled === true);
+          setTenantEnabled(data.settings?.enabled === true);
         }
       } catch {
         // AI not available
