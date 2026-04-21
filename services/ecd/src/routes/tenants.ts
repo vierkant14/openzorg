@@ -390,6 +390,7 @@ const FEATURE_FLAG_SLUGS = [
   "dmn-editor",
   "facturatie-module",
   "planning-module",
+  "planning-intramuraal",
   "mic-meldingen",
   "rapportages-ai",
   "sales-canvas",

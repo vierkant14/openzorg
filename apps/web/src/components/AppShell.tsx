@@ -98,6 +98,7 @@ const NAV_SECTIONS: NavSection[] = [
   {
     label: "Systeem",
     items: [
+      { href: "/admin/modules", label: "Modules", icon: IconGrid, permission: "feature-flags:read" },
       { href: "/admin/state-machines", label: "State-machines", icon: IconFlow, permission: "state-machines:read" },
       { href: "/admin/rollen", label: "Rollen & rechten", icon: IconShield, permission: "rollen:read" },
       { href: "/admin/ai-instellingen", label: "AI Instellingen", icon: IconSettings, permission: "ai-config:read" },
