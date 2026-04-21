@@ -138,7 +138,7 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
       const controller = new AbortController();
       abortRef.current = controller;
 
-      const res = await fetch("/api/ecd/ai/chat", {
+      const res = await fetch("/api/ecd/api/ai/chat", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
