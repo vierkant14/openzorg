@@ -182,16 +182,34 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
 
         for (const line of lines) {
           if (line.startsWith("data: ")) {
-            const chunk = line.slice(6);
-            if (chunk === "[DONE]") break;
-            setMessages((prev) => {
-              const copy = [...prev];
-              const last = copy[copy.length - 1];
-              if (last?.role === "assistant") {
-                copy[copy.length - 1] = { ...last, content: last.content + chunk };
+            const raw = line.slice(6);
+            if (raw === "[DONE]") break;
+            try {
+              const parsed = JSON.parse(raw) as { chunk?: string; done?: boolean };
+              if (parsed.done) break;
+              if (parsed.chunk) {
+                setMessages((prev) => {
+                  const copy = [...prev];
+                  const last = copy[copy.length - 1];
+                  if (last?.role === "assistant") {
+                    copy[copy.length - 1] = { ...last, content: last.content + parsed.chunk };
+                  }
+                  return copy;
+                });
               }
-              return copy;
-            });
+            } catch {
+              // Not JSON — might be raw text, append as-is
+              if (raw.trim()) {
+                setMessages((prev) => {
+                  const copy = [...prev];
+                  const last = copy[copy.length - 1];
+                  if (last?.role === "assistant") {
+                    copy[copy.length - 1] = { ...last, content: last.content + raw };
+                  }
+                  return copy;
+                });
+              }
+            }
           }
         }
       }
