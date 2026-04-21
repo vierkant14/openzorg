@@ -214,6 +214,11 @@ export async function buildClientContext(c: Context<AppEnv>, clientId: string): 
     }
 
     // Vaccinaties
+    console.log("[AI-Context] vaccRes.ok:", vaccRes.ok, "status:", vaccRes.status);
+    if (!vaccRes.ok) {
+      const errText = await vaccRes.text().catch(() => "?");
+      console.log("[AI-Context] vaccRes error:", errText.substring(0, 200));
+    }
     if (vaccRes.ok) {
       const bundle = (await vaccRes.json()) as { entry?: Array<{ resource: Record<string, unknown> }> };
       const vaccs = (bundle.entry ?? []).map((e) => {
