@@ -143,12 +143,15 @@ export function matchWikiSection(question: string): string | null {
 
 export async function buildClientContext(c: Context<AppEnv>, clientId: string): Promise<string | null> {
   try {
-    const [patientRes, allergyRes, medRes, planRes, flagRes] = await Promise.all([
+    const [patientRes, allergyRes, medRes, planRes, flagRes, vaccRes, diagRes, rapRes] = await Promise.all([
       medplumFetch(c, `/fhir/R4/Patient/${clientId}`),
       medplumFetch(c, `/fhir/R4/AllergyIntolerance?patient=Patient/${clientId}&clinical-status=active&_count=10`),
       medplumFetch(c, `/fhir/R4/MedicationRequest?patient=Patient/${clientId}&status=active&_count=10`),
       medplumFetch(c, `/fhir/R4/CarePlan?subject=Patient/${clientId}&status=active&_count=1&_sort=-_lastUpdated`),
       medplumFetch(c, `/fhir/R4/Flag?patient=Patient/${clientId}&status=active&_count=5`),
+      medplumFetch(c, `/fhir/R4/Immunization?patient=Patient/${clientId}&_count=10&_sort=-date`),
+      medplumFetch(c, `/fhir/R4/Condition?patient=Patient/${clientId}&_count=10`),
+      medplumFetch(c, `/fhir/R4/Observation?subject=Patient/${clientId}&code=https://openzorg.nl/CodeSystem/observation-type|rapportage&_count=5&_sort=-date`),
     ]);
 
     const lines: string[] = ["\n## Clientgegevens (uit het dossier)"];
@@ -207,6 +210,46 @@ export async function buildClientContext(c: Context<AppEnv>, clientId: string): 
       });
       if (flags.length > 0) {
         lines.push(`Signaleringen: ${flags.join(", ")}`);
+      }
+    }
+
+    // Vaccinaties
+    if (vaccRes.ok) {
+      const bundle = (await vaccRes.json()) as { entry?: Array<{ resource: Record<string, unknown> }> };
+      const vaccs = (bundle.entry ?? []).map((e) => {
+        const r = e.resource;
+        const vaccine = ((r.vaccineCode as Record<string, unknown>)?.text as string) ??
+          ((r.vaccineCode as Record<string, unknown>)?.coding as Array<{ display?: string }> | undefined)?.[0]?.display ?? "?";
+        const date = (r.occurrenceDateTime as string)?.split("T")[0] ?? "";
+        return date ? `${vaccine} (${date})` : vaccine;
+      });
+      lines.push(`Vaccinaties: ${vaccs.length > 0 ? vaccs.join(", ") : "Geen geregistreerd"}`);
+    }
+
+    // Diagnoses
+    if (diagRes.ok) {
+      const bundle = (await diagRes.json()) as { entry?: Array<{ resource: Record<string, unknown> }> };
+      const diags = (bundle.entry ?? []).map((e) => {
+        const r = e.resource;
+        return ((r.code as Record<string, unknown>)?.text as string) ??
+          ((r.code as Record<string, unknown>)?.coding as Array<{ display?: string }> | undefined)?.[0]?.display ?? "?";
+      });
+      if (diags.length > 0) {
+        lines.push(`Diagnoses: ${diags.join(", ")}`);
+      }
+    }
+
+    // Laatste rapportages
+    if (rapRes.ok) {
+      const bundle = (await rapRes.json()) as { entry?: Array<{ resource: Record<string, unknown> }> };
+      const raps = (bundle.entry ?? []).map((e) => {
+        const r = e.resource;
+        const date = (r.effectiveDateTime as string)?.split("T")[0] ?? "";
+        const text = ((r.valueString as string) ?? "").substring(0, 100);
+        return `${date}: ${text}${text.length >= 100 ? "..." : ""}`;
+      });
+      if (raps.length > 0) {
+        lines.push(`Laatste rapportages:\n${raps.map((r) => `  - ${r}`).join("\n")}`);
       }
     }
 
