@@ -35,9 +35,9 @@ export default function AiInstellingenPage() {
   useEffect(() => {
     async function load() {
       setLoading(true);
-      const { data } = await ecdFetch<AiSettings>("/api/admin/ai-settings");
-      if (data) {
-        setSettings(data);
+      const { data } = await ecdFetch<{ settings: AiSettings }>("/api/admin/ai-settings");
+      if (data?.settings) {
+        setSettings(data.settings);
       }
       setLoading(false);
     }
