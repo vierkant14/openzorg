@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-const TABS = [
+export const TABS = [
   { slug: "dashboard", label: "Dashboard" },
   { slug: "indicaties", label: "Indicaties" },
   { slug: "rapportages", label: "Rapportages" },
