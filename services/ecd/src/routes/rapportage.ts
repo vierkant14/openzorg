@@ -25,6 +25,18 @@ interface VrijRapportage {
 type RapportageInput = SoepRapportage | VrijRapportage;
 
 /**
+ * GET /api/rapportages-overzicht — List all clinical notes across all clients.
+ * Used by the cross-client rapportages overview page.
+ */
+rapportageRoutes.get("/rapportages-overzicht", async (c) => {
+  const count = c.req.query("_count") ?? "200";
+  return medplumProxy(
+    c,
+    `/fhir/R4/Observation?category=social-history&_sort=-date&_count=${encodeURIComponent(count)}&_include=Observation:subject`,
+  );
+});
+
+/**
  * GET /api/clients/:clientId/rapportages — List clinical notes (Observation resources) for a client.
  */
 rapportageRoutes.get("/clients/:clientId/rapportages", async (c) => {

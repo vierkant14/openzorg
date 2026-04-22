@@ -22,6 +22,18 @@ export const vaccinatieRoutes = new Hono<AppEnv>();
  */
 
 /**
+ * GET /api/vaccinaties-overzicht — List all vaccinations across all clients.
+ * Used by the cross-client vaccinaties overview page.
+ */
+vaccinatieRoutes.get("/overzicht", async (c) => {
+  const count = c.req.query("_count") ?? "200";
+  return medplumProxy(
+    c,
+    `/fhir/R4/Immunization?_sort=-date&_count=${encodeURIComponent(count)}&_include=Immunization:patient`,
+  );
+});
+
+/**
  * GET /api/clients/:patientId/vaccinaties — List all vaccinations for a patient.
  */
 vaccinatieRoutes.get("/:patientId/vaccinaties", async (c) => {
