@@ -32,6 +32,26 @@ const WILSVERKLARING_TYPES: Record<string, string> = {
 const VALID_TYPES = Object.keys(WILSVERKLARING_TYPES);
 
 /**
+ * GET /api/wilsverklaringen-overzicht — Cross-client overview of all Consent (wilsverklaring) resources.
+ * Supports optional query params: type, status, _count.
+ */
+wilsverklaringRoutes.get("/wilsverklaringen-overzicht", async (c) => {
+  const type = c.req.query("type");
+  const status = c.req.query("status");
+  const count = c.req.query("_count") ?? "200";
+
+  let url = `/fhir/R4/Consent?category=https://openzorg.nl/CodeSystem/wilsverklaring-type|&_count=${count}&_sort=-date&_include=Consent:patient`;
+  if (type) {
+    url += `&category=https://openzorg.nl/CodeSystem/wilsverklaring-type|${type}`;
+  }
+  if (status) {
+    url += `&status=${status}`;
+  }
+
+  return medplumProxy(c, url);
+});
+
+/**
  * GET /api/clients/:patientId/wilsverklaringen — List all wilsverklaringen for a patient.
  */
 wilsverklaringRoutes.get("/:patientId/wilsverklaringen", async (c) => {

@@ -122,9 +122,12 @@ app.route("/api/clients", toedieningRoutes);
 
 // Vaccinaties (Immunization)
 app.route("/api/clients", vaccinatieRoutes);
+app.route("/api/vaccinaties", vaccinatieRoutes);
 
 // Wilsverklaringen / BOPZ-status (Consent)
 app.route("/api/clients", wilsverklaringRoutes);
+// Cross-client wilsverklaringen overzicht (/api/wilsverklaringen-overzicht)
+app.route("/api", wilsverklaringRoutes);
 
 // Medicatieoverzicht (MedicationStatement)
 app.route("/api/clients", medicatieOverzichtRoutes);
