@@ -92,6 +92,7 @@ const NAV_SECTIONS: NavSection[] = [
       { href: "/admin/validatie", label: "Validatieregels", icon: IconShield, permission: "configuratie:read" },
       { href: "/admin/task-form-options", label: "Taak-formulieren", icon: IconList, permission: "configuratie:read" },
       { href: "/admin/client-dashboard-config", label: "Client dashboard", icon: IconGrid, permission: "configuratie:read" },
+      { href: "/admin/audit", label: "Audit log", icon: IconList, permission: "configuratie:read" },
       { href: "/admin/workflows/dmn", label: "DMN tabellen (bèta)", icon: IconList, permission: "workflows:read", featureFlag: "dmn-editor" },
     ],
   },

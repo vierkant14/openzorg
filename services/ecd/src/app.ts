@@ -8,6 +8,7 @@ import { rbacMiddleware } from "./middleware/rbac.js";
 import { tenantMiddleware } from "./middleware/tenant.js";
 import { aiSettingsRoutes } from "./routes/ai-settings.js";
 import { aiRoutes } from "./routes/ai.js";
+import { auditLogRoutes } from "./routes/audit-log.js";
 import { allergieRoutes } from "./routes/allergie.js";
 import { apiDocsRoutes } from "./routes/api-docs.js";
 import { berichtenRoutes } from "./routes/berichten.js";
@@ -188,6 +189,9 @@ app.route("/api/admin/state-machines", stateMachinesRoutes);
 // Sprint 6: API docs, Integraties (webhooks + API keys)
 app.route("/api/docs", apiDocsRoutes);
 app.route("/api/admin/integraties", integratieRoutes);
+
+// Audit log (NEN 7513) — admin viewer
+app.route("/api/admin/audit-log", auditLogRoutes);
 
 // AI-instellingen per tenant (enable/disable, Ollama URL, model)
 app.route("/api/admin/ai-settings", aiSettingsRoutes);
