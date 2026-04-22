@@ -58,6 +58,11 @@ const NAV_SECTIONS: NavSection[] = [
     label: "Overzichten",
     items: [
       { href: "/mic-meldingen", label: "MIC-meldingen", icon: IconShield, permission: "mic:read" as Permission },
+      { href: "/medicatie-overzicht", label: "Medicatie", icon: IconList, permission: "medicatie:read" as Permission },
+      { href: "/wilsverklaringen", label: "Wilsverklaringen", icon: IconShield, permission: "clients:read" },
+      { href: "/vaccinaties", label: "Vaccinaties", icon: IconShield, permission: "clients:read" },
+      { href: "/rapportages", label: "Rapportages", icon: IconClipboard, permission: "rapportage:read" },
+      { href: "/signaleringen", label: "Signaleringen", icon: IconList, permission: "clients:read" },
     ],
   },
   {
