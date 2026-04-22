@@ -55,6 +55,12 @@ const NAV_SECTIONS: NavSection[] = [
     ],
   },
   {
+    label: "Overzichten",
+    items: [
+      { href: "/mic-meldingen", label: "MIC-meldingen", icon: IconShield, permission: "mic:read" as Permission },
+    ],
+  },
+  {
     label: "Planning",
     items: [
       { href: "/planning", label: "Overzicht", icon: IconCalendar, permission: "planning:read" },
