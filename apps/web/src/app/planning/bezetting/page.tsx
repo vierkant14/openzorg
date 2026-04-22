@@ -253,7 +253,7 @@ export default function BezettingsroosterPage() {
         setLoading(false);
       }
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    
   }, []);
 
   /* Reload on locatie or week change */
@@ -267,7 +267,7 @@ export default function BezettingsroosterPage() {
       await loadBezettingsEisen(selectedLocatie);
       await validateBezetting(selectedLocatie, weekISO);
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    
   }, [selectedLocatie, weekISO]);
 
   /* Build grid data */

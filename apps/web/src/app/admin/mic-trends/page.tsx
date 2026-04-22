@@ -145,7 +145,7 @@ export default function MicTrendsPage() {
       months.push({ label: monthLabel(key), key, count: monthCounts[key] ?? 0 });
     }
     return months;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    
   }, [monthCounts]);
 
   const maxCount = Math.max(...chartData.map((d) => d.count), 1);
