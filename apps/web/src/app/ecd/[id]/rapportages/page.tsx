@@ -23,6 +23,13 @@ interface FhirObservation {
   valueString?: string;
   effectiveDateTime?: string;
   extension?: Array<{ url: string; valueString: string }>;
+  focus?: Array<{ reference?: string }>;
+}
+
+function getGoalIdFromObservation(obs: FhirObservation): string | undefined {
+  const ref = obs.focus?.[0]?.reference;
+  if (!ref || !ref.startsWith("Goal/")) return undefined;
+  return ref.slice("Goal/".length);
 }
 
 interface FhirGoal {
@@ -238,14 +245,18 @@ export default function RapportagesPage() {
   const clientId = params?.id ?? "";
 
   const [allItems, setAllItems] = useState<FhirObservation[]>([]);
+  const [goals, setGoals] = useState<FhirGoal[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [filterType, setFilterType] = useState<"alle" | "soep" | "vrij">("alle");
+  const [filterGoalId, setFilterGoalId] = useState<string>("alle");
   const [filterDateFrom, setFilterDateFrom] = useState("");
   const [filterDateTo, setFilterDateTo] = useState("");
   const [searchText, setSearchText] = useState("");
   const [showFilters, setShowFilters] = useState(false);
+
+  const goalsById = new Map(goals.map((g) => [g.id ?? "", g]));
 
   const load = useCallback(() => {
     if (!clientId) return;
@@ -263,15 +274,32 @@ export default function RapportagesPage() {
     );
   }, [clientId]);
 
+  const loadGoals = useCallback(() => {
+    if (!clientId) return;
+    ecdFetch<FhirBundle<FhirGoal>>(`/api/clients/${clientId}/zorgplan`).then(({ data: cpData }) => {
+      const cpId = cpData?.entry?.[0]?.resource?.id;
+      if (!cpId) return;
+      ecdFetch<FhirBundle<FhirGoal>>(`/api/zorgplan/${cpId}/doelen`).then(({ data }) => {
+        setGoals(data?.entry?.map((e) => e.resource) ?? []);
+      });
+    });
+  }, [clientId]);
+
   useEffect(() => {
     load();
-  }, [load]);
+    loadGoals();
+  }, [load, loadGoals]);
 
   const filteredItems = allItems.filter((obs) => {
     const type = obs.code?.text?.toLowerCase() ?? "vrij";
     const isSoep = type === "soep";
     if (filterType === "soep" && !isSoep) return false;
     if (filterType === "vrij" && isSoep) return false;
+    if (filterGoalId !== "alle") {
+      const goalId = getGoalIdFromObservation(obs);
+      if (filterGoalId === "geen" && goalId) return false;
+      if (filterGoalId !== "geen" && goalId !== filterGoalId) return false;
+    }
     const dt = obs.effectiveDateTime ?? "";
     if (filterDateFrom && dt < filterDateFrom) return false;
     if (filterDateTo && dt > filterDateTo + "T23:59:59") return false;
@@ -295,7 +323,7 @@ export default function RapportagesPage() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => setShowFilters(!showFilters)}
-            className={`rounded-lg border px-3 py-1.5 text-sm font-medium btn-press ${showFilters || filterType !== "alle" || filterDateFrom || filterDateTo || searchText ? "border-brand-300 bg-brand-50 dark:bg-brand-950/20 text-brand-700" : "border-default text-fg-muted hover:bg-sunken"}`}
+            className={`rounded-lg border px-3 py-1.5 text-sm font-medium btn-press ${showFilters || filterType !== "alle" || filterGoalId !== "alle" || filterDateFrom || filterDateTo || searchText ? "border-brand-300 bg-brand-50 dark:bg-brand-950/20 text-brand-700" : "border-default text-fg-muted hover:bg-sunken"}`}
           >
             Filteren
           </button>
@@ -326,6 +354,20 @@ export default function RapportagesPage() {
               <option value="vrij">Vrij</option>
             </select>
           </div>
+          {goals.length > 0 && (
+            <div>
+              <label className="block text-xs font-medium text-fg-muted mb-1">Doel</label>
+              <select value={filterGoalId} onChange={(e) => setFilterGoalId(e.target.value)} className={filterCls}>
+                <option value="alle">Alle doelen</option>
+                <option value="geen">Geen doel</option>
+                {goals.map((g) => (
+                  <option key={g.id} value={g.id ?? ""}>
+                    {g.description?.text ?? "Doel"}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <div>
             <label className="block text-xs font-medium text-fg-muted mb-1">Van</label>
             <input type="date" value={filterDateFrom} onChange={(e) => setFilterDateFrom(e.target.value)} className={filterCls} />
@@ -338,8 +380,8 @@ export default function RapportagesPage() {
             <label className="block text-xs font-medium text-fg-muted mb-1">Zoeken</label>
             <input type="text" value={searchText} onChange={(e) => setSearchText(e.target.value)} placeholder="Zoek in rapportages..." className={`${filterCls} w-full`} />
           </div>
-          {(filterType !== "alle" || filterDateFrom || filterDateTo || searchText) && (
-            <button onClick={() => { setFilterType("alle"); setFilterDateFrom(""); setFilterDateTo(""); setSearchText(""); }} className="text-xs font-medium text-coral-600 hover:text-coral-800 btn-press pb-1.5">Wissen</button>
+          {(filterType !== "alle" || filterGoalId !== "alle" || filterDateFrom || filterDateTo || searchText) && (
+            <button onClick={() => { setFilterType("alle"); setFilterGoalId("alle"); setFilterDateFrom(""); setFilterDateTo(""); setSearchText(""); }} className="text-xs font-medium text-coral-600 hover:text-coral-800 btn-press pb-1.5">Wissen</button>
           )}
         </div>
       )}
@@ -367,9 +409,11 @@ export default function RapportagesPage() {
         {filteredItems.map((obs, i) => {
           const type = obs.code?.text ?? "vrij";
           const isSoep = type.toLowerCase() === "soep";
+          const goalId = getGoalIdFromObservation(obs);
+          const linkedGoal = goalId ? goalsById.get(goalId) : undefined;
           return (
             <li key={obs.id ?? i} className="rounded-lg border border-default bg-raised p-4">
-              <div className="mb-2 flex items-center gap-3">
+              <div className="mb-2 flex flex-wrap items-center gap-3">
                 <span className="text-xs font-medium text-fg-subtle">
                   {formatDateTime(obs.effectiveDateTime)}
                 </span>
@@ -382,6 +426,14 @@ export default function RapportagesPage() {
                 >
                   {isSoep ? "SOEP" : "Vrij"}
                 </span>
+                {linkedGoal && (
+                  <span
+                    className="inline-flex items-center gap-1 rounded-full border border-brand-200 bg-brand-50/50 px-2 py-0.5 text-xs font-medium text-brand-700 dark:border-brand-800 dark:bg-brand-950/20 dark:text-brand-300"
+                    title={linkedGoal.description?.text}
+                  >
+                    🎯 {linkedGoal.description?.text ?? "Doel"}
+                  </span>
+                )}
               </div>
               {isSoep ? (
                 <dl className="grid gap-1 text-sm">

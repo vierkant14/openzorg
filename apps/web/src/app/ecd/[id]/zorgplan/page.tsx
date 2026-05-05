@@ -137,6 +137,7 @@ export default function ZorgplanPage() {
   const [evalVoortgang, setEvalVoortgang] = useState(50);
   const [evalSaving, setEvalSaving] = useState(false);
   const [evaluaties, setEvaluaties] = useState<Record<string, Array<{ status?: string; opmerking?: string; voortgang?: number; datum?: string }>>>({});
+  const [goalRapportages, setGoalRapportages] = useState<Record<string, Array<{ id?: string; type: string; tekst: string; datum?: string }>>>({});
 
   // Handtekening form
   const [showHandtekeningForm, setShowHandtekeningForm] = useState<string | null>(null);
@@ -315,6 +316,22 @@ export default function ZorgplanPage() {
       `/api/zorgplan/${planId}/doelen/${goalId}/evaluaties`,
     ).then(({ data }) => {
       setEvaluaties((prev) => ({ ...prev, [goalId]: data?.items ?? [] }));
+    });
+  }
+
+  function loadGoalRapportages(goalId: string) {
+    ecdFetch<FhirBundle<{ id?: string; code?: { text?: string }; valueString?: string; effectiveDateTime?: string; focus?: Array<{ reference?: string }> }>>(
+      `/api/clients/${clientId}/rapportages`,
+    ).then(({ data }) => {
+      const items = (data?.entry?.map((e) => e.resource) ?? [])
+        .filter((obs) => obs.focus?.some((f) => f.reference === `Goal/${goalId}`))
+        .map((obs) => ({
+          id: obs.id,
+          type: obs.code?.text ?? "Rapportage",
+          tekst: obs.valueString ?? "",
+          datum: obs.effectiveDateTime,
+        }));
+      setGoalRapportages((prev) => ({ ...prev, [goalId]: items }));
     });
   }
 
@@ -596,7 +613,10 @@ export default function ZorgplanPage() {
                                         <button
                                           onClick={() => {
                                             setShowEvalForm(showEvalForm === goalId ? null : goalId);
-                                            if (showEvalForm !== goalId && g.id && cp.id) loadEvaluaties(cp.id, g.id);
+                                            if (showEvalForm !== goalId && g.id && cp.id) {
+                                              loadEvaluaties(cp.id, g.id);
+                                              loadGoalRapportages(g.id);
+                                            }
                                           }}
                                           className="shrink-0 rounded-md bg-brand-50 px-2.5 py-1 text-xs font-medium text-brand-700 hover:bg-brand-100 btn-press"
                                         >
@@ -655,6 +675,31 @@ export default function ZorgplanPage() {
                                           ))}
                                         </div>
                                       )}
+
+                                      {showEvalForm === goalId && (() => {
+                                        const linkedRapportages = goalRapportages[goalId] ?? [];
+                                        return (
+                                          <div className="mt-2 space-y-1">
+                                            <p className="text-xs font-medium text-fg-subtle">Gerelateerde rapportages ({linkedRapportages.length}):</p>
+                                            {linkedRapportages.length === 0 ? (
+                                              <p className="text-xs text-fg-subtle italic">Nog geen rapportages aan dit doel gekoppeld.</p>
+                                            ) : (
+                                              linkedRapportages.slice(0, 5).map((r, ri) => (
+                                                <div key={r.id ?? ri} className="flex items-start gap-2 rounded bg-raised px-2 py-1 text-xs">
+                                                  <span className="shrink-0 rounded-full bg-brand-50 dark:bg-brand-950/20 px-1.5 py-0.5 font-semibold text-brand-700 dark:text-brand-300">
+                                                    {r.type.toLowerCase().includes("soep") ? "SOEP" : "Vrij"}
+                                                  </span>
+                                                  <span className="flex-1 truncate text-fg-muted">{r.tekst}</span>
+                                                  <span className="shrink-0 text-fg-subtle">{formatDate(r.datum)}</span>
+                                                </div>
+                                              ))
+                                            )}
+                                            {linkedRapportages.length > 5 && (
+                                              <p className="text-xs text-fg-subtle italic">+ {linkedRapportages.length - 5} meer (zie rapportages-tab)</p>
+                                            )}
+                                          </div>
+                                        );
+                                      })()}
                                     </div>
                                   );
                                 })}

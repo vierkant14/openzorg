@@ -15,11 +15,13 @@ interface SoepRapportage {
   objectief: string;
   evaluatie: string;
   plan: string;
+  goalId?: string;
 }
 
 interface VrijRapportage {
   type: "vrij";
   tekst: string;
+  goalId?: string;
 }
 
 type RapportageInput = SoepRapportage | VrijRapportage;
@@ -155,6 +157,11 @@ rapportageRoutes.post("/clients/:clientId/rapportages", async (c) => {
 
   if (extensions.length > 0) {
     resource["extension"] = extensions;
+  }
+
+  // Link rapportage to a zorgplan goal if provided
+  if (body.goalId) {
+    resource["focus"] = [{ reference: `Goal/${body.goalId}` }];
   }
 
   return medplumProxy(c, "/fhir/R4/Observation", {
