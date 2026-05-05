@@ -9,6 +9,11 @@ import { clearSession, getUserRole, isMasterAdmin, isLoggedIn } from "../lib/api
 import { isFeatureEnabled, type FeatureFlagSlug } from "../lib/features";
 
 import { ChatPanel, useAiChatAvailable } from "./ChatPanel";
+import {
+  KeyboardShortcutsButton,
+  KeyboardShortcutsModal,
+  useKeyboardShortcuts,
+} from "./KeyboardShortcuts";
 import TenantSwitcher from "./TenantSwitcher";
 
 /* ── Navigation items ── */
@@ -137,6 +142,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   const [chatOpen, setChatOpen] = useState(false);
   const aiAvailable = useAiChatAvailable();
+  const { open: shortcutsOpen, setOpen: setShortcutsOpen } = useKeyboardShortcuts();
   const [sessionWarning, setSessionWarning] = useState(false);
   // Counter die wordt verhoogd wanneer feature-flags vernieuwd worden;
   // triggert re-render van filteredSections zodat UI live reageert.
@@ -452,6 +458,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           <ChatPanel open={chatOpen} onClose={() => setChatOpen(false)} />
         </div>
       </div>
+
+      <KeyboardShortcutsButton onClick={() => setShortcutsOpen(true)} />
+      <KeyboardShortcutsModal open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
     </div>
   );
 }
