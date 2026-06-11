@@ -908,7 +908,7 @@ Per feature een sub-sectie met:
 - **Effort**: L
 - **Dependencies**: F (verlof-light)
 - **Beschrijving**: Bij verlof/verzuim worden afspraken van die medewerker automatisch in herplanning-queue geplaatst, planner krijgt alternatief-suggesties.
-- **Differentiator-rationale**: Planning-engine `optimaliseer`-modus met constraint-solver die rekening houdt met competenties + CAO + ZZP-norm + cliënt-voorkeuren tegelijk is uniek t.o.v. handmatige herplanning bij Caress/Nedap. Dit is waar de killer-feature-ambitie concreet gemaakt wordt.
+- **Differentiator-rationale**: Planning-engine `optimaliseer`-modus met constraint-solver die rekening houdt met competenties + CAO + ZZP-norm + cliënt-voorkeuren tegelijk is uniek t.o.v. handmatige herplanning bij commerciële ECD-systemen. Dit is waar de killer-feature-ambitie concreet gemaakt wordt.
 - **Acceptatiecriteria**:
   - Detectie verlof/verzuim → bulk-cancel + herplanning-queue
   - Planning-engine in `optimaliseer`-modus stelt alternatieven voor
