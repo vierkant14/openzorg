@@ -1,5 +1,7 @@
 const FLOWABLE_BASE = process.env.FLOWABLE_BASE_URL || "http://localhost:8080/flowable-rest";
-const FLOWABLE_AUTH = Buffer.from("admin:admin").toString("base64");
+const FLOWABLE_USER = process.env.FLOWABLE_ADMIN_USER || "admin";
+const FLOWABLE_PASSWORD = process.env.FLOWABLE_ADMIN_PASSWORD || "admin";
+const FLOWABLE_AUTH = Buffer.from(`${FLOWABLE_USER}:${FLOWABLE_PASSWORD}`).toString("base64");
 
 interface FlowableRequestOptions {
   method?: string;
