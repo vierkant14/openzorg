@@ -1,0 +1,196 @@
+# Productie-deploy: draait gepubliceerde GHCR-images, bouwt niets lokaal.
+# Gebruik: docker compose -f infra/compose/docker-compose.prod.yml --env-file .env.prod up -d
+# Alle secrets zijn VERPLICHT via env — er zijn bewust geen defaults.
+# Web en Medplum binden op 127.0.0.1: een reverse proxy (TLS) zit ervoor.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: always
+    environment:
+      POSTGRES_DB: openzorg
+      POSTGRES_USER: openzorg
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is verplicht}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ../postgres/init.sql:/docker-entrypoint-initdb.d/01-init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U openzorg"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: always
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  medplum:
+    image: medplum/medplum-server:latest
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8103:8103"
+    environment:
+      NODE_ENV: production
+      MEDPLUM_PORT: 8103
+      MEDPLUM_BASE_URL: ${MEDPLUM_PUBLIC_URL:?MEDPLUM_PUBLIC_URL is verplicht (bijv. https://fhir.voorbeeld.nl/)}
+      MEDPLUM_DATABASE_HOST: postgres
+      MEDPLUM_DATABASE_PORT: 5432
+      MEDPLUM_DATABASE_DBNAME: medplum
+      MEDPLUM_DATABASE_USERNAME: openzorg
+      MEDPLUM_DATABASE_PASSWORD: ${POSTGRES_PASSWORD:?}
+      MEDPLUM_REDIS_HOST: redis
+      MEDPLUM_REDIS_PORT: 6379
+      MEDPLUM_SUPER_ADMIN_EMAIL: ${MEDPLUM_ADMIN_EMAIL:?MEDPLUM_ADMIN_EMAIL is verplicht}
+      MEDPLUM_SUPER_ADMIN_PASSWORD: ${MEDPLUM_ADMIN_PASSWORD:?MEDPLUM_ADMIN_PASSWORD is verplicht}
+    volumes:
+      - medplum_data:/var/lib/medplum
+      - ../medplum/medplum.config.json:/usr/src/medplum/medplum.config.json
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:8103/healthcheck').then(r=>{if(!r.ok)throw 1}).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 10s
+      retries: 120
+      start_period: 600s
+
+  flowable:
+    image: flowable/flowable-rest:7.1.0
+    restart: always
+    environment:
+      - spring.datasource.driver-class-name=org.postgresql.Driver
+      - spring.datasource.url=jdbc:postgresql://postgres:5432/openzorg
+      - spring.datasource.username=openzorg
+      - spring.datasource.password=${POSTGRES_PASSWORD:?}
+      - flowable.rest.app.admin.user-id=${FLOWABLE_ADMIN_USER:?FLOWABLE_ADMIN_USER is verplicht}
+      - flowable.rest.app.admin.password=${FLOWABLE_ADMIN_PASSWORD:?FLOWABLE_ADMIN_PASSWORD is verplicht}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/flowable-rest/actuator/health || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 15
+      start_period: 60s
+
+  ecd:
+    image: ghcr.io/vierkant14/openzorg-ecd:${OPENZORG_VERSION:?OPENZORG_VERSION is verplicht (bijv. 0.2.0)}
+    restart: always
+    depends_on:
+      medplum:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    environment:
+      ECD_PORT: 4001
+      MEDPLUM_BASE_URL: http://medplum:8103
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: openzorg
+      POSTGRES_USER: openzorg
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+      MASTER_ADMIN_KEY: ${MASTER_ADMIN_KEY:?MASTER_ADMIN_KEY is verplicht}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:4001/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  planning:
+    image: ghcr.io/vierkant14/openzorg-planning:${OPENZORG_VERSION:?}
+    restart: always
+    depends_on:
+      medplum:
+        condition: service_healthy
+    environment:
+      PLANNING_PORT: 4002
+      MEDPLUM_BASE_URL: http://medplum:8103
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:4002/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  workflow-bridge:
+    image: ghcr.io/vierkant14/openzorg-workflow-bridge:${OPENZORG_VERSION:?}
+    restart: always
+    depends_on:
+      medplum:
+        condition: service_healthy
+      flowable:
+        condition: service_healthy
+    environment:
+      WORKFLOW_PORT: 4003
+      MEDPLUM_BASE_URL: http://medplum:8103
+      FLOWABLE_BASE_URL: http://flowable:8080/flowable-rest
+      FLOWABLE_ADMIN_USER: ${FLOWABLE_ADMIN_USER:?}
+      FLOWABLE_ADMIN_PASSWORD: ${FLOWABLE_ADMIN_PASSWORD:?}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: openzorg
+      POSTGRES_USER: openzorg
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:4003/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  facturatie:
+    image: ghcr.io/vierkant14/openzorg-facturatie:${OPENZORG_VERSION:?}
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      FACTURATIE_PORT: 4004
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: openzorg
+      POSTGRES_USER: openzorg
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:4004/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  web:
+    image: ghcr.io/vierkant14/openzorg-web:${OPENZORG_VERSION:?}
+    restart: always
+    depends_on:
+      medplum:
+        condition: service_healthy
+      ecd:
+        condition: service_healthy
+      workflow-bridge:
+        condition: service_healthy
+      facturatie:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      MEDPLUM_BASE_URL: http://medplum:8103
+      ECD_SERVICE_URL: http://ecd:4001
+      PLANNING_SERVICE_URL: http://planning:4002
+      WORKFLOW_SERVICE_URL: http://workflow-bridge:4003
+      FACTURATIE_SERVICE_URL: http://facturatie:4004
+      MASTER_ADMIN_KEY: ${MASTER_ADMIN_KEY:?}
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/api/health').then(r=>{if(!r.ok)throw 1}).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+
+volumes:
+  postgres_data:
+  medplum_data:
