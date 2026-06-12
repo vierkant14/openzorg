@@ -236,6 +236,14 @@ All ports shifted to 1xxxx range to avoid conflicts with existing Unraid service
 | PostgreSQL | :5432 | :15432 |
 | Redis | :6379 | :16379 |
 
+### Productie (portable, GHCR-images)
+
+```
+docker compose -f infra/compose/docker-compose.prod.yml --env-file .env.prod up -d
+```
+
+Zie `docs/deployment-production.md` voor het volledige runbook (secrets, backup/restore, upgrades). Releases via git-tag `v*` → GitHub Actions bouwt images naar `ghcr.io/vierkant14/openzorg-*`. Test-accounts en seed-scripts zijn **dev-only** en horen nooit in productie.
+
 ### Test Accounts (created by seed container)
 
 | Account | Email | Password | Rol |
