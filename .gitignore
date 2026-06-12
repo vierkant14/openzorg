@@ -13,6 +13,10 @@ backups/
 .DS_Store
 Thumbs.db
 
+# Claude Code lokale sessie-bestanden
+.claude/settings.local.json
+.claude/scheduled_tasks.lock
+
 # Playwright
 apps/web/test-results/
 apps/web/playwright-report/
