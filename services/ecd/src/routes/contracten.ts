@@ -23,7 +23,7 @@ const CONTRACT_TYPES = ["vast", "flex", "oproep", "zzp", "stage", "vrijwilliger"
  * GET /api/contracten — List all contracts (PractitionerRoles with contract extension).
  */
 contractenRoutes.get("/", async (c) => {
-  return medplumProxy(c, `/fhir/R4/PractitionerRole?_has:extension:url=${encodeURIComponent(CONTRACT_EXT)}&_count=200`);
+  return medplumProxy(c, `/fhir/R4/PractitionerRole?_count=200`);
 });
 
 /**

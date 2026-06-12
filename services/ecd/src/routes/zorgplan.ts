@@ -88,6 +88,20 @@ const VALID_LEEFGEBIEDEN: ReadonlyMap<string, string> = new Map([
 export const zorgplanRoutes = new Hono<AppEnv>();
 
 /**
+ * GET /api/zorgplannen — List all CarePlans across the tenant.
+ *
+ * Gebruikt voor een top-level zorgplan overzicht (welke clienten
+ * hebben een zorgplan, welke status, wanneer laatste update).
+ * Include de Patient voor naam-resolutie in één request.
+ */
+zorgplanRoutes.get("/zorgplannen", async (c) => {
+  return medplumProxy(
+    c,
+    "/fhir/R4/CarePlan?_sort=-_lastUpdated&_count=100&_include=CarePlan:subject",
+  );
+});
+
+/**
  * GET /api/clients/:clientId/zorgplan — Get the CarePlan for a client.
  */
 zorgplanRoutes.get("/clients/:clientId/zorgplan", async (c) => {
@@ -131,10 +145,69 @@ zorgplanRoutes.post("/clients/:clientId/zorgplan", async (c) => {
     ],
   };
 
-  return medplumProxy(c, "/fhir/R4/CarePlan", {
+  const createdRes = await medplumFetch(c, "/fhir/R4/CarePlan", {
     method: "POST",
     body: JSON.stringify(resource),
   });
+
+  if (!createdRes.ok) {
+    return c.json(await createdRes.json() as Record<string, unknown>, createdRes.status as 200);
+  }
+
+  const createdPlan = (await createdRes.json()) as { id?: string };
+
+  // ── Automatische 6-maandelijkse evaluatie-scheduler ──
+  // Maak een FHIR Task die over 6 maanden dueDate heeft. De werkbak
+  // toont deze als "Evalueer zorgplan" en teamleider kan 'm oppakken.
+  // Kwaliteitskader VVT vereist minimaal een halfjaarlijkse evaluatie.
+  if (createdPlan.id) {
+    const now = new Date();
+    const dueDate = new Date(now);
+    dueDate.setMonth(dueDate.getMonth() + 6);
+
+    const evalTask = {
+      resourceType: "Task",
+      status: "requested",
+      intent: "plan",
+      priority: "routine",
+      code: {
+        coding: [
+          {
+            system: "https://openzorg.nl/CodeSystem/task-type",
+            code: "zorgplan-evaluatie",
+            display: "Zorgplan evaluatie",
+          },
+        ],
+        text: "Evalueer zorgplan (6-maandelijks)",
+      },
+      description: `Halfjaarlijkse evaluatie van '${body["title"]}' conform kwaliteitskader VVT.`,
+      authoredOn: now.toISOString(),
+      executionPeriod: { end: dueDate.toISOString() },
+      focus: { reference: `CarePlan/${createdPlan.id}` },
+      for: { reference: `Patient/${clientId}` },
+      restriction: { period: { end: dueDate.toISOString() } },
+      extension: [
+        {
+          url: "https://openzorg.nl/extensions/task-category",
+          valueString: "zorgplan",
+        },
+        {
+          url: "https://openzorg.nl/extensions/auto-generated",
+          valueBoolean: true,
+        },
+      ],
+    };
+
+    // Fire-and-forget: als de task-creatie faalt blijft het zorgplan geldig
+    medplumFetch(c, "/fhir/R4/Task", {
+      method: "POST",
+      body: JSON.stringify(evalTask),
+    }).catch((err) => {
+      console.error("[zorgplan] Auto-evaluatie task creation failed:", err);
+    });
+  }
+
+  return c.json(createdPlan as Record<string, unknown>, 201);
 });
 
 /**
@@ -149,6 +222,69 @@ zorgplanRoutes.post("/zorgplan/:id/doelen", async (c) => {
       operationOutcome("error", "required", "Beschrijving van het doel is vereist"),
       400,
     );
+  }
+
+  // ── SMART-goal validatie (Layer 2 compliance: kwaliteitskader VVT) ──
+  // Skip-header aanwezig? Dan slaat de beheerder deze check over. Altijd
+  // loggen zodat audit kan zien wie expliciet SMART overrulet.
+  const skipSmart = c.req.header("X-Skip-SMART-Validation") === "true";
+  if (!skipSmart) {
+    const smartErrors: string[] = [];
+
+    // Specifiek: beschrijving moet substantieel zijn
+    const description = typeof body["description"] === "object"
+      ? (body["description"] as { text?: string })?.text
+      : (body["description"] as string);
+    if (!description || description.trim().length < 20) {
+      smartErrors.push(
+        "S(pecifiek): doel-beschrijving moet minimaal 20 tekens zijn en concreet gedrag benoemen (bv. 'cliënt loopt 50m met rollator zonder hulp')",
+      );
+    }
+
+    // Meetbaar: target OF measure moet aanwezig zijn
+    const targets = body["target"] as Array<Record<string, unknown>> | undefined;
+    const hasMeasure = Array.isArray(targets) && targets.length > 0;
+    if (!hasMeasure) {
+      smartErrors.push(
+        "M(eetbaar): doel heeft geen target — voeg een meetbare waarde of tijdsduur toe (bv. 50 meter, binnen 3 maanden)",
+      );
+    }
+
+    // Tijdgebonden: target.dueDate, Goal.startDate+target.dueDate, of 'binnen X' in description
+    const hasDueDate = Array.isArray(targets) && targets.some(
+      (t) => typeof t["dueDate"] === "string" || typeof t["dueQuantity"] === "object",
+    );
+    const hasDeadlineInText = description && /\b(binnen|voor|uiterlijk|tot|over)\b.{0,30}\b(dag|week|weken|maand|maanden|jaar)/i.test(description);
+    if (!hasDueDate && !hasDeadlineInText) {
+      smartErrors.push(
+        "T(ijdgebonden): doel heeft geen deadline — vul target.dueDate of noem een termijn in de beschrijving",
+      );
+    }
+
+    if (smartErrors.length > 0) {
+      return c.json(
+        {
+          resourceType: "OperationOutcome",
+          id: "smart-validation-failed",
+          issue: smartErrors.map((diagnostics) => ({
+            severity: "error",
+            code: "invariant",
+            diagnostics,
+            details: { text: diagnostics },
+          })),
+          extension: [
+            {
+              url: "https://openzorg.nl/extensions/smart-validation",
+              extension: [
+                { url: "skipHeader", valueString: "X-Skip-SMART-Validation: true" },
+                { url: "rationale", valueString: "Kwaliteitskader VVT vereist SMART-geformuleerde doelen" },
+              ],
+            },
+          ],
+        },
+        400,
+      );
+    }
   }
 
   // Validate leefgebied if provided
@@ -682,4 +818,17 @@ zorgplanRoutes.post("/zorgplan/:planId/evaluaties", async (c) => {
 
   const evalBody = await evalRes.json();
   return c.json(evalBody, 201);
+});
+
+/**
+ * GET /api/fhir-taken — List FHIR Tasks (e.g. auto-generated zorgplan-evaluatie tasks).
+ *
+ * Returns tasks with status "requested" or "in-progress" so the werkbak can
+ * display them alongside Flowable workflow tasks.
+ */
+zorgplanRoutes.get("/fhir-taken", async (c) => {
+  return medplumProxy(
+    c,
+    "/fhir/R4/Task?status=requested,accepted,in-progress&_sort=-_lastUpdated&_count=100",
+  );
 });

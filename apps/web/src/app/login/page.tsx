@@ -3,8 +3,11 @@
 import { useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 
+import { refreshFeatureFlags } from "../../lib/features";
+
 const ROLES = [
-  { value: "beheerder", label: "Beheerder" },
+  { value: "tenant-admin", label: "Tenant admin" },
+  { value: "beheerder", label: "Functioneel beheerder" },
   { value: "zorgmedewerker", label: "Zorgmedewerker" },
   { value: "planner", label: "Planner" },
   { value: "teamleider", label: "Teamleider" },
@@ -67,6 +70,10 @@ function LoginForm() {
       // Detect master admin — server checks against master_admins table
       const isMaster = data.isMaster === true;
       localStorage.setItem("openzorg_is_master", isMaster ? "true" : "false");
+
+      // Feature-flags + branding voor deze tenant ophalen en cachen.
+      // Fire-and-forget: als het mislukt, faalt de flag-check fail-open.
+      void refreshFeatureFlags();
 
       window.location.href = "/dashboard";
     } catch (err) {

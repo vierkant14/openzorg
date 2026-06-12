@@ -5,9 +5,13 @@ import { logger } from "hono/logger";
 import { tenantMiddleware } from "./middleware/tenant.js";
 import { afspraakRoutes } from "./routes/afspraak.js";
 import { beschikbaarheidRoutes } from "./routes/beschikbaarheid.js";
+import { bezettingRoutes } from "./routes/bezetting.js";
+import { contractRoutes } from "./routes/contract.js";
 import { dagplanningRoutes } from "./routes/dagplanning.js";
+import { dienstConfigRoutes } from "./routes/dienst-config.js";
 import { healthRoutes } from "./routes/health.js";
 import { herhalingRoutes } from "./routes/herhaling.js";
+import { planningEngineRoutes } from "./routes/planning-engine.js";
 import { wachtlijstRoutes } from "./routes/wachtlijst.js";
 
 export type AppEnv = {
@@ -49,3 +53,15 @@ app.route("/api/beschikbaarheid", beschikbaarheidRoutes);
 
 // PLN-05: Wachtlijst (Waiting list)
 app.route("/api/wachtlijst", wachtlijstRoutes);
+
+// PLN-06: Contract-uren (Medewerker contract info)
+app.route("/api/medewerkers", contractRoutes);
+
+// PLN-07: Dienst-configuratie (Shift type config with inheritance)
+app.route("/api/dienst-config", dienstConfigRoutes);
+
+// PLN-08: Bezettingsprofiel (Staffing requirements per afdeling per dienst)
+app.route("/api/bezetting", bezettingRoutes);
+
+// PLN-09: Planning engine (constraint solver: validate, optimaliseer, genereer)
+app.route("/api/planning-engine", planningEngineRoutes);

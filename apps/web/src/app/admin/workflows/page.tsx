@@ -148,7 +148,7 @@ export default function WorkflowsAdminPage() {
               Lopende instanties
             </Link>
             <Link
-              href="/admin/workflows/ontwerp"
+              href="/admin/workflows/canvas"
               className="bg-brand-600 text-white px-5 py-2.5 rounded-lg hover:bg-brand-700 text-sm font-medium"
             >
               + Nieuw proces ontwerpen

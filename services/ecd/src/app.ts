@@ -6,8 +6,11 @@ import { pool } from "./lib/db.js";
 import { auditMiddleware } from "./middleware/audit.js";
 import { rbacMiddleware } from "./middleware/rbac.js";
 import { tenantMiddleware } from "./middleware/tenant.js";
+import { aiSettingsRoutes } from "./routes/ai-settings.js";
+import { aiRoutes } from "./routes/ai.js";
 import { allergieRoutes } from "./routes/allergie.js";
 import { apiDocsRoutes } from "./routes/api-docs.js";
+import { auditLogRoutes } from "./routes/audit-log.js";
 import { berichtenRoutes } from "./routes/berichten.js";
 import { capaciteitRoutes } from "./routes/capaciteit.js";
 import { clientRoutes } from "./routes/client.js";
@@ -15,9 +18,12 @@ import { codelijstenRoutes } from "./routes/codelijsten.js";
 import { configuratieRoutes } from "./routes/configuratie.js";
 import { contactpersoonRoutes } from "./routes/contactpersoon.js";
 import { contractenRoutes } from "./routes/contracten.js";
+import { coverageRoutes } from "./routes/coverage.js";
 import { diagnoseRoutes } from "./routes/diagnose.js";
 import { documentenRoutes } from "./routes/documenten.js";
+import { featureFlagRoutes } from "./routes/feature-flags.js";
 import { healthRoutes } from "./routes/health.js";
+import { indicatieRoutes } from "./routes/indicaties.js";
 import { integratieRoutes } from "./routes/integraties.js";
 import { masterAdminRoutes } from "./routes/master-admins.js";
 import { mdoRoutes } from "./routes/mdo.js";
@@ -29,12 +35,16 @@ import { organisatieRoutes } from "./routes/organisatie.js";
 import { productieRoutes } from "./routes/productie.js";
 import { rapportageRoutes } from "./routes/rapportage.js";
 import { risicoscreeningRoutes } from "./routes/risicoscreening.js";
+import { rollenRoutes } from "./routes/rollen.js";
 import { roosterRoutes } from "./routes/rooster.js";
 import { signaleringRoutes } from "./routes/signaleringen.js";
+import { stateMachinesRoutes } from "./routes/state-machines.js";
+import { taskFormOptionsRoutes } from "./routes/task-form-options.js";
 import { tenantSettingsRoutes } from "./routes/tenant-settings.js";
-import { tenantRoutes } from "./routes/tenants.js";
+import { loadTenantFeatures, tenantRoutes } from "./routes/tenants.js";
 import { toedieningRoutes } from "./routes/toediening.js";
 import { vaccinatieRoutes } from "./routes/vaccinatie.js";
+import { validationRulesRoutes } from "./routes/validation-rules.js";
 import { vbmRoutes } from "./routes/vbm.js";
 import { vragenlijstenRoutes } from "./routes/vragenlijsten.js";
 import { wilsverklaringRoutes } from "./routes/wilsverklaring.js";
@@ -54,6 +64,18 @@ app.use("*", cors());
 
 // Health check does not require tenant context
 app.route("/health", healthRoutes);
+
+// Publieke tenant-features endpoint — MOET voor de /api/* middleware chain
+// staan zodat hij niet door tenant/rbac/audit/medplum-auth loopt. Alleen
+// X-Tenant-ID vereist; geen Bearer token.
+app.get("/api/tenant-features", async (c) => {
+  const tenantId = c.req.header("X-Tenant-ID");
+  if (!tenantId) {
+    return c.json({ error: "X-Tenant-ID header ontbreekt" }, 400);
+  }
+  const data = await loadTenantFeatures(tenantId);
+  return c.json(data);
+});
 
 // All other routes require tenant context
 app.use("/api/*", tenantMiddleware);
@@ -100,9 +122,12 @@ app.route("/api/clients", toedieningRoutes);
 
 // Vaccinaties (Immunization)
 app.route("/api/clients", vaccinatieRoutes);
+app.route("/api/vaccinaties", vaccinatieRoutes);
 
 // Wilsverklaringen / BOPZ-status (Consent)
 app.route("/api/clients", wilsverklaringRoutes);
+// Cross-client wilsverklaringen overzicht (/api/wilsverklaringen-overzicht)
+app.route("/api", wilsverklaringRoutes);
 
 // Medicatieoverzicht (MedicationStatement)
 app.route("/api/clients", medicatieOverzichtRoutes);
@@ -114,12 +139,17 @@ app.route("/api/clients", mdoRoutes);
 app.route("/api/clients", vbmRoutes);
 app.route("/api/vbm", vbmRoutes);
 
+// Coverage / Verzekeringsdekking (FHIR Coverage for billing)
+app.route("/api/clients", coverageRoutes);
+
 // MIC Meldingen (Incident reports)
 app.route("/api/mic-meldingen", micMeldingRoutes);
 
 // Vragenlijsten (Questionnaire + QuestionnaireResponse)
+// NB: dubbele mount op /api moet NA alle single-segment /api/* routes
+// staan, anders vangt vragenlijsten' /:id catch-all bv /api/medewerkers
+// en /api/organisatie op. Zie app.ts onderkant.
 app.route("/api/vragenlijsten", vragenlijstenRoutes);
-app.route("/api", vragenlijstenRoutes);
 
 // Admin configuratie (custom fields, validation rules)
 app.route("/api/admin", configuratieRoutes);
@@ -153,10 +183,32 @@ app.route("/api/productie", productieRoutes);
 
 // Admin: Workflow triggers
 app.route("/api/admin/workflow-triggers", workflowTriggerRoutes);
+app.route("/api/task-form-options", taskFormOptionsRoutes);
+app.route("/api/admin/validation-rules", validationRulesRoutes);
+app.route("/api/admin/feature-flags", featureFlagRoutes);
+app.route("/api/admin/rollen", rollenRoutes);
+app.route("/api/admin/state-machines", stateMachinesRoutes);
 
 // Sprint 6: API docs, Integraties (webhooks + API keys)
 app.route("/api/docs", apiDocsRoutes);
 app.route("/api/admin/integraties", integratieRoutes);
+
+// Audit log (NEN 7513) — admin viewer
+app.route("/api/admin/audit-log", auditLogRoutes);
+
+// AI-instellingen per tenant (enable/disable, Ollama URL, model)
+app.route("/api/admin/ai-settings", aiSettingsRoutes);
+
+// AI-assistant (Ollama integration) — data blijft lokaal
+app.route("/api/ai", aiRoutes);
+
+// Indicaties (CIZ / Wlz / Zvw / Wmo / Jeugdwet) als FHIR Coverage
+app.route("/api", indicatieRoutes);
+
+// Vragenlijsten: dubbele mount op /api voor /clients/:id/responses routes.
+// Moet NA alle single-segment /api/* mounts, anders vangt /:id catch-all
+// deze bovenliggende routes op.
+app.route("/api", vragenlijstenRoutes);
 
 // Master admin check-admin endpoint (no auth required, called during login)
 app.get("/api/master/check-admin", async (c) => {

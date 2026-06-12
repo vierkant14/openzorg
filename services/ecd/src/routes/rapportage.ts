@@ -15,14 +15,28 @@ interface SoepRapportage {
   objectief: string;
   evaluatie: string;
   plan: string;
+  goalId?: string;
 }
 
 interface VrijRapportage {
   type: "vrij";
   tekst: string;
+  goalId?: string;
 }
 
 type RapportageInput = SoepRapportage | VrijRapportage;
+
+/**
+ * GET /api/rapportages-overzicht — List all clinical notes across all clients.
+ * Used by the cross-client rapportages overview page.
+ */
+rapportageRoutes.get("/rapportages-overzicht", async (c) => {
+  const count = c.req.query("_count") ?? "200";
+  return medplumProxy(
+    c,
+    `/fhir/R4/Observation?category=social-history&_sort=-date&_count=${encodeURIComponent(count)}&_include=Observation:subject`,
+  );
+});
 
 /**
  * GET /api/clients/:clientId/rapportages — List clinical notes (Observation resources) for a client.
@@ -143,6 +157,11 @@ rapportageRoutes.post("/clients/:clientId/rapportages", async (c) => {
 
   if (extensions.length > 0) {
     resource["extension"] = extensions;
+  }
+
+  // Link rapportage to a zorgplan goal if provided
+  if (body.goalId) {
+    resource["focus"] = [{ reference: `Goal/${body.goalId}` }];
   }
 
   return medplumProxy(c, "/fhir/R4/Observation", {

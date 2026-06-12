@@ -1,0 +1,818 @@
+REQUIREMENTS DOCUMENT — CLAUDE CODE
+OpenZorg
+Open source modulair zorgplatform
+Bouwspecificatie voor MVP — Planning &amp; ECD voor VVT-instellingen — gebouwd op Medplum, Flowable, JSONForms en Next.js
+Document type: standalone bouwspecificatie
+Doelpubliek: Claude Code en het ontwikkelteam
+Versie: 1.0
+Datum: 9 april 2026
+Status: bouwklaar
+Inhoudsopgave
+1. Samenvatting voor Claude Code
+2. Productvisie en context
+3. Doelgroep en use cases
+4. Architectuurprincipes
+5. Tech stack
+6. Datamodel-strategie
+7. Het drielagen-configureerbaarheidsmodel
+8. Workflow-engine (Flowable) — de killer feature
+9. Modulaire architectuur
+10. MVP scope en functionele requirements
+11. Repo-structuur
+12. Sprint-planning (8 weken)
+13. Acceptatiecriteria MVP
+14. Compliance, security en privacy
+15. CI/CD en kwaliteitsborging
+16. De Claude Code start-prompt
+17. Bijlagen
+1. Samenvatting voor Claude Code
+OpenZorg is een open source modulair zorgplatform dat is ontworpen als alternatief voor gesloten Nederlandse ECD-systemen zoals Nedap ONS en PinkRoccade MijnCaress. Dit document is geschreven om als enige bron te dienen voor de bouw van de MVP. Het bevat de volledige context, architectuur, datamodel-strategie, MVP-scope, sprintplanning en de letterlijke prompt waarmee de eerste sprint in Claude Code gestart wordt.
+Kernbelofte van OpenZorg
+Functioneel beheerders in zorginstellingen kunnen zelf processen, formulieren en validatieregels aanpassen via een visuele interface, zonder tussenkomst van de leverancier en zonder dat upgrades de aanpassingen breken. De kern blijft FHIR-compliant en wettelijk geldig, ongeacht wat klanten configureren.
+De drie kerninnovaties die Claude Code moet borgen
+Visuele procesmodellering via BPMN waarmee functioneel beheerders zelf workflows tekenen die direct uitvoerbaar zijn als levende processen in de applicatie.
+Drielagen-configureerbaarheid: een vaste FHIR-Zib-kern die nooit verandert, een vrije uitbreidingslaag voor klant-specifieke velden en regels, en een plugin-laag voor echt maatwerk. Deze grenzen zijn architectureel hard.
+Modulaire opbouw waarbij Planning, ECD, Facturatie en Rapportage los afneembaar zijn maar werken op één gedeeld FHIR-datamodel.
+Wat in dit document staat
+Hoofdstukken 2 tot en met 4 geven de why en de architectuurprincipes. Hoofdstukken 5 tot en met 9 zijn de technische fundering: stack, datamodel, configureerbaarheid en de workflow-engine. Hoofdstukken 10 tot en met 13 zijn de bouw-instructies: scope, repo, sprints, acceptatiecriteria. Hoofdstukken 14 en 15 dekken compliance en kwaliteit. Hoofdstuk 16 is de start-prompt voor Claude Code. De bijlagen bevatten de forbidden-words-lijst voor de CI-check en links naar referentiestandaarden.
+2. Productvisie en context
+2.1 Het probleem in de Nederlandse zorg-IT-markt
+De Nederlandse markt voor elektronische cliëntdossiers wordt gedomineerd door een handvol gesloten leveranciers, met Nedap ONS en PinkRoccade MijnCaress als marktleiders. Zorginstellingen klagen al jaren over drie terugkerende problemen die niet door incrementele verbetering opgelost worden.
+Dure licenties, vaak tussen 20 en 45 euro per cliënt per maand, vaak ondoorzichtig en met verplichte modules die niet worden gebruikt.
+Niet aanpasbaar zonder tussenkomst van de leverancier. Een kleine procesaanpassing kost weken en honderden tot duizenden euro's. Functioneel beheerders zijn afhankelijk van consultants voor wijzigingen die ze functioneel zelf prima zouden kunnen doorvoeren.
+Datakwaliteit is laag omdat verplichte invoer technisch niet wordt afgedwongen. Velden blijven leeg, rapportages bevatten fouten, en kwaliteitsindicatoren zijn onbetrouwbaar.
+2.2 De OpenZorg-oplossing
+OpenZorg pakt deze drie problemen op een fundamenteel andere manier aan. De licentiestructuur is modulair en transparant — een organisatie betaalt alleen voor wat ze gebruikt. De aanpasbaarheid is verplaatst van leveranciersconsultants naar de functioneel beheerder van de klant zelf, via een visuele BPMN-procesmodeller en een formulierbouwer. Datakwaliteit wordt afgedwongen op het niveau dat de organisatie zelf kiest, via een configureerbare validatie-engine die werkt op basis van FHIR-profielen en klant-specifieke regels.
+2.3 Strategische positionering
+OpenZorg richt zich primair op functioneel beheerders en operationeel managers binnen zorginstellingen — niet op IT-afdelingen. Dit is een bewuste keuze. Functioneel beheerders zijn de groep die dagelijks tegen de beperkingen van bestaande systemen aanloopt, ze hebben invloed in selectietrajecten, en ze praten met elkaar op congressen en in branche-netwerken. Door dit publiek tot fans te maken, ontstaat organische groei die niet via traditionele B2B-sales hoeft te lopen.
+2.4 Open source en business model
+OpenZorg wordt uitgebracht onder een open source licentie. De volledige codebase is publiek inzichtelijk en zelf te hosten. Het business model is open-core: de software is gratis, maar Anthropic-stijl betaalde diensten zijn beschikbaar voor hosting, support, certificering, compliance-borging en custom plugin-ontwikkeling. Dit model is bewezen werkbaar door bedrijven als GitLab, Mattermost, Sentry en Supabase.
+2.5 Naamgeving
+De werknaam is OpenZorg. Dit is gekozen boven OpenCare en OpenCure omdat het Nederlands is (vertrouwen-wekkend in de NL zorgmarkt), zowel care als cure dekt, en de werknaam te wijzigen is voordat de eerste publieke release plaatsvindt. Een merkconflictcheck moet worden uitgevoerd voordat de naam definitief wordt vastgelegd. Voor de bouw van de MVP volstaat OpenZorg als naam.
+3. Doelgroep en use cases
+3.1 Pilotsector: VVT
+De eerste sector die OpenZorg ondersteunt is VVT (verpleging, verzorging, thuiszorg). Deze keuze is gemaakt omdat VVT-instellingen het vaakst tegen de pijnpunten van ONS aanlopen, omdat het wettelijk kader (Wlz, Zvw-wijkverpleging) goed afgebakend is, en omdat de Zibs voor deze sector volwassen en stabiel zijn. GHZ en GGZ volgen in latere fasen op basis van dezelfde architectuur.
+3.2 Doelorganisaties voor de MVP
+De MVP wordt geoptimaliseerd voor VVT-instellingen tussen de 50 en 500 cliënten. Dit segment is groot genoeg om serieus te zijn als referentieklant en klein genoeg om snel onboarding te kunnen doen zonder uitgebreide implementatietrajecten.
+3.3 Primaire gebruikers
+Rol
+Gebruikt OpenZorg voor
+Belangrijk voor adoptie
+Functioneel beheerder
+Processen tekenen, formulieren bouwen, validatieregels instellen, gebruikers beheren
+Zeer hoog — dit is de fan die we maken
+Wijkverpleegkundige
+Cliëntdossier raadplegen, rapporteren, indicaties stellen, dagplanning bekijken
+Hoog
+Planner
+Roosters maken, beschikbaarheid beheren, route-optimalisatie
+Hoog
+Teamleider
+Caseload monitoren, kwaliteitsindicatoren bekijken, escalaties afhandelen
+Middel
+Cliënt of mantelzorger
+Eigen dossier inzien (later, niet in MVP)
+Laag voor MVP
+
+3.4 Belangrijkste user stories MVP
+Als functioneel beheerder wil ik het intake-proces van mijn organisatie visueel kunnen tekenen en publiceren, zodat nieuwe aanmeldingen automatisch het juiste proces volgen.
+Als functioneel beheerder wil ik velden kunnen toevoegen aan het cliëntprofiel en aangeven welke verplicht zijn, zonder tussenkomst van de leverancier.
+Als wijkverpleegkundige wil ik mijn dagplanning op mijn telefoon zien met cliëntinformatie en route, zodat ik mijn werk efficiënt kan uitvoeren.
+Als wijkverpleegkundige wil ik bij een cliënt rapporteren volgens Omaha-systematiek, zodat de zorg methodisch wordt vastgelegd.
+Als planner wil ik een week vooruit plannen voor 200 cliënten met drag-and-drop, zonder dat het systeem traag wordt.
+Als teamleider wil ik zien welke taken openstaan en welke escalaties er zijn, zodat ik kan ingrijpen waar nodig.
+4. Architectuurprincipes
+Deze principes gelden door de hele codebase heen. Bij twijfelgevallen tijdens de bouw moet altijd worden teruggegrepen op deze lijst. Een keuze die in strijd is met een van deze principes vereist expliciete documentatie in een ADR (Architecture Decision Record) en akkoord buiten Claude Code.
+4.1 Open source bovenop open source
+OpenZorg wordt niet vanaf nul gebouwd. Voor elk niet-zorgspecifiek probleem (auth, FHIR-opslag, workflow, formulieren, BI) wordt een volwassen open source bouwsteen gekozen. Het OpenZorg-team bouwt alleen de zorgspecifieke samenhang en de Nederlandse compliance-laag. Dit principe heeft voorrang op 'not invented here'-overwegingen.
+4.2 FHIR-native, Zib-gebaseerd
+Het interne datamodel is gebaseerd op de Nederlandse Zorginformatiebouwstenen (Zibs) van Nictiz. De externe API spreekt FHIR R4 met de officiële zorg-NL profielen. Elke entiteit in de codebase die zorginformatie representeert, moet 1-op-1 koppelen aan een Zib of een FHIR-resource. Eigen interne datamodellen die afwijken van Zibs zijn niet toegestaan voor zorginformatie.
+4.3 Drielagen-configureerbaarheid
+Configureerbaarheid is opgedeeld in drie lagen met harde grenzen ertussen. De kern is onaanraakbaar door klanten en garandeert FHIR-compliance en wettelijke geldigheid. De uitbreidingslaag is vrij configureerbaar binnen vooraf gedefinieerde regels. De pluginlaag is voor echt maatwerk en vereist code. Zie hoofdstuk 7 voor de volledige uitwerking. De grens tussen lagen wordt afgedwongen in code, niet via afspraken.
+4.4 Modulair en los afneembaar
+Planning, ECD, Facturatie en Rapportage zijn aparte deployable modules. Een klant kan elke module los afnemen. Modules communiceren met elkaar via de gedeelde FHIR-API en een interne event bus, niet via directe database-toegang. Een klant die alleen Planning afneemt, hoeft de andere modules niet te draaien.
+4.5 Multi-tenant vanaf dag één
+OpenZorg ondersteunt meerdere zorginstellingen op één installatie. Tenant-isolatie wordt afgedwongen op database-niveau via row-level security in PostgreSQL en op API-niveau via Medplum-projects. Een tenant kan onder geen enkele omstandigheid data van een andere tenant zien, ook niet bij bugs in applicatiecode. Dit principe is niet onderhandelbaar.
+4.6 Geen enkele kopie van ONS-IP
+De codebase bevat geen veldnamen, klassenamen, structuurnamen of andere identificatie die uniek herleidbaar is naar de Nedap ONS documentatie. Dit wordt afgedwongen via een CI-check (zie bijlage 17.1 voor de forbidden-words-lijst). Inspiratie halen uit de publieke ONS API om te begrijpen hoe een proces werkt is toegestaan; de structuur of naamgeving overnemen is dat niet.
+4.7 Datakwaliteit als eerste-klas concept
+Validatieregels zijn geen optionele add-on maar een kernonderdeel van het datamodel. Elke entiteit heeft een validatieprofiel, dat bestaat uit (a) wettelijk verplichte regels die niet uit kunnen, (b) FHIR-profiel-validaties die altijd gelden, en (c) klant-specifieke regels die de functioneel beheerder configureert. Validatie gebeurt altijd at-write-time, nooit alleen at-display-time.
+4.8 API-first, alles via dezelfde API
+Elk scherm in OpenZorg gebruikt dezelfde publieke API als externe integraties. Er bestaat geen 'private API' voor de eigen frontend. Dit garandeert dat alles wat de UI kan, ook via integraties kan, en dwingt af dat de publieke API altijd compleet en up-to-date is.
+4.9 Configuratie als data, niet als code
+Klantconfiguratie (custom velden, processen, validatieregels, formulieren) wordt opgeslagen als data in de database, niet als code in de codebase. Dit garandeert dat upgrades van OpenZorg geen klantconfiguratie kunnen breken zolang de configuratie-schemas backwards-compatible blijven.
+5. Tech stack
+Onderstaande stack is het resultaat van een bewuste afweging tussen open source bouwstenen, ontwikkelsnelheid voor een klein team, en aansluiting op het Nederlandse zorgecosysteem. Elke keuze is hieronder kort gemotiveerd.
+5.1 Stack-overzicht
+Laag
+Keuze
+Licentie
+FHIR-fundament
+Medplum (self-hosted)
+Apache 2.0
+Workflow-engine
+Flowable Community
+Apache 2.0
+Configureerbare formulieren
+JSONForms
+MIT
+Frontend framework
+Next.js 15
+MIT
+UI-componenten
+shadcn/ui + Tailwind CSS
+MIT
+Backend glue-laag
+Hono (TypeScript op Node.js)
+MIT
+Database
+PostgreSQL 16
+PostgreSQL License (BSD-stijl)
+Auth (MVP)
+Medplum Auth
+Apache 2.0
+BI en dashboards
+Metabase (embedded)
+AGPL / commercieel
+Procesmodeller
+bpmn-js (in-browser BPMN editor)
+MIT
+Test framework backend
+Vitest
+MIT
+Test framework E2E
+Playwright
+Apache 2.0
+Container
+Docker + Docker Compose
+Apache 2.0
+CI/CD
+GitHub Actions
+Gratis voor open source
+
+5.2 Motivatie per kernkeuze
+Medplum als FHIR-fundament
+Medplum is een open source FHIR-native backend, geschreven in TypeScript, die out-of-the-box een complete FHIR R4 server biedt inclusief authenticatie, audit logging, en row-level security via 'projects' (multi-tenancy). Het is filosofisch het dichtst bij wat OpenZorg wil zijn: open source, FHIR-first, configureerbaar. Door Medplum als fundament te gebruiken besparen we minimaal zes maanden aan eigen bouwwerk voor zaken die anders vanaf nul ontwikkeld moeten worden. Medplum ondersteunt Nederlandse FHIR-profielen via standaard FHIR-extensies.
+Flowable als workflow-engine
+Flowable is een volledig open source BPMN 2.0 workflow-engine onder Apache 2.0 licentie, ontstaan als fork van Activiti en met dezelfde wortels als Camunda. Het wordt gebruikt door onder andere Nederlandse overheidsorganisaties en is daarmee een veilige keuze in het Nederlandse zorgecosysteem. In tegenstelling tot Camunda 8, dat deels source-available is, kent Flowable geen licentie-cliffhanger. Flowable's BPMN-bestanden zijn uitwisselbaar met Camunda-modellers, dus de skills zijn overdraagbaar.
+JSONForms voor configureerbare formulieren
+JSONForms genereert React-formulieren uit JSON Schema definities. Dit sluit perfect aan bij de FHIR-eerste filosofie, omdat FHIR-profielen al uitgedrukt kunnen worden als JSON Schema. Een functioneel beheerder die een veld toevoegt of verplicht maakt, past in feite het JSON Schema aan, en de UI volgt automatisch. Dit is fundamenteel anders dan formulier-builders die HTML genereren, en het garandeert dat de validatie consistent is tussen frontend, backend en FHIR-laag.
+Next.js + shadcn/ui + Tailwind
+Next.js 15 is de standaard voor moderne React-applicaties met server components, sterke routing en uitstekende performance. shadcn/ui geeft hoogwaardige, eigen te customizen componenten zonder ze als zwarte doos te importeren — de code wordt in het project gekopieerd en kan worden aangepast. Tailwind CSS past bij de configureerbare aard van het product omdat styling per klant-thema makkelijk aanpasbaar is.
+Hono als glue-laag
+Hono is een lichte, snelle TypeScript-webframework die we gebruiken voor de OpenZorg-specifieke logica die niet in Medplum thuishoort: integraties met VECOZO, iWlz-berichtenverkeer, AGB-validatie, CAO-checks, en de orkestratie tussen Medplum, Flowable en de frontend. We kiezen Hono boven NestJS vanwege de eenvoud en snelheid; voor de scope van OpenZorg is een opinionated framework als NestJS overkill.
+PostgreSQL
+Standaard, breed gedragen, sterk in zowel relationele data als JSON via JSONB. Komt mee met Medplum en wordt ook gebruikt door Flowable. Eén database, twee schema's, geen extra operationele overhead.
+5.3 Wat we bewust niet kiezen
+Geen Python/FastAPI: zou betekenen dat front en back verschillende type-systemen hebben, wat configureerbare formulieren onnodig complex maakt.
+Geen Camunda 8: source-available licentie, niet 100% open source, en heeft een commerciële cliffhanger bij schaal.
+Geen Keycloak in MVP: te zwaar voor de eerste fase. Medplum Auth volstaat en kan later worden vervangen.
+Geen GraphQL in MVP: FHIR REST is voldoende en eenvoudiger te documenteren. GraphQL kan later via een laag bovenop.
+Geen eigen ORM: Medplum handelt FHIR-resources af, Drizzle wordt alleen gebruikt voor de OpenZorg-specifieke configuratie-tabellen.
+Geen microservices in MVP: modules worden los deployable maar starten als een gestructureerde monolith. Microservices komen pas wanneer schaal het rechtvaardigt.
+6. Datamodel-strategie
+6.1 Het juridische uitgangspunt
+Het datamodel van OpenZorg wordt gebouwd vanuit Nederlandse open standaarden, niet vanuit reverse-engineering van bestaande commerciële systemen. Dit is geen voorzichtigheidsadvies maar een harde architecturale eis. Het databankenrecht (Hoofdstuk II Databankenwet) en mogelijk auteursrecht op software-structuren maken het overnemen van het ONS-datamodel een serieus juridisch risico, ook bij 'opnieuw typen'. Door direct vanuit Zibs en FHIR te bouwen vermijden we dit risico volledig én leveren we automatisch betere interoperabiliteit dan welke gesloten leverancier dan ook.
+6.2 De vier bouwblokken
+Standaard
+Eigenaar
+Wat het dekt
+Zibs (Zorginformatiebouwstenen)
+Nictiz
+Klinische informatie: Patient, Contactpersoon, Allergie, Medicatie, Meting, Probleem, Behandeling, etc.
+FHIR R4 + zorg-NL profielen
+HL7 NL / Nictiz
+Externe API-formaat en interne resource-modellering
+iWlz
+Zorginstituut Nederland
+Berichtenverkeer Wlz: indicaties, AW319, AW320, AW33, MAZ, MUT
+Omaha System
+Stichting OSS Nederland
+Methodisch werken in zorgplannen (domeinen, problemen, interventies, resultaten)
+
+6.3 De vertaling van Zibs naar OpenZorg-entiteiten
+Voor de MVP zijn de volgende Zibs in scope. Elke Zib wordt rechtstreeks gekoppeld aan een FHIR-resource met Nederlands profiel. De kolom 'OpenZorg-naam' geeft de naam zoals die in de codebase verschijnt — altijd in TypeScript en altijd Nederlands waar het zorginformatie betreft, omdat dit de werkende taal van het domein is.
+Zib
+FHIR Resource
+OpenZorg-naam (TS interface)
+MVP?
+Patient
+Patient
+Client
+Ja
+Zorgverlener
+Practitioner
+Zorgverlener
+Ja
+Zorgaanbieder
+Organization
+Zorgaanbieder
+Ja
+Contactpersoon
+RelatedPerson
+Contactpersoon
+Ja
+Probleem
+Condition
+Probleem
+Ja
+BehandelDoel
+Goal
+Doel
+Ja
+PlannedCareActivity
+ServiceRequest
+GeplandeZorgActiviteit
+Ja
+Verrichting
+Procedure
+Verrichting
+Ja (Sprint 3)
+Allergie
+AllergyIntolerance
+Allergie
+Ja
+MedicatieGebruik
+MedicationStatement
+Medicatiegebruik
+V1.1
+LichaamsGewicht
+Observation
+Meting
+Ja (als algemeen)
+AfsprakenInfo
+Appointment
+Afspraak
+Ja
+
+6.4 Custom velden en uitbreidingen
+Klant-specifieke velden worden opgeslagen als FHIR Extensions. Dit is de standaard FHIR-manier om een resource uit te breiden zonder de core-structuur te raken. Een klant die een veld 'Lievelingsmuziek' aan het cliëntprofiel wil toevoegen krijgt automatisch een extension met een unieke URL onder de OpenZorg extension namespace, plus een JSON Schema-fragment dat de validatie definieert.
+Concrete vorm:
+// Een custom veld bij een Client wordt:
+{
+  "resourceType": "Patient",
+  "id": "abc-123",
+  "name": [...],
+  "extension": [
+    {
+      "url": "https://openzorg.nl/extensions/lievelingsmuziek",
+      "valueString": "Bach, met name de Brandenburgse"
+    }
+  ]
+}
+6.5 Forbidden words: borging tegen ONS-IP
+De CI-pipeline draait een check die de codebase weigert wanneer hij een woord uit de forbidden-words-lijst bevat. Deze lijst bevat termen die uniek zijn voor de Nedap ONS API en documentatie. Zie bijlage 17.1. De lijst wordt onderhouden door het OpenZorg-kernteam en kan alleen aangevuld worden, nooit afgezwakt. Een ontwikkelaar die per ongeluk een gerelateerde term gebruikt krijgt een buildfailure met een suggestie voor een Zib-equivalent.
+7. Het drielagen-configureerbaarheidsmodel
+Dit hoofdstuk beschrijft de belangrijkste architectuur-uitdaging van OpenZorg: hoe maken we een systeem dat klanten zelf vergaand kunnen aanpassen, zonder dat OpenZorg als leverancier elke klantinstallatie individueel hoeft te onderhouden bij upgrades. De oplossing is een drielagen-model met harde, in code afgedwongen grenzen.
+Het houdbaarheidsprincipe
+Een klant mag in de uitbreidingslaag nooit iets configureren dat met een upgrade van OpenZorg kan breken. Dit is waarom de grenzen tussen lagen architectureel hard zijn en waarom configuratie altijd data is, nooit code.
+7.1 Laag 1 — De kern (onaanraakbaar)
+De kern bevat alles wat wettelijk verplicht is, alles wat de Zibs en FHIR voorschrijven, en alles wat OpenZorg moet garanderen om FHIR-compliant te blijven. Klanten kunnen hier niets aan veranderen, ook niet of een veld verplicht is, ook niet de naam, ook niet of een validatie aan staat. Wijzigingen aan de kern komen alleen via OpenZorg-releases.
+Wat in laag 1 valt:
+Alle Zib-velden zoals gedefinieerd door Nictiz
+BSN-validatie (elfproef)
+AGB-code-validatie voor zorgverleners
+Wettelijk verplichte iWlz-berichtvelden
+Audit logging conform NEN 7513
+De FHIR-resource-structuur en de verplichte profielen
+7.2 Laag 2 — De uitbreiding (vrij configureerbaar binnen regels)
+De uitbreidingslaag is wat de functioneel beheerder dagelijks gebruikt. Het is bewust groot — ongeveer 35% van wat een organisatie wil aanpassen valt hierin. Maar het is begrensd door spelregels die garanderen dat upgrades nooit een klantconfiguratie kunnen breken.
+Wat een functioneel beheerder kan doen in laag 2
+Type aanpassing
+Voorbeeld
+Hoe (UI)
+Custom veld toevoegen
+Lievelingsmuziek bij Client
+Formulier-editor in admin-paneel
+Bestaand veld verplicht maken
+Tijdstip bij MIC-melding wordt verplicht
+Klik op veld → 'Verplicht' aanvinken
+Validatieregel toevoegen
+Gewicht moet tussen 1 en 300 kg zijn
+Regel-editor met dropdown voor operator
+Workflow aanpassen
+Extra controle-stap na intake
+BPMN-modeller, sleep blokje toevoegen
+Notificatie configureren
+Teamleider krijgt mail bij escalatie
+Notificatie-editor
+Beslisregel maken
+Indicatie hoog → traject A
+DMN decision table
+Formulier-layout aanpassen
+Velden hergroeperen op intake-scherm
+Drag-and-drop formulier-editor
+Rol-rechten beheren
+Stagiairs mogen alleen lezen
+Rollen-matrix in admin
+
+De spelregels die laag 2 begrenzen
+Custom velden zijn altijd additief. Een klant kan een veld toevoegen, niet overschrijven. Een Zib-veld kan nooit verdwijnen of van type veranderen.
+Validatieregels zijn declaratief, opgeslagen als JSON in een vaste regel-DSL die OpenZorg versioneert. Er staat geen klantcode in de codebase.
+Formulieren worden opgebouwd uit OpenZorg-componenten. Klanten kunnen niet zelf React schrijven of HTML injecteren.
+Workflows zijn BPMN-bestanden die worden uitgevoerd door Flowable. De beschikbare task types zijn een vaste set die OpenZorg definieert.
+Custom velden krijgen automatisch een unieke namespace per tenant, zodat twee klanten een veld 'Bijzonderheden' kunnen hebben zonder conflict.
+Configuratie wordt versioned. Een klant kan terugrollen naar een eerdere versie van zijn proces of formulier.
+7.3 Laag 3 — De plugin-laag (custom werk)
+Voor zaken die echt buiten de uitbreidingslaag vallen — een koppeling met een uniek HR-systeem, een eigen rekenmodule, een custom integratie — bestaat de pluginlaag. Dit is bewust ongemakkelijk om te gebruiken: het vereist code, het vereist deployment-toegang, en het wordt buiten de standaard upgrade-cyclus onderhouden. Plugins zijn de uitzondering, niet de regel.
+Plugins implementeren een gepubliceerde plugin-interface en draaien in een geïsoleerde context. Ze hebben toegang tot de FHIR-API zoals elke andere API-consumer, niet tot interne database-tabellen. Dit garandeert dat plugins een upgrade niet kunnen breken.
+7.4 Visualisatie van de drie lagen
+Onderstaande tabel geeft per resource een indruk van wat in welke laag valt. Dit is geen volledige lijst, maar een illustratie van de denkrichting.
+Resource
+Kern (laag 1)
+Uitbreiding (laag 2)
+Plugin (laag 3)
+Client
+BSN, naam, geboortedatum (Zib)
+Lievelingsmuziek, allergie-vrije tekst, eigen labels
+Koppeling met extern CRM
+Afspraak
+Tijdstip, type, deelnemers (FHIR)
+Klant-specifieke afspraaktypes, kleurcodes
+Sync met Outlook-agenda van medewerker
+Zorgplan
+Doelen, interventies (Omaha)
+Eigen template-plannen per cliëntgroep
+Rapportgenerator naar PDF in eigen huisstijl
+MIC-melding
+Datum, betrokken cliënt
+Eigen categorieën, eigen ernst-schaal, verplichte velden
+Doorzending naar extern incidentensysteem
+8. Workflow-engine — de killer feature
+De visuele procesmodellering via Flowable is de feature waarmee OpenZorg zich het sterkst onderscheidt van bestaande systemen. Dit hoofdstuk beschrijft hoe het werkt, welke technische beslissingen gemaakt zijn, en hoe het in de UI verschijnt.
+8.1 Concept
+Een functioneel beheerder tekent het proces van zijn organisatie in een BPMN-modeller die in OpenZorg geïntegreerd is (op basis van bpmn-js). Het resultaat is een BPMN 2.0 XML-bestand. OpenZorg slaat dit bestand op als versie van een proces-definitie. Wanneer een nieuw proces gestart wordt (bijvoorbeeld een nieuwe aanmelding), instantieert Flowable een nieuwe procesinstance volgens deze definitie.
+Voor zorgmedewerkers is dit volledig onzichtbaar. Zij zien alleen hun werkbak met openstaande taken. Dat de taken voortkomen uit een BPMN-proces dat de functioneel beheerder heeft getekend, is implementatiedetail.
+8.2 Voorbeeld: het intake-proces
+Een typisch VVT-intakeproces ziet er als BPMN als volgt uit:
+Start: aanmelding ontvangen (via formulier, telefoon, of verwijzer)
+User task: triage door wijkverpleegkundige (binnen 1 werkdag)
+Gateway: is dit Wlz of Zvw? (beslist op basis van zorgvraag)
+User task (Wlz-pad): indicatie aanvragen
+User task (Zvw-pad): direct intakegesprek plannen
+User task: intakegesprek voeren en zorgplan opstellen
+Service task: cliënt activeren in administratie
+Service task: eerste afspraak inplannen
+Einde: cliënt is in zorg
+Elke 'user task' verschijnt automatisch in de werkbak van de juiste rol. Elke 'service task' wordt automatisch uitgevoerd door OpenZorg (bijvoorbeeld een API-call naar Medplum om de cliënt te activeren). De gateway beslist op basis van een DMN decision table die de functioneel beheerder zelf onderhoudt.
+8.3 Wat de functioneel beheerder kan veranderen
+Stappen toevoegen of weghalen (bijvoorbeeld een extra dubbelcheck na intake)
+Wie welke taak krijgt (op rol, team, specialisatie of werkgebied)
+Tijdslimieten en escalaties (intake binnen 5 werkdagen, anders escalatie naar teamleider)
+Welke velden in welke stap verplicht zijn (gekoppeld aan JSONForms)
+Notificaties: wie krijgt wanneer een melding via welk kanaal
+Beslisregels in DMN-tabellen
+8.4 Wat de functioneel beheerder NIET kan veranderen
+Wettelijk verplichte stappen (BSN-controle, audit logging, iWlz-bericht versturen) kunnen niet worden weggehaald
+Een procesinstance kan niet halverwege van definitie wisselen
+De beschikbare task types zijn een vaste set
+Custom Java/JS in service tasks is niet toegestaan in laag 2 — dat is plugin-territorium
+8.5 Technische integratie Flowable
+Flowable draait als aparte service in de Docker Compose stack. Het exposeert een REST-API die de OpenZorg backend (Hono) gebruikt voor het starten van procesinstances, het ophalen van taken, en het completeren van taken. Flowable gebruikt zijn eigen schema in dezelfde PostgreSQL-database als Medplum, in een apart 'flowable' schema voor isolatie.
+De BPMN-modeller (bpmn-js) draait in de browser binnen het OpenZorg admin-paneel. BPMN-bestanden worden opgeslagen in Flowable via deployment-API.
+8.6 De killer demo (voor sales-doeleinden)
+Tijdens een verkoopgesprek met een VVT-instelling die ONS gebruikt, wordt de volgende demo gegeven door de OpenZorg-medewerker:
+Vraag de aanwezige functioneel beheerder zijn intake-proces te beschrijven.
+Teken het live mee in de Camunda-modeller binnen OpenZorg (vijf minuten werk).
+Druk op 'publiceren' en maak direct een testaanmelding aan.
+Laat zien dat de juiste taken in de juiste volgorde bij de juiste rollen verschijnen.
+Vraag wat hij zou willen veranderen. Wat hij ook noemt, voer het ter plekke door.
+Op dit moment heb je een fan.
+9. Modulaire architectuur
+9.1 De vier modules
+Module
+Doel
+MVP-status
+Planning
+Roostering, dagplanning, beschikbaarheid, route, herhaalafspraken, CAO-checks
+Ja, in MVP
+ECD
+Cliëntdossier, zorgplan, rapportage Omaha/SOEP, MIC, formulieren
+Ja, in MVP
+Facturatie
+Wlz/Wmo/Jw/Zvw declaratie, iWlz, iStandaarden, VECOZO
+Beperkt: alleen MAZ-bericht in MVP
+Rapportage
+Kwaliteitsindicatoren, NZa, dashboards, capaciteitsanalyse
+Nee, post-MVP (v1.1)
+
+9.2 Hoe los afneembaar werkt
+Modules zijn aparte deployable services binnen de mono-repo. Elke module heeft een eigen Hono-applicatie, eigen routes, eigen workflows in Flowable, en eigen schermen in de Next.js shell. Modules delen het FHIR-datamodel via Medplum en de gedeelde domain-types in packages/shared-domain.
+Een tenant heeft per module een 'enabled' vlag in zijn configuratie. Wanneer een module uit staat, verschijnen de bijbehorende navigatie-items niet in de UI, worden de bijbehorende API-routes geweerd, en draaien de bijbehorende workflows niet. Een klant die alleen Planning afneemt, ziet en betaalt alleen voor Planning.
+9.3 Module-grenzen en communicatie
+Modules communiceren met elkaar via twee kanalen, en alleen via deze twee kanalen:
+De gedeelde FHIR-API van Medplum, voor alles wat zorginformatie betreft (cliënt, afspraak, zorgplan).
+Een interne event bus (op basis van PostgreSQL LISTEN/NOTIFY in MVP, later eventueel NATS), voor domeingebeurtenissen zoals 'afspraak gepland', 'rapportage afgerond', 'indicatie gestart'.
+Direct database-toegang tussen modules is niet toegestaan. Dit garandeert dat een module losstaand kan draaien.
+10. MVP scope en functionele requirements
+De MVP-scope is bewust strak begrensd: 20 functionele requirements die samen één samenhangend werkend systeem opleveren voor een VVT-instelling. Alle requirements zijn afgeleid uit het uitgebreide projectplan in de eerdere strategie-chat (90 requirements totaal, waarvan 20 als MVP gemarkeerd).
+10.1 Fundament-requirements (FUN)
+ID
+Requirement
+Acceptatiecriterium (kern)
+FUN-01
+Multi-tenant: meerdere zorginstellingen op één installatie
+Tenant A ziet nooit data van tenant B, ook niet bij directe DB-toegang
+FUN-02
+Authenticatie en autorisatie met rollen
+Beheerder, Zorgmedewerker, Planner, Teamleider als basis-rollen
+FUN-03
+Audit logging conform NEN 7513
+Elke read/write op cliëntdata wordt gelogd met tijd, gebruiker, actie
+FUN-04
+FHIR R4 API met zorg-NL profielen
+Validatie tegen simplifier.net/nictiz slaagt
+FUN-05
+Configuratie per tenant
+Modules aan/uit, custom velden, validatieregels per tenant gescheiden
+
+10.2 ECD-requirements (ECD)
+ID
+Requirement
+Acceptatiecriterium (kern)
+ECD-01
+Cliëntprofiel met Zib-velden
+Aanmaken, wijzigen, verwijderen werkt; BSN-elfproef faalt op fout BSN
+ECD-02
+Contactpersonen koppelen
+Meerdere contactpersonen per cliënt met rol en relatie
+ECD-03
+Zorgplan opstellen volgens Omaha
+Selectie uit 42 Omaha-domeinen, doelen formuleren, interventies koppelen
+ECD-04
+Vrije rapportage en SOEP-rapportage
+Beide formaten beschikbaar, gekoppeld aan cliënt en zorgmoment
+ECD-05
+Documenten uploaden bij cliënt
+PDF, JPG, PNG; max 25 MB; gekoppeld aan dossier
+ECD-06
+MIC-melding registreren
+Met datum, ernst, betrokken cliënt, betrokken medewerker
+ECD-07
+Custom veld toevoegen via UI
+Functioneel beheerder kan veld toevoegen zonder code
+ECD-08
+Validatieregel toevoegen via UI
+Bijvoorbeeld 'gewicht tussen 1 en 300 kg'
+
+10.3 Planning-requirements (PLN)
+ID
+Requirement
+Acceptatiecriterium (kern)
+PLN-01
+Zorgafspraak aanmaken/wijzigen/verwijderen
+Met cliënt, medewerker, tijd, type, locatie
+PLN-02
+Dagplanning per medewerker
+Drag-and-drop, real-time updates voor andere planners
+PLN-03
+Herhalende afspraken (RRULE)
+iCal-RRULE syntax; serie en uitzonderingen
+PLN-04
+Beschikbaarheid van medewerker beheren
+Werkdagen, vakantie, ziek; beïnvloedt planner-zicht
+PLN-05
+Wachtlijst
+Aanmeldingen die nog niet ingepland zijn
+
+10.4 Workflow-requirements (WFL)
+ID
+Requirement
+Acceptatiecriterium (kern)
+WFL-01
+BPMN-modeller in admin-paneel
+Functioneel beheerder kan proces tekenen, opslaan, publiceren
+WFL-02
+Procesinstances starten en taken routeren
+Een nieuwe aanmelding triggert het juiste proces
+
+10.5 Out-of-scope voor MVP
+De volgende dingen zijn bewust niet in de MVP. Ze komen in v1.1 of later.
+Volledige facturatie (alleen MAZ-bericht in MVP, geen complete declaratiestroom)
+BI-dashboards en kwaliteitsindicatoren
+Cliëntportaal en mantelzorger-toegang
+Mobiele app (we leveren een responsive web-UI in MVP)
+Routeplanning met geo-optimalisatie (basisvolgorde wel, optimalisatie niet)
+Spraakgestuurd rapporteren
+GHZ- en GGZ-specifieke workflows
+Externe SSO via SAML/OIDC (Medplum Auth volstaat in MVP)
+11. Repo-structuur
+OpenZorg wordt opgezet als mono-repo met losse deployable services. Dit maakt het mogelijk om gedeelde code (domein-types, validatie-schema's, UI-componenten) één keer te onderhouden en tegelijk modules onafhankelijk te releasen.
+11.1 Top-level structuur
+openzorg/
+├── apps/
+│   └── web/                   # Next.js shell, routet tussen modules
+├── services/
+│   ├── ecd/                   # ECD module: Hono backend
+│   ├── planning/              # Planning module: Hono backend
+│   ├── facturatie/            # Facturatie module: Hono backend (beperkt in MVP)
+│   └── workflow-bridge/       # Bridge tussen Hono en Flowable
+├── packages/
+│   ├── shared-domain/         # Zib-types, FHIR-resources, validatie-schemas
+│   ├── shared-ui/             # shadcn-componenten, OpenZorg-theming
+│   ├── shared-config/         # Drielagen-configuratiemodel, regel-DSL
+│   └── shared-test/           # Testfixtures, FHIR-testdata
+├── adapters/
+│   └── ons-import/            # Eenrichtings-import vanuit publieke ONS API
+├── infra/
+│   ├── docker/                # Dockerfiles per service
+│   ├── compose/               # docker-compose.yml voor lokaal en demo
+│   ├── medplum/               # Medplum config en seed-data
+│   ├── flowable/              # Flowable config
+│   └── postgres/              # Init-scripts, migraties
+├── docs/
+│   ├── architecture/          # ADRs, diagrammen
+│   ├── api/                   # OpenAPI / FHIR CapabilityStatement
+│   └── user/                  # Eindgebruikers-docs
+├── .github/
+│   └── workflows/             # CI: lint, test, forbidden-words check, build
+├── package.json               # pnpm workspaces root
+├── pnpm-workspace.yaml
+├── turbo.json                 # Turborepo voor build-orchestratie
+└── README.md
+11.2 Conventies
+Package manager: pnpm met workspaces. Geen npm, geen yarn.
+Build-orchestratie: Turborepo. Caching aan voor lokaal en CI.
+TypeScript strict mode aan, in het hele project. Geen any zonder ESLint-disable + comment.
+Code formatting: Prettier met de defaults, behalve printWidth=100.
+Linting: ESLint met @typescript-eslint en eslint-plugin-import. Custom rule voor forbidden-words check.
+Commit-conventie: Conventional Commits (feat:, fix:, chore:, etc.).
+Branch-strategie: trunk-based met feature branches, geen long-lived branches.
+12. Sprint-planning (8 weken)
+De MVP wordt in vier sprints van twee weken opgeleverd. Elke sprint resulteert in iets dat draait, getest is, en demonstreerbaar is voor een potentiële klant. Aan het eind van sprint 4 is er een werkende demo-installatie waarmee de eerste pilotklant kan starten.
+12.1 Sprint 1 (week 1-2): Fundament
+Doel: een werkende docker compose up die alle services start, met authenticatie en een lege FHIR-database.
+Deliverables sprint 1
+Mono-repo opgezet met pnpm workspaces, Turborepo, ESLint, Prettier, TypeScript strict
+Docker Compose stack: Postgres, Medplum, Flowable, web (Next.js shell), één Hono-service als template
+Medplum-instantie geconfigureerd met Nederlandse FHIR-profielen
+Authenticatie via Medplum Auth met vier rollen (Beheerder, Zorgmedewerker, Planner, Teamleider)
+Multi-tenancy: twee testtenants kunnen worden aangemaakt en data-isolatie is bewezen
+CI: GitHub Actions met lint, test, forbidden-words check, build
+Eerste ADR: Architecture Decision Records template en eerste record ('Waarom Medplum')
+README waarmee een nieuwe ontwikkelaar binnen 15 minuten lokaal draait
+12.2 Sprint 2 (week 3-4): ECD en configureerbaarheid
+Doel: een werkend cliëntdossier met de mogelijkheid voor functioneel beheerders om custom velden toe te voegen.
+Deliverables sprint 2
+ECD-module met cliëntprofiel, contactpersonen, zorgplan (Omaha), vrije en SOEP-rapportage (ECD-01 t/m ECD-04)
+Documenten uploaden en koppelen (ECD-05)
+MIC-melding registreren (ECD-06)
+Drielagen-configuratie-engine: configuratie-schema, JSONForms-integratie, validatie-engine
+Admin-UI om custom velden toe te voegen (ECD-07) en validatieregels (ECD-08)
+BSN-elfproef en AGB-validatie geïmplementeerd in laag 1
+Test-coverage backend: minimaal 80%
+12.3 Sprint 3 (week 5-6): Planning en workflows
+Doel: een werkende planning-module en de eerste BPMN-workflow die door functioneel beheerders aanpasbaar is.
+Deliverables sprint 3
+Planning-module met CRUD voor afspraken (PLN-01)
+Dagplanning-UI met drag-and-drop, real-time updates (PLN-02)
+Herhalende afspraken via RRULE (PLN-03)
+Beschikbaarheid van medewerkers (PLN-04)
+Wachtlijst (PLN-05)
+Flowable-integratie via workflow-bridge service
+BPMN-modeller in admin-paneel via bpmn-js (WFL-01)
+Eerste werkende workflow: intake-proces als demo (WFL-02)
+Taakwerkbak voor zorgmedewerkers
+12.4 Sprint 4 (week 7-8): Integratie en demo-rijp maken
+Doel: een polished demo-installatie waarmee de eerste pilotklant kan beginnen.
+Deliverables sprint 4
+ONS-importadapter: cliënten en zorgplannen lezen via de publieke ONS API en omzetten naar FHIR
+Eerste versie facturatie-module: alleen het MAZ-bericht voor iWlz
+Demo-data: een fictieve VVT-instelling met 100 cliënten, 20 medewerkers, een werkend intake-proces
+End-to-end Playwright-tests voor de drie kritieke happy paths: nieuwe aanmelding, dagplanning, rapportage
+Eindgebruikers-documentatie (markdown in docs/user/)
+Demo-script voor verkoopgesprekken
+Pilotklant-onboarding-checklist
+Performance-test: 50 cliënten een week vooruit plannen, P95 &lt; 200ms
+13. Acceptatiecriteria MVP
+De MVP is af wanneer alle onderstaande criteria aantoonbaar voldaan zijn. Dit is de definitie waarop 'klaar' wordt gemeten.
+13.1 Functioneel
+Alle 20 MVP-requirements (FUN-01 t/m FUN-05, ECD-01 t/m ECD-08, PLN-01 t/m PLN-05, WFL-01 en WFL-02) zijn geïmplementeerd en getest.
+Een functioneel beheerder kan zonder hulp van een ontwikkelaar een veld toevoegen aan het cliëntprofiel, het verplicht maken, en zien dat de validatie werkt in zowel UI als API.
+Een functioneel beheerder kan een proces tekenen in de BPMN-modeller, publiceren, en een instance starten die de juiste taken bij de juiste rollen aflevert.
+Een planner kan een week vooruit plannen voor 200 cliënten zonder performance-problemen.
+Een wijkverpleegkundige kan haar dagplanning op een mobiele browser bekijken en bij een cliënt rapporteren.
+13.2 Niet-functioneel
+De FHIR-API valideert tegen de officiële Nederlandse profielen via simplifier.net/nictiz.
+Een nieuwe organisatie kan binnen 30 minuten een werkende installatie hebben via Docker Compose.
+Een nieuwe ontwikkelaar kan binnen 15 minuten lokaal draaien volgens de README.
+De backend-test-coverage is minimaal 80%, gemeten met Vitest coverage.
+Er zijn end-to-end Playwright-tests voor minimaal drie kritieke happy paths.
+De P95-responstijd voor de planning-API onder de testlast (200 cliënten, 50 concurrent gebruikers) is onder de 200ms.
+13.3 Compliance en juridisch
+De CI-pipeline weigert builds die woorden uit de forbidden-words-lijst bevatten.
+Audit logging is geïmplementeerd voor alle reads en writes op cliëntdata, conform NEN 7513.
+Een AVG-verwerkersovereenkomst is opgesteld als template (juridisch werk, niet door Claude Code).
+Multi-tenant data-isolatie is bewezen via een geautomatiseerde test die probeert tenant-grenzen te doorbreken.
+13.4 Documentatie
+Architecture Decision Records voor minimaal de tien grootste ontwerpbeslissingen.
+API-documentatie automatisch gegenereerd uit FHIR CapabilityStatement.
+Eindgebruikers-handleiding voor functioneel beheerders, in markdown.
+Demo-script voor verkoopgesprekken.
+14. Compliance, security en privacy
+14.1 Toepasselijke standaarden
+Standaard
+Wat het regelt
+MVP-status
+NEN 7510
+Informatiebeveiliging in de zorg
+Architecturaal voorbereid, certificering post-MVP
+NEN 7512
+Vertrouwensbasis voor uitwisseling
+Voorbereid via FHIR
+NEN 7513
+Logging van toegang tot patiëntgegevens
+Geïmplementeerd in MVP
+AVG / GDPR
+Privacy
+Verwerkersovereenkomst-template, recht op inzage en wissen geïmplementeerd
+WGBO
+Behandelingsovereenkomst
+Niet technisch, wel in zorgplan-flow
+Wlz / Zvw / Wmo / Jw
+Zorgwetgeving
+iWlz-bericht (MAZ) in MVP, rest later
+Wegiz
+Gegevensuitwisseling
+Voorbereid via FHIR R4 + zorg-NL profielen
+
+14.2 Security-uitgangspunten
+Encryption at rest: PostgreSQL-volume versleuteld op infrastructuurniveau
+Encryption in transit: TLS 1.3 verplicht, geen HTTP-fallback
+Wachtwoordbeleid: minimaal 12 tekens, bcrypt of argon2
+Sessies: kort verlopend (max 8 uur), refresh tokens
+Rate limiting op de publieke API
+CSRF-bescherming op alle state-changing endpoints
+Content Security Policy strict
+Geen secrets in de codebase, alles via environment variables of secret manager
+Dependency-scanning via GitHub Dependabot
+14.3 Privacy by design
+Data minimalisatie: velden zijn standaard niet verplicht, tenzij wettelijk of door functioneel beheerder ingesteld
+Recht op inzage: cliënt kan via API eigen gegevens opvragen (post-MVP via cliëntportaal)
+Recht op wissen: een cliënt kan worden geanonimiseerd, met behoud van audit trail van geanonimiseerde records
+Logging van toegang tot dossiers, conform NEN 7513
+Geen tracking, geen analytics op cliëntdata
+15. CI/CD en kwaliteitsborging
+15.1 GitHub Actions pipeline
+Bij elke push naar een feature branch en bij elke pull request draait de volgende pipeline:
+Install dependencies (pnpm install met cache)
+Lint (ESLint over de hele monorepo)
+Type check (tsc --noEmit per package)
+Forbidden-words check (custom script tegen bijlage 17.1)
+Unit tests (Vitest, parallel per package)
+Build alle packages en services
+Bouw Docker images per service
+Op main: deploy naar staging via Docker Compose op test-server
+Op main: end-to-end Playwright tests tegen staging
+Op tag (v*): publiceer Docker images naar GitHub Container Registry
+15.2 Code review en merge-policy
+Geen direct commits naar main
+Alle changes via pull request
+Minimaal één review verplicht (in MVP-fase mag dat door Claude zelf zijn als de tweede ontwikkelaar nog niet aan boord is)
+Branch protection: pipeline moet groen zijn
+Squash-merge default, om main-historie schoon te houden
+15.3 Kwaliteitsmetrieken die continu zichtbaar zijn
+Test-coverage (minimaal 80% backend)
+Bundle size frontend (alarm bij regressie &gt;10%)
+API P95-responstijd in staging
+Aantal openstaande TODO's in code
+Aantal Dependabot-meldingen
+16. De Claude Code start-prompt
+Hieronder de letterlijke prompt om in een nieuwe Claude Code sessie te plakken om sprint 1 te starten. Voeg dit document als bijlage bij de sessie zodat Claude Code de volledige context heeft.
+Werkwijze
+Plak de prompt hieronder in een verse Claude Code sessie. Voeg dit Word-document toe als attachment. Claude Code zal dan beginnen met sprint 1 en alleen vragen stellen bij fundamentele onduidelijkheden. Voor implementatiekeuzes neemt Claude Code zelf besluiten en documenteert die als ADR.
+16.1 De prompt
+--- begin prompt ---
+
+Ik wil een open source modulair zorgplatform bouwen voor Nederlandse
+zorginstellingen, naam: OpenZorg. De volledige bouwspecificatie staat
+in het bijgevoegde Word-document. Lees dat eerst volledig voor je begint.
+
+Start met sprint 1: Fundament. De doelen van sprint 1 staan in
+hoofdstuk 12.1 van het document.
+
+Concreet wil ik aan het eind van sprint 1 dit kunnen:
+1. git clone &lt;repo&gt; &amp;&amp; cd openzorg &amp;&amp; pnpm install &amp;&amp; docker compose up
+2. Browser open op localhost:3000 toont een werkende Next.js shell
+3. Inloggen werkt via Medplum Auth met vier rollen
+4. Twee testtenants bestaan en data-isolatie is bewezen via een test
+5. CI is groen (lint, test, forbidden-words, build)
+6. README beschrijft hoe een nieuwe ontwikkelaar binnen 15 minuten draait
+
+Tech stack (zie hoofdstuk 5 van het document voor motivatie):
+- Mono-repo met pnpm workspaces en Turborepo
+- TypeScript strict overal
+- Backend glue: Hono
+- FHIR-fundament: Medplum self-hosted
+- Workflow-engine: Flowable Community (sprint 3, niet nu)
+- Frontend: Next.js 15 + shadcn/ui + Tailwind
+- Database: PostgreSQL 16
+- Test: Vitest (unit), Playwright (E2E, sprint 4)
+- CI: GitHub Actions
+
+Architectuurprincipes die nooit overtreden mogen worden
+(zie hoofdstuk 4):
+- Multi-tenant vanaf dag 1, tenant-isolatie via row-level security
+- FHIR-native, Zib-gebaseerd, geen eigen interne datamodellen voor
+  zorginformatie
+- Drielagen-configureerbaarheid (kern vast, uitbreiding vrij,
+  plugin voor maatwerk)
+- Geen enkele veldnaam of klassenaam uit de Nedap ONS documentatie
+  (zie forbidden-words lijst in bijlage 17.1)
+- Configuratie als data, niet als code
+
+Werkwijze die ik van je verwacht:
+- Maak een Architecture Decision Record voor elke grote keuze
+- Stel alleen vragen als iets fundamenteel onduidelijk is
+- Voor implementatiekeuzes neem je zelf het beste besluit
+- Schrijf tests voor alles wat je bouwt (target: 80% coverage)
+- Commit vaak, met conventional commits
+- Maak een feature branch en aan het eind een PR met samenvatting
+
+Begin met de repo-structuur uit hoofdstuk 11.1, en werk dan
+stap voor stap door de sprint 1 deliverables van hoofdstuk 12.1.
+
+Vraag me om akkoord voor je de eerste commit pusht, zodat ik kan
+controleren of de richting klopt.
+
+--- einde prompt ---
+16.2 Wat te verwachten van Claude Code
+Bij een goed ingerichte Claude Code sessie zal sprint 1 ongeveer 20 tot 40 uur Claude-tijd kosten, afhankelijk van hoeveel jij zelf wilt reviewen onderweg. Plan in dat je dagelijks 30 tot 60 minuten besteedt aan reviewen, beslissingen nemen op vragen, en bijsturen waar nodig. Aan het eind van sprint 1 heb je een werkend fundament dat draait en CI-groen is.
+17. Bijlagen
+17.1 Forbidden-words-lijst (eerste versie)
+Deze lijst wordt door de CI-check gebruikt om te voorkomen dat de codebase termen bevat die uniek zijn voor de Nedap ONS API of documentatie. De lijst is een eerste versie en moet worden uitgebreid op basis van een grondige scan van de publieke ONS-documentatie. De controle is hoofdletter-ongevoelig en matcht hele woorden, niet substrings.
+Eerste versie van de lijst (uit te breiden):
+// scripts/forbidden-words.txt
+Caress
+MijnCaress
+OnsAdministratie
+OnsAgenda
+OnsDossier
+OnsInsights
+OnsPlanning
+OnsToegang
+Carenzorgt
+Nedap
+PinkRoccade
+// Voeg hier veldnamen en entiteitsnamen toe na grondige scan
+// van https://ons-api.nl/Introductie.html
+Belangrijk: deze lijst is bewust kort en zal uitgebreid moeten worden voordat de eerste publieke release plaatsvindt. Het OpenZorg-team moet de publieke ONS-documentatie systematisch doornemen en alle unieke termen, veldnamen en entiteitsnamen toevoegen. Reken op een halve dag werk.
+17.2 Referentie-links
+Medplum: https://www.medplum.com en https://github.com/medplum/medplum
+Flowable: https://www.flowable.com en https://github.com/flowable/flowable-engine
+JSONForms: https://jsonforms.io
+bpmn-js: https://bpmn.io/toolkit/bpmn-js/
+Nictiz Zibs: https://zibs.nl
+FHIR zorg-NL profielen: https://simplifier.net/nictiz
+HL7 FHIR R4: https://hl7.org/fhir/R4/
+iWlz/iStandaarden: https://istandaarden.nl
+Omaha System NL: https://omahasystem.nl
+NEN 7510/7512/7513: https://www.nen.nl/zorg-welzijn/ict-in-de-zorg
+Nedap ONS API (publiek, voor importadapter): https://ons-api.nl
+17.3 Begrippenlijst
+Term
+Betekenis
+Zib
+Zorginformatiebouwsteen, gestandaardiseerde definitie van klinische informatie van Nictiz
+FHIR
+Fast Healthcare Interoperability Resources, internationale standaard voor zorggegevensuitwisseling
+BPMN
+Business Process Model and Notation, internationale standaard voor procesmodellering
+DMN
+Decision Model and Notation, standaard voor beslisregels
+RRULE
+Recurrence Rule, iCal-standaard voor herhalende afspraken
+VVT
+Verpleging, Verzorging, Thuiszorg
+GHZ
+Gehandicaptenzorg
+GGZ
+Geestelijke Gezondheidszorg
+ECD
+Elektronisch Cliënten Dossier
+EPD
+Elektronisch Patiënten Dossier
+ADR
+Architecture Decision Record
+MIC
+Melding Incident Cliënt
+Omaha
+Methodisch werken-systematiek voor zorgplannen, breed gebruikt in NL VVT
+SOEP
+Subjectief, Objectief, Evaluatie, Plan — rapportage-formaat
+iWlz
+Informatieuitwisseling Wet langdurige zorg
+MAZ
+Melding Aanvang Zorg, een iWlz-bericht
+VECOZO
+Centraal communicatiepunt voor zorgverzekeraars en zorgaanbieders
+AGB-code
+Algemeen Gegevens Beheer-code, identificatie zorgverlener
+
+17.4 Wijzigingshistorie
+Versie
+Datum
+Wijziging
+1.0
+9 april 2026
+Eerste bouwklare versie. Standalone document met volledige context, architectuur, MVP scope en Claude Code prompt.

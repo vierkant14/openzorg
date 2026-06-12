@@ -29,7 +29,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ p
   return proxy(req, await params);
 }
 
-async function proxy(req: NextRequest, params: { path: string[] }): Promise<NextResponse> {
+async function proxy(req: NextRequest, params: { path: string[] }): Promise<NextResponse | Response> {
   const path = params.path.join("/");
   const search = req.nextUrl.search;
   const url = `${ECD_URL}/${path}${search}`;
@@ -52,6 +52,22 @@ async function proxy(req: NextRequest, params: { path: string[] }): Promise<Next
       headers: forwardHeaders,
       body: body ?? undefined,
     });
+
+    // Stream SSE responses (AI chat) directly without buffering
+    const contentType = response.headers.get("content-type") ?? "";
+    if (contentType.includes("text/event-stream") || path.includes("ai/chat")) {
+      const responseHeaders = new Headers();
+      response.headers.forEach((value, key) => {
+        responseHeaders.set(key, value);
+      });
+      responseHeaders.set("cache-control", "no-cache");
+      responseHeaders.set("connection", "keep-alive");
+
+      return new Response(response.body, {
+        status: response.status,
+        headers: responseHeaders,
+      });
+    }
 
     const responseBody = await response.arrayBuffer();
     const responseHeaders = new Headers();

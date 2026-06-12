@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 
 import AppShell from "../../components/AppShell";
-import { getUserRole } from "../../lib/api";
+import { FeatureGate } from "../../components/FeatureGate";
+import { ecdFetch, getUserRole } from "../../lib/api";
 import { workflowFetch } from "../../lib/workflow-api";
 
 /* ---------- Types ---------- */
@@ -13,6 +14,7 @@ interface WorkflowTask {
   name: string;
   description?: string;
   createTime: string;
+  dueDate?: string | null;
   assignee?: string;
   processDefinitionId?: string;
   processInstanceId?: string;
@@ -20,9 +22,75 @@ interface WorkflowTask {
   variables?: Array<{ name: string; value: unknown }>;
 }
 
+/**
+ * Formatter voor deadlines. Geeft een { label, color } terug zodat de kaart
+ * kan kleuren op basis van hoe dringend het is.
+ */
+function formatDueDate(iso?: string | null): { label: string; color: string } | null {
+  if (!iso) return null;
+  const due = new Date(iso);
+  if (isNaN(due.getTime())) return null;
+  const now = new Date();
+  const diffMs = due.getTime() - now.getTime();
+  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+  const diffDays = Math.floor(diffHours / 24);
+
+  if (diffMs < 0) {
+    return { label: `Verlopen: ${Math.abs(diffDays)}d geleden`, color: "bg-coral-100 text-coral-800 dark:bg-coral-950/30 dark:text-coral-300" };
+  }
+  if (diffHours < 24) {
+    return { label: `Over ${diffHours}u`, color: "bg-amber-100 text-amber-800 dark:bg-amber-950/30 dark:text-amber-300" };
+  }
+  if (diffDays < 3) {
+    return { label: `Over ${diffDays}d`, color: "bg-amber-100 text-amber-800 dark:bg-amber-950/30 dark:text-amber-300" };
+  }
+  return { label: `Over ${diffDays}d`, color: "bg-brand-50 text-brand-700 dark:bg-brand-950/20 dark:text-brand-300" };
+}
+
 interface TasksResponse {
   data: WorkflowTask[];
   total: number;
+}
+
+/** FHIR Task resource (from Medplum, e.g. auto-generated zorgplan-evaluatie). */
+interface FhirTask {
+  resourceType: "Task";
+  id?: string;
+  status?: string;
+  code?: {
+    coding?: Array<{ system?: string; code?: string; display?: string }>;
+    text?: string;
+  };
+  description?: string;
+  authoredOn?: string;
+  executionPeriod?: { end?: string };
+  focus?: { reference?: string };
+  for?: { reference?: string };
+  extension?: Array<{ url?: string; valueString?: string; valueBoolean?: boolean }>;
+}
+
+interface FhirBundle<T> {
+  resourceType: "Bundle";
+  entry?: Array<{ resource: T }>;
+}
+
+/** Convert a FHIR Task to a WorkflowTask shape so it fits the werkbak UI. */
+function fhirTaskToWorkflow(task: FhirTask): WorkflowTask {
+  const code = task.code?.coding?.[0]?.code ?? "fhir-task";
+  return {
+    id: `fhir-${task.id ?? ""}`,
+    name: task.code?.text ?? task.code?.coding?.[0]?.display ?? "FHIR Taak",
+    description: task.description,
+    createTime: task.authoredOn ?? new Date().toISOString(),
+    dueDate: task.executionPeriod?.end ?? null,
+    processDefinitionId: `${code}:fhir:1`,
+    taskDefinitionKey: code,
+    variables: [
+      ...(task.for?.reference
+        ? [{ name: "clientRef", value: task.for.reference }]
+        : []),
+    ],
+  };
 }
 
 /* ---------- Process variable definitions ---------- */
@@ -34,8 +102,13 @@ interface TaskVar {
   options?: Array<{ value: string; label: string }>;
 }
 
-/** Map process definition keys to their gateway variables */
-const PROCESS_VARS: Record<string, TaskVar[]> = {
+/**
+ * Default-vars per process-key. Deze hardcoded defaults zijn Laag 1 —
+ * leveranciersvoorschrift. Tenant-configuraties (Laag 2) mergen erover
+ * heen zodat een functioneel beheerder per task eigen opties kan zetten
+ * zonder code te wijzigen.
+ */
+const DEFAULT_PROCESS_VARS: Record<string, TaskVar[]> = {
   "intake-proces": [
     { name: "goedgekeurd", label: "Goedgekeurd?", type: "boolean" },
     { name: "opmerking", label: "Opmerking", type: "text" },
@@ -79,24 +152,49 @@ function getProcessLabel(key: string): string {
 
 /* ---------- Page ---------- */
 
+type StatusFilter = "all" | "unclaimed" | "claimed-mine" | "claimed-other";
+
 export default function WerkbakPage() {
+  return (
+    <FeatureGate flag="workflow-engine">
+      <WerkbakInner />
+    </FeatureGate>
+  );
+}
+
+interface TenantFormOptions {
+  [processKey: string]: { [taskKey: string]: TaskVar[] };
+}
+
+function WerkbakInner() {
   const [tasks, setTasks] = useState<WorkflowTask[]>([]);
+  const [tenantFormOptions, setTenantFormOptions] = useState<TenantFormOptions>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedTask, setExpandedTask] = useState<string | null>(null);
   const [completing, setCompleting] = useState<string | null>(null);
   const [formVars, setFormVars] = useState<Record<string, string>>({});
 
+  // Filters
+  const [processFilter, setProcessFilter] = useState<string>("all");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [searchQuery, setSearchQuery] = useState<string>("");
+
   const role = typeof window !== "undefined" ? getUserRole() : "";
 
-  // Teamleider en beheerder zien taken van alle rollen (oversight)
-  const isOversight = role === "teamleider" || role === "beheerder";
-  const ALL_ROLES = ["zorgmedewerker", "planner", "teamleider", "beheerder"];
+  // Teamleider, beheerder en tenant-admin zien taken van alle rollen (oversight)
+  const isOversight = role === "teamleider" || role === "beheerder" || role === "tenant-admin";
+  const ALL_ROLES = ["zorgmedewerker", "planner", "teamleider", "beheerder", "tenant-admin"];
 
   const loadTasks = useCallback(async () => {
     if (!role) return;
     setLoading(true);
     setError(null);
+
+    // Fetch FHIR Tasks (e.g. auto-generated zorgplan-evaluatie) in parallel
+    const fhirTasksPromise = ecdFetch<FhirBundle<FhirTask>>("/api/fhir-taken").then(
+      ({ data }) => (data?.entry ?? []).map((e) => fhirTaskToWorkflow(e.resource)),
+    ).catch(() => [] as WorkflowTask[]);
 
     if (isOversight) {
       // Fetch tasks for all roles and merge
@@ -113,15 +211,30 @@ export default function WerkbakPage() {
           }
         }
       }
+      // Merge FHIR Tasks
+      const fhirTasks = await fhirTasksPromise;
+      for (const ft of fhirTasks) {
+        if (!seenIds.has(ft.id)) {
+          seenIds.add(ft.id);
+          allTasks.push(ft);
+        }
+      }
       setTasks(allTasks);
     } else {
       const { data, error: err } = await workflowFetch<TasksResponse>(
         `/api/taken?userId=${encodeURIComponent(role)}`,
       );
+      // Merge FHIR Tasks
+      const fhirTasks = await fhirTasksPromise;
       if (err) {
-        setError(err);
+        // Even if workflow fails, show FHIR tasks
+        if (fhirTasks.length > 0) {
+          setTasks(fhirTasks);
+        } else {
+          setError(err);
+        }
       } else {
-        setTasks(data?.data ?? []);
+        setTasks([...(data?.data ?? []), ...fhirTasks]);
       }
     }
     setLoading(false);
@@ -129,7 +242,30 @@ export default function WerkbakPage() {
 
   useEffect(() => {
     loadTasks();
+    // Laad tenant-specifieke form-opties (Laag 2)
+    import("../../lib/api").then(({ ecdFetch }) =>
+      ecdFetch<{ config: TenantFormOptions }>("/api/task-form-options").then(({ data }) => {
+        if (data?.config) setTenantFormOptions(data.config);
+      }),
+    );
   }, [loadTasks]);
+
+  /**
+   * Merge Laag 1 (hardcoded defaults) met Laag 2 (tenant-overrides).
+   * Tenant-config wint per var-name; defaults zijn de fallback.
+   */
+  function getTaskVars(processKey: string, taskDefKey?: string): TaskVar[] {
+    const defaults = DEFAULT_PROCESS_VARS[processKey] ?? [
+      { name: "opmerking", label: "Opmerking", type: "text" as const },
+    ];
+    const override = tenantFormOptions[processKey]?.[taskDefKey ?? ""] ?? [];
+    if (override.length === 0) return defaults;
+    // Merge: tenant-override vervangt default met zelfde name, rest blijft
+    const byName = new Map<string, TaskVar>();
+    for (const v of defaults) byName.set(v.name, v);
+    for (const v of override) byName.set(v.name, v);
+    return Array.from(byName.values());
+  }
 
   async function claimTask(taskId: string) {
     const { error: err } = await workflowFetch(`/api/taken/${taskId}/claim`, {
@@ -172,6 +308,35 @@ export default function WerkbakPage() {
 
   const inputCls = "w-full rounded-lg border border-default bg-raised px-3 py-2 text-sm text-fg focus:border-brand-400 focus:ring-2 focus:ring-brand-500/20 outline-none transition-[border-color,box-shadow] duration-200 ease-out";
 
+  // Unieke proces-keys uit de huidige taken-set, gesorteerd op label
+  const availableProcesses = Array.from(
+    new Set(tasks.map((t) => getProcessKey(t.processDefinitionId)).filter(Boolean)),
+  )
+    .map((key) => ({ key, label: getProcessLabel(key) }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+
+  // Filter de taken-lijst
+  const filteredTasks = tasks.filter((task) => {
+    if (processFilter !== "all" && getProcessKey(task.processDefinitionId) !== processFilter) return false;
+
+    if (statusFilter === "unclaimed" && task.assignee) return false;
+    if (statusFilter === "claimed-mine" && task.assignee !== role) return false;
+    if (statusFilter === "claimed-other" && (!task.assignee || task.assignee === role)) return false;
+
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      const hay = [
+        task.name,
+        task.description ?? "",
+        (task.variables?.find((v) => v.name === "clientNaam")?.value as string | undefined) ?? "",
+        task.assignee ?? "",
+      ].join(" ").toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+
+    return true;
+  });
+
   return (
     <AppShell>
       <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6 lg:px-8">
@@ -184,6 +349,68 @@ export default function WerkbakPage() {
             }
           </p>
         </div>
+
+        {/* Filter-bar */}
+        <div className="mb-5 grid gap-3 rounded-xl border border-default bg-raised p-4 sm:grid-cols-[1fr_200px_200px]">
+          <div>
+            <label className="mb-1 block text-xs font-medium text-fg-muted">Zoek (naam, cliënt, beschrijving)</label>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Typ om te filteren..."
+              className={inputCls}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-fg-muted">Proces-type</label>
+            <select
+              value={processFilter}
+              onChange={(e) => setProcessFilter(e.target.value)}
+              className={inputCls}
+            >
+              <option value="all">Alle processen</option>
+              {availableProcesses.map((p) => (
+                <option key={p.key} value={p.key}>{p.label}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-fg-muted">Status</label>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
+              className={inputCls}
+            >
+              <option value="all">Alles</option>
+              <option value="unclaimed">Niet geclaimd</option>
+              <option value="claimed-mine">Door mij geclaimd</option>
+              <option value="claimed-other">Door anderen geclaimd</option>
+            </select>
+          </div>
+        </div>
+
+        {!loading && tasks.length > 0 && (
+          <p className="mb-3 text-xs text-fg-subtle">
+            {filteredTasks.length} van {tasks.length} taken zichtbaar
+            {(processFilter !== "all" || statusFilter !== "all" || searchQuery.trim()) && (
+              <>
+                {" · "}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setProcessFilter("all");
+                    setStatusFilter("all");
+                    setSearchQuery("");
+                  }}
+                  className="text-brand-600 hover:underline"
+                >
+                  filters wissen
+                </button>
+              </>
+            )}
+          </p>
+        )}
 
         {loading && (
           <div className="flex items-center justify-center py-16">
@@ -207,12 +434,18 @@ export default function WerkbakPage() {
           </div>
         )}
 
-        {!loading && !error && tasks.length > 0 && (
+        {!loading && !error && tasks.length > 0 && filteredTasks.length === 0 && (
+          <div className="rounded-2xl border border-dashed border-default bg-raised p-8 text-center">
+            <p className="text-fg-muted">Geen taken die voldoen aan deze filters.</p>
+          </div>
+        )}
+
+        {!loading && !error && filteredTasks.length > 0 && (
           <div className="space-y-3 stagger">
-            {tasks.map((task) => {
+            {filteredTasks.map((task) => {
               const processKey = getProcessKey(task.processDefinitionId);
               const isExpanded = expandedTask === task.id;
-              const taskVars = PROCESS_VARS[processKey] ?? [{ name: "opmerking", label: "Opmerking", type: "text" as const }];
+              const taskVars = getTaskVars(processKey, task.taskDefinitionKey);
               const isClaimed = !!task.assignee;
               const clientNaam = task.variables?.find((v) => v.name === "clientNaam")?.value as string | undefined;
 
@@ -232,6 +465,15 @@ export default function WerkbakPage() {
                             Niet geclaimd
                           </span>
                         )}
+                        {(() => {
+                          const due = formatDueDate(task.dueDate);
+                          if (!due) return null;
+                          return (
+                            <span className={`inline-flex items-center rounded-lg px-2.5 py-0.5 text-xs font-semibold ${due.color}`}>
+                              ⏰ {due.label}
+                            </span>
+                          );
+                        })()}
                         {clientNaam && (
                           <span className="text-xs text-fg-subtle">Client: {clientNaam}</span>
                         )}
@@ -242,6 +484,7 @@ export default function WerkbakPage() {
                       )}
                       <p className="mt-1.5 text-xs text-fg-subtle">
                         Aangemaakt: {new Date(task.createTime).toLocaleString("nl-NL", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                        {task.assignee && <> · Geclaimd door <span className="font-medium text-fg-muted">{task.assignee}</span></>}
                       </p>
                     </div>
 

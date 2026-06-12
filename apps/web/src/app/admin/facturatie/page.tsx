@@ -3,6 +3,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 
 import AppShell from "../../../components/AppShell";
+import { FeatureGate } from "../../../components/FeatureGate";
 import { ecdFetch } from "../../../lib/api";
 import { facturatieFetch } from "../../../lib/facturatie-api";
 
@@ -69,6 +70,14 @@ function formatBedrag(cents: number): string {
 /* ---------- Component ---------- */
 
 export default function FacturatiePage() {
+  return (
+    <FeatureGate flag="facturatie-module">
+      <FacturatiePageInner />
+    </FeatureGate>
+  );
+}
+
+function FacturatiePageInner() {
   const [tab, setTab] = useState<TabKey>("overzicht");
 
   // Data

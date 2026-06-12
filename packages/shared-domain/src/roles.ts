@@ -3,9 +3,10 @@
  * These map to Medplum AccessPolicy resources.
  */
 
-export type OpenZorgRole = "beheerder" | "zorgmedewerker" | "planner" | "teamleider";
+export type OpenZorgRole = "tenant-admin" | "beheerder" | "zorgmedewerker" | "planner" | "teamleider";
 
 export const ALL_ROLES: readonly OpenZorgRole[] = [
+  "tenant-admin",
   "beheerder",
   "zorgmedewerker",
   "planner",
@@ -20,9 +21,14 @@ export interface RoleDefinition {
 
 export const ROLE_DEFINITIONS: readonly RoleDefinition[] = [
   {
+    role: "tenant-admin",
+    displayName: "Tenant admin",
+    description: "Applicatiebeheerder: beheert technische instellingen, rollen, feature flags, state-machines en API-koppelingen",
+  },
+  {
     role: "beheerder",
-    displayName: "Beheerder",
-    description: "Functioneel beheerder: beheert processen, formulieren, validatieregels en gebruikers",
+    displayName: "Functioneel beheerder",
+    description: "Zorginhoudelijk beheerder: beheert medewerkers, organisatie, validatieregels, workflows en codelijsten",
   },
   {
     role: "zorgmedewerker",
@@ -78,14 +84,29 @@ export type Permission =
   | "workflows:read"
   | "workflows:write"
   | "rollen:read"
-  | "rollen:write";
+  | "rollen:write"
+  | "state-machines:read"
+  | "state-machines:write"
+  | "feature-flags:read"
+  | "feature-flags:write"
+  | "api-keys:read"
+  | "api-keys:write"
+  | "ai-config:read"
+  | "ai-config:write"
+  | "ai-chat:read"
+  | "competenties:read"
+  | "competenties:write"
+  | "bezetting:read"
+  | "bezetting:write"
+  | "dienst-config:read"
+  | "dienst-config:write";
 
 /**
  * Permission matrix: which role has which permissions.
  * Beheerder gets everything. Other roles are scoped.
  */
 export const ROLE_PERMISSIONS: Record<OpenZorgRole, readonly Permission[]> = {
-  beheerder: [
+  "tenant-admin": [
     "clients:read", "clients:write", "clients:delete",
     "zorgplan:read", "zorgplan:write",
     "rapportage:read", "rapportage:write",
@@ -99,6 +120,34 @@ export const ROLE_PERMISSIONS: Record<OpenZorgRole, readonly Permission[]> = {
     "configuratie:read", "configuratie:write",
     "workflows:read", "workflows:write",
     "rollen:read", "rollen:write",
+    "state-machines:read", "state-machines:write",
+    "feature-flags:read", "feature-flags:write",
+    "api-keys:read", "api-keys:write",
+    "ai-config:read", "ai-config:write", "ai-chat:read",
+    "competenties:read", "competenties:write",
+    "bezetting:read", "bezetting:write",
+    "dienst-config:read", "dienst-config:write",
+  ],
+  beheerder: [
+    "clients:read", "clients:write", "clients:delete",
+    "zorgplan:read", "zorgplan:write",
+    "rapportage:read", "rapportage:write",
+    "documenten:read", "documenten:write",
+    "medicatie:read", "medicatie:write",
+    "mic:read", "mic:write",
+    "planning:read", "planning:write",
+    "berichten:read", "berichten:write",
+    "medewerkers:read", "medewerkers:write",
+    "organisatie:read", "organisatie:write",
+    "configuratie:read", "configuratie:write",
+    "workflows:read", "workflows:write",
+    // state-machine-definities zijn nodig om traject-status te renderen
+    // in gedeelde schermen (cliëntdossier); schrijven blijft tenant-admin
+    "state-machines:read",
+    "ai-chat:read",
+    "competenties:read", "competenties:write",
+    "bezetting:read", "bezetting:write",
+    "dienst-config:read", "dienst-config:write",
   ],
   zorgmedewerker: [
     "clients:read", "clients:write",
@@ -109,12 +158,15 @@ export const ROLE_PERMISSIONS: Record<OpenZorgRole, readonly Permission[]> = {
     "mic:read", "mic:write",
     "planning:read",
     "berichten:read", "berichten:write",
+    "state-machines:read",
+    "ai-chat:read",
   ],
   planner: [
     "clients:read",
     "planning:read", "planning:write",
     "berichten:read", "berichten:write",
     "medewerkers:read",
+    "state-machines:read",
   ],
   teamleider: [
     "clients:read", "clients:write",
@@ -127,6 +179,8 @@ export const ROLE_PERMISSIONS: Record<OpenZorgRole, readonly Permission[]> = {
     "berichten:read", "berichten:write",
     "medewerkers:read",
     "organisatie:read",
+    "state-machines:read",
+    "ai-chat:read",
   ],
 } as const;
 
@@ -158,6 +212,7 @@ export const ROUTE_PERMISSIONS: ReadonlyArray<{
   { pattern: "/api/clients/*/medicatie", GET: "medicatie:read", POST: "medicatie:write", PUT: "medicatie:write", DELETE: "medicatie:write" },
   { pattern: "/api/clients/*/allergieen", GET: "clients:read", POST: "clients:write", DELETE: "clients:write" },
   { pattern: "/api/clients/*/vaccinaties", GET: "clients:read", POST: "clients:write", PUT: "clients:write", DELETE: "clients:write" },
+  { pattern: "/api/clients/*/verzekering", GET: "clients:read", POST: "clients:write", PUT: "clients:write" },
   { pattern: "/api/clients/*/wilsverklaringen", GET: "clients:read", POST: "clients:write", DELETE: "clients:write" },
   { pattern: "/api/clients/*/medicatie-overzicht", GET: "medicatie:read", POST: "medicatie:write", PUT: "medicatie:write", DELETE: "medicatie:write" },
   { pattern: "/api/clients/*/foto", POST: "clients:write", DELETE: "clients:write" },
@@ -174,6 +229,11 @@ export const ROUTE_PERMISSIONS: ReadonlyArray<{
   { pattern: "/api/admin/validation-rules", GET: "configuratie:read", POST: "configuratie:write", DELETE: "configuratie:write" },
   { pattern: "/api/admin/workflows", GET: "workflows:read", POST: "workflows:write" },
   { pattern: "/api/admin/rollen", GET: "rollen:read", POST: "rollen:write", PUT: "rollen:write" },
+  { pattern: "/api/admin/state-machines", GET: "state-machines:read", POST: "state-machines:write", PUT: "state-machines:write", DELETE: "state-machines:write" },
+  { pattern: "/api/admin/feature-flags", GET: "feature-flags:read", POST: "feature-flags:write", PUT: "feature-flags:write" },
+  { pattern: "/api/admin/api-keys", GET: "api-keys:read", POST: "api-keys:write", DELETE: "api-keys:write" },
+  { pattern: "/api/admin/ai-settings", GET: "ai-config:read", PUT: "ai-config:write", POST: "ai-config:write" },
+  { pattern: "/api/ai/chat", POST: "ai-chat:read" },
 ] as const;
 
 /**
@@ -203,4 +263,8 @@ export const NAV_PERMISSIONS = {
   "/admin/configuratie": "configuratie:read" as Permission,
   "/admin/workflows": "workflows:read" as Permission,
   "/admin/rollen": "rollen:read" as Permission,
+  "/admin/state-machines": "state-machines:read" as Permission,
+  "/admin/feature-flags": "feature-flags:read" as Permission,
+  "/admin/api-keys": "api-keys:read" as Permission,
+  "/admin/ai-instellingen": "ai-config:read" as Permission,
 } as const;

@@ -26,8 +26,14 @@ test.describe("Golden path: zorgmedewerker", () => {
     await clientLink.click();
     await expect(page).toHaveURL(/\/ecd\/[^/]+$/, { timeout: 15_000 });
 
-    // 3. Naar Rapportages-tab (custom button, niet role=tab)
-    await page.getByRole("button", { name: "Rapportages", exact: true }).click();
+    // 3. Naar Rapportages-tab (TabNav: role=tab links binnen role=tablist)
+    await page
+      .locator('[role="tablist"]')
+      .getByRole("tab", { name: "Rapportages", exact: true })
+      .click();
+    await expect(page).toHaveURL(/\/ecd\/[^/]+\/rapportages$/, {
+      timeout: 15_000,
+    });
     await expect(
       page.getByRole("heading", { name: /^Rapportages/ }),
     ).toBeVisible({ timeout: 10_000 });

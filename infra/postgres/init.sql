@@ -194,3 +194,167 @@ CREATE TABLE openzorg.productie_registratie (
 
 CREATE INDEX idx_productie_tenant_datum ON openzorg.productie_registratie (tenant_id, datum DESC);
 CREATE INDEX idx_productie_tenant_client ON openzorg.productie_registratie (tenant_id, client_id);
+
+-- ──────────────────────────────────────────────────────────────────────────
+-- Plan 2E: Dynamische rollen per tenant
+-- ──────────────────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS openzorg.roles (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID REFERENCES openzorg.tenants(id),
+  slug TEXT NOT NULL,
+  display_name TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  permissions TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+  is_system BOOLEAN NOT NULL DEFAULT false,
+  active BOOLEAN NOT NULL DEFAULT true,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (tenant_id, slug)
+);
+
+CREATE INDEX IF NOT EXISTS idx_roles_tenant ON openzorg.roles(tenant_id) WHERE active = true;
+
+-- Seed default rollen voor alle bestaande tenants (is_system = de 4 bestaande,
+-- niet-system = de 4 nieuwe die bewerkbaar blijven).
+-- NOTE: permissions-arrays blijven leeg — shared-domain blijft de canonical
+-- permission-per-role matrix voor de 4 kern-rollen.
+INSERT INTO openzorg.roles (tenant_id, slug, display_name, description, is_system)
+SELECT t.id, 'beheerder', 'Beheerder',
+       'Functioneel beheerder: beheert processen, formulieren, validatieregels en gebruikers',
+       true
+  FROM openzorg.tenants t
+ WHERE NOT EXISTS (SELECT 1 FROM openzorg.roles r WHERE r.tenant_id = t.id AND r.slug = 'beheerder');
+
+INSERT INTO openzorg.roles (tenant_id, slug, display_name, description, is_system)
+SELECT t.id, 'zorgmedewerker', 'Zorgmedewerker',
+       'Wijkverpleegkundige of verzorgende: raadpleegt dossiers, rapporteert, bekijkt planning',
+       true
+  FROM openzorg.tenants t
+ WHERE NOT EXISTS (SELECT 1 FROM openzorg.roles r WHERE r.tenant_id = t.id AND r.slug = 'zorgmedewerker');
+
+INSERT INTO openzorg.roles (tenant_id, slug, display_name, description, is_system)
+SELECT t.id, 'planner', 'Planner',
+       'Maakt roosters, beheert beschikbaarheid, plant afspraken',
+       true
+  FROM openzorg.tenants t
+ WHERE NOT EXISTS (SELECT 1 FROM openzorg.roles r WHERE r.tenant_id = t.id AND r.slug = 'planner');
+
+INSERT INTO openzorg.roles (tenant_id, slug, display_name, description, is_system)
+SELECT t.id, 'teamleider', 'Teamleider',
+       'Monitort caseload, bekijkt kwaliteitsindicatoren, handelt escalaties af',
+       true
+  FROM openzorg.tenants t
+ WHERE NOT EXISTS (SELECT 1 FROM openzorg.roles r WHERE r.tenant_id = t.id AND r.slug = 'teamleider');
+
+-- Extra rollen voor VVT-compleetheid (niet-system, kunnen worden gewijzigd)
+INSERT INTO openzorg.roles (tenant_id, slug, display_name, description, is_system)
+SELECT t.id, 'controller', 'Controller',
+       'Financiele controle, facturatie en declaratie-overzicht',
+       false
+  FROM openzorg.tenants t
+ WHERE NOT EXISTS (SELECT 1 FROM openzorg.roles r WHERE r.tenant_id = t.id AND r.slug = 'controller');
+
+INSERT INTO openzorg.roles (tenant_id, slug, display_name, description, is_system)
+SELECT t.id, 'kwaliteitsmedewerker', 'Kwaliteitsmedewerker',
+       'Bewaakt kwaliteit van zorg, HKZ-indicatoren, MIC-analyse',
+       false
+  FROM openzorg.tenants t
+ WHERE NOT EXISTS (SELECT 1 FROM openzorg.roles r WHERE r.tenant_id = t.id AND r.slug = 'kwaliteitsmedewerker');
+
+INSERT INTO openzorg.roles (tenant_id, slug, display_name, description, is_system)
+SELECT t.id, 'zorgadministratie', 'Zorgadministratie',
+       'Administratieve verwerking van indicaties, toewijzingen en declaraties',
+       false
+  FROM openzorg.tenants t
+ WHERE NOT EXISTS (SELECT 1 FROM openzorg.roles r WHERE r.tenant_id = t.id AND r.slug = 'zorgadministratie');
+
+INSERT INTO openzorg.roles (tenant_id, slug, display_name, description, is_system)
+SELECT t.id, 'mic-coordinator', 'MIC-coordinator',
+       'Coordineert MIC-meldingen en bewaakt de opvolging',
+       false
+  FROM openzorg.tenants t
+ WHERE NOT EXISTS (SELECT 1 FROM openzorg.roles r WHERE r.tenant_id = t.id AND r.slug = 'mic-coordinator');
+
+-- Default permissions voor niet-systeem rollen (alleen als nog leeg)
+UPDATE openzorg.roles
+   SET permissions = ARRAY['clients:read','facturatie:read','medewerkers:read','organisatie:read','configuratie:read']
+ WHERE slug = 'controller' AND permissions = '{}';
+UPDATE openzorg.roles
+   SET permissions = ARRAY['clients:read','rapportage:read','mic:read','mic:write','configuratie:read','workflows:read']
+ WHERE slug = 'kwaliteitsmedewerker' AND permissions = '{}';
+UPDATE openzorg.roles
+   SET permissions = ARRAY['clients:read','clients:write','medewerkers:read','organisatie:read','facturatie:read']
+ WHERE slug = 'zorgadministratie' AND permissions = '{}';
+UPDATE openzorg.roles
+   SET permissions = ARRAY['clients:read','mic:read','mic:write','rapportage:read','workflows:read']
+ WHERE slug = 'mic-coordinator' AND permissions = '{}';
+
+-- ──────────────────────────────────────────────────────────────────────────
+-- Plan 2C: Platform-level settings per tenant (feature flags, sessie, branding)
+-- ──────────────────────────────────────────────────────────────────────────
+-- platform_settings JSONB schema:
+-- {
+--   "featureFlags": {
+--     "<slug>": { "enabled": bool, "rolloutDate": "YYYY-MM-DD"?, "notes": string? }
+--   },
+--   "session": {
+--     "accessTokenLifetime": string (ISO duration),
+--     "refreshTokenLifetime": string,
+--     "idleTimeoutMinutes": number
+--   },
+--   "branding": {
+--     "logoUrl": string,
+--     "primaryColor": string (hex),
+--     "organizationNameOverride": string
+--   }
+-- }
+ALTER TABLE openzorg.tenants
+  ADD COLUMN IF NOT EXISTS platform_settings JSONB NOT NULL DEFAULT jsonb_build_object(
+    'featureFlags', jsonb_build_object(
+      'workflow-engine',    jsonb_build_object('enabled', true),
+      'bpmn-canvas',        jsonb_build_object('enabled', true),
+      'dmn-editor',         jsonb_build_object('enabled', false, 'notes', 'Nog niet geïmplementeerd'),
+      'facturatie-module',  jsonb_build_object('enabled', true),
+      'planning-module',    jsonb_build_object('enabled', true),
+      'mic-meldingen',      jsonb_build_object('enabled', true),
+      'rapportages-ai',     jsonb_build_object('enabled', false, 'notes', 'Experimenteel'),
+      'sales-canvas',       jsonb_build_object('enabled', false, 'notes', 'Alleen voor demo tenants')
+    ),
+    'session', jsonb_build_object(
+      'accessTokenLifetime', '1d',
+      'refreshTokenLifetime', '30d',
+      'idleTimeoutMinutes', 60
+    ),
+    'branding', jsonb_build_object(
+      'logoUrl', '',
+      'primaryColor', '',
+      'organizationNameOverride', ''
+    )
+  );
+
+-- Backfill voor bestaande rijen (IF NOT EXISTS boven voegt alleen de kolom toe,
+-- default geldt alleen voor nieuwe rijen; bestaande krijgen {})
+UPDATE openzorg.tenants
+   SET platform_settings = jsonb_build_object(
+     'featureFlags', jsonb_build_object(
+       'workflow-engine',    jsonb_build_object('enabled', true),
+       'bpmn-canvas',        jsonb_build_object('enabled', true),
+       'dmn-editor',         jsonb_build_object('enabled', false),
+       'facturatie-module',  jsonb_build_object('enabled', true),
+       'planning-module',    jsonb_build_object('enabled', true),
+       'mic-meldingen',      jsonb_build_object('enabled', true),
+       'rapportages-ai',     jsonb_build_object('enabled', false),
+       'sales-canvas',       jsonb_build_object('enabled', false)
+     ),
+     'session', jsonb_build_object(
+       'accessTokenLifetime', '1d',
+       'refreshTokenLifetime', '30d',
+       'idleTimeoutMinutes', 60
+     ),
+     'branding', jsonb_build_object(
+       'logoUrl', '',
+       'primaryColor', '',
+       'organizationNameOverride', ''
+     )
+   )
+ WHERE platform_settings = '{}'::jsonb OR platform_settings IS NULL;

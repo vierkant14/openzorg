@@ -92,6 +92,20 @@ signaleringRoutes.post("/:clientId/signaleringen", async (c) => {
 });
 
 /**
+ * GET /api/signaleringen/overzicht — List all active flags across all clients
+ * in the current tenant. Optioneel gefilterd op ernst (hoog/midden/laag).
+ * Wordt gebruikt door het dashboard voor de signaleringen-card.
+ */
+signaleringRoutes.get("/overzicht", async (c) => {
+  const ernst = c.req.query("ernst"); // optioneel filter
+  const limit = c.req.query("limit") ?? "20";
+  return medplumProxy(
+    c,
+    `/fhir/R4/Flag?status=active&_sort=-date&_count=${encodeURIComponent(limit)}${ernst ? `&_tag=ernst-${ernst}` : ""}`,
+  );
+});
+
+/**
  * DELETE /api/signaleringen/:id — Deactivate a flag.
  */
 signaleringRoutes.delete("/:id", async (c) => {

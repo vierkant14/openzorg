@@ -11,6 +11,22 @@ import {
 export const medicatieRoutes = new Hono<AppEnv>();
 
 /**
+ * GET /api/medicatie-voorschriften — Cross-client overview of all MedicationRequest resources.
+ * Supports optional query params: status (active/stopped), _count.
+ */
+medicatieRoutes.get("/medicatie-voorschriften", async (c) => {
+  const status = c.req.query("status");
+  const count = c.req.query("_count") ?? "200";
+
+  let url = `/fhir/R4/MedicationRequest?_count=${count}&_sort=-_lastUpdated&_include=MedicationRequest:subject`;
+  if (status) {
+    url += `&status=${status}`;
+  }
+
+  return medplumProxy(c, url);
+});
+
+/**
  * GET /api/clients/:clientId/medicatie — List MedicationRequest resources for a patient.
  */
 medicatieRoutes.get("/clients/:clientId/medicatie", async (c) => {

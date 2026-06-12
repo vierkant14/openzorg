@@ -157,6 +157,11 @@ services:
       WORKFLOW_PORT: 4003
       MEDPLUM_BASE_URL: http://medplum:8103
       FLOWABLE_BASE_URL: http://flowable:8080/flowable-rest
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: openzorg
+      POSTGRES_USER: openzorg
+      POSTGRES_PASSWORD: openzorg_dev_password
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:4003/health || exit 1"]
       interval: 10s
@@ -194,6 +199,8 @@ services:
     build:
       context: ../..
       dockerfile: infra/docker/Dockerfile.web
+      args:
+        CACHEBUST: ${CACHEBUST:-1}
     restart: unless-stopped
     depends_on:
       medplum:
@@ -238,6 +245,19 @@ services:
     volumes:
       - ../scripts/seed.sh:/seed.sh
     command: sh /seed.sh
+    restart: "no"
+
+  # ── Seed Codelijsten (runs after seed, adds rich test data) ──
+  seed-codelijsten:
+    image: node:20-alpine
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+    environment:
+      MEDPLUM_BASE_URL: http://medplum:8103
+    volumes:
+      - ../scripts/seed-codelijsten.sh:/seed-codelijsten.sh
+    command: sh /seed-codelijsten.sh
     restart: "no"
 
 volumes:

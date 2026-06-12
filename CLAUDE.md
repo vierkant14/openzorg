@@ -88,7 +88,13 @@ In `services/ecd/src/app.ts`, `micMeldingRoutes` must be mounted BEFORE `vragenl
 
 ### RBAC System (packages/shared-domain/src/roles.ts)
 
-Four roles: `beheerder`, `zorgmedewerker`, `planner`, `teamleider`. Each mapped to permissions (e.g. `clients:read`, `zorgplan:write`). `ROUTE_PERMISSIONS` maps API route patterns + HTTP methods to required permissions. `NAV_PERMISSIONS` controls frontend sidebar visibility.
+Five roles: `tenant-admin`, `beheerder`, `zorgmedewerker`, `planner`, `teamleider`. Each mapped to permissions (e.g. `clients:read`, `zorgplan:write`). `ROUTE_PERMISSIONS` maps API route patterns + HTTP methods to required permissions. `NAV_PERMISSIONS` controls frontend sidebar visibility.
+
+- **Tenant admin**: Full access including technical settings (state-machines, feature flags, rollen, API keys, AI config)
+- **Beheerder (Functioneel beheerder)**: Care-content management (medewerkers, organisatie, validatieregels, workflows, codelijsten, competenties, bezetting, dienst-config)
+- **Teamleider**: Monitoring, escalations, MIC
+- **Zorgmedewerker**: Client care (dossiers, rapportages, zorgplan)
+- **Planner**: Scheduling (planning, rooster, beschikbaarheid)
 
 Frontend: `AppShell.tsx` filters sidebar items based on `getUserRole()`. The `ecdFetch()` client auto-redirects to `/geen-toegang` on 403.
 
@@ -137,10 +143,13 @@ Custom FHIR extensions: `https://openzorg.nl/extensions/`. Client identifiers: `
 ### Frontend Navigation Structure
 
 Defined in `apps/web/src/components/AppShell.tsx`:
-- **Overzicht** (Dashboard, Berichten) — everyone
-- **Zorg** (Clienten) — zorgmedewerker/beheerder/teamleider
-- **Planning** (Overzicht, Dagplanning, Rooster, Herhalingen, Wachtlijst) — planner/beheerder/teamleider
-- **Beheer** (Medewerkers, Organisatie, Facturatie, etc.) — beheerder only
+- **Overzicht** (Dashboard, Berichten, Werkbak, Wiki) — everyone
+- **Zorg** (Clienten, Zorgplannen, Overdracht) — zorgmedewerker/beheerder/teamleider
+- **Planning** (Bezettingsrooster, Dagplanning, Rooster, Herhalingen, Beschikbaarheid, Wachtlijst) — planner/beheerder/teamleider
+- **HR** (Medewerkers, Contracten, Organisatie) — medewerkers:read
+- **Financieel** (Facturatie) — configuratie:read, feature-flagged
+- **Configuratie** (Overzicht, Workflows, Vragenlijsten, Codelijsten, Validatieregels, Diensten, Bezetting, Competenties, Taak-formulieren, Client dashboard, DMN) — configuratie:read
+- **Systeem** (State-machines, Rollen, AI Instellingen) — tenant-admin only
 - **Platform** (Tenants, Onboarding, Wiki) — master admin only (`masterOnly: true`)
 
 ### Design System
@@ -162,6 +171,29 @@ Via `packages/shared-config/src/validation-engine.ts`:
 2. **Uitbreiding** — Tenant-configurable rules via `/api/admin/validation-rules`.
 3. **Plugin** — Reserved for future custom validation plugins.
 
+### AI System
+
+- **Ollama-backed** — local LLM, data never leaves the network. Per-tenant configurable (URL, model, on/off).
+- **Chat assistant** — contextual side panel (`ChatPanel.tsx`) with 3-layer system prompt: static OpenZorg knowledge + wiki keyword match + FHIR client data.
+- **Streaming** — SSE via `POST /api/ai/chat`. Proxy route streams responses without buffering.
+- **System prompt** — `services/ecd/src/lib/ai-system-prompt.ts` contains static knowledge + `matchWikiSection()` + `buildClientContext()`.
+- **Audit** — every AI interaction logged to `openzorg.audit_log`.
+
+### Competency System (packages/shared-domain/src/competenties.ts)
+
+Three-layer model (same pattern as validation):
+1. **Kern** — Voorbehouden handelingen (Wet BIG), not removable. 10 items.
+2. **Uitbreiding** — Standard VVT competencies (dementie, palliatief, wond, etc.), toggleable. 10 items. Sector-tagged.
+3. **Organisatie-specifiek** — Tenant creates custom competencies.
+
+### Intramural Planning System
+
+- **Dienst-configuratie** — shift types per org level with inheritance (tenant → locatie → afdeling). Stored as FHIR Basic resources.
+- **Bezettingsprofiel** — minimum staffing per shift per competency. Stored as FHIR Basic resources.
+- **Planning engine** (`services/planning/src/lib/planning-engine.ts`) — constraint solver with 3 modes: validate (find gaps), optimaliseer (suggest fills), genereer (full roster).
+- **Zorgzwaarte** (`services/planning/src/lib/zorgzwaarte.ts`) — ZZP class → FTE calculator with sector-neutral interface.
+- **Sector-extensible** — all concepts (zorgzwaarte, competenties, diensten, bezetting) designed with interfaces that other sectors (GGZ, GHZ, ziekenhuis) implement later.
+
 ## Hard Rules
 
 - **All Dutch UI labels** — The frontend is entirely in Dutch
@@ -172,6 +204,9 @@ Via `packages/shared-config/src/validation-engine.ts`:
 - **Docker symlink workaround** — With `node-linker=hoisted`, pnpm does NOT create workspace symlinks. Dockerfiles must manually `ln -s` workspace packages after `pnpm install` (see `infra/docker/Dockerfile.service`)
 - **Design system tokens** — Use `bg-page`/`bg-raised`/`text-fg` etc., never raw `bg-gray-*`/`text-gray-*`. All pages wrapped in `AppShell`.
 - **Route mount order matters** — Routes with `/:id` catch-alls must be mounted AFTER more specific routes in app.ts.
+- **Never use `docker compose build --no-cache`** on Unraid — crashes Docker daemon due to BuildKit provenance bug. Use `--force-recreate` or touch a file to invalidate cache.
+- **Sector-neutral design** — New features must use configurable interfaces, not hardcoded VVT terms. Every concept (zorgzwaarte, competenties, diensten) should work for GGZ/GHZ/ziekenhuis via configuration.
+- **Database: `openzorg` not `medplum`** — Services connect to database `openzorg` (POSTGRES_DB=openzorg). The `openzorg` schema lives there. Database `medplum` is for Medplum's own tables only.
 
 ## Deployment
 
@@ -214,6 +249,12 @@ All ports shifted to 1xxxx range to avoid conflicts with existing Unraid service
 ### Test Data (seeded per tenant)
 
 6 medewerkers, 8 clienten (BSN, adres, indicatie), 4 zorgplannen met doelen, 10 rapportages (SOEP + vrij), 7 medicatievoorschriften, 4 allergieen, 6 vaccinaties, 5 contactpersonen, 6 afspraken.
+
+Additional seed scripts (run manually after first setup):
+- `infra/scripts/seed-codelijsten.sh` — 3 codelijsten (medicatie 22, diagnoses 22, allergieen 17) + 4 zorgplannen with SMART goals
+- `infra/scripts/seed-planning.sh` — Afspraken + PractitionerRole contracts
+- `infra/scripts/seed-planning-config.sh` — Organization hierarchy + dienst-config + bezettingsprofielen + competenties + client-locatie
+- `infra/scripts/seed-facturatie.sh` — Coverage + prestaties
 
 ### Medplum User Registration
 

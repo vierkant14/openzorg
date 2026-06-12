@@ -129,6 +129,181 @@ declaratieRoutes.post("/", async (c) => {
   return c.json({ declaratie: mapDeclaratie(decRes.rows[0]) }, 201);
 });
 
+// GET /:id/export/csv — CSV export for Excel
+declaratieRoutes.get("/:id/export/csv", async (c) => {
+  const tenantId = c.get("tenantId");
+  const tenantUuid = await getTenantUuid(tenantId);
+  if (!tenantUuid) return c.json({ error: "Tenant niet gevonden" }, 404);
+
+  const id = c.req.param("id");
+  const decRes = await pool.query(
+    "SELECT * FROM openzorg.declaraties WHERE id = $1 AND tenant_id = $2",
+    [id, tenantUuid],
+  );
+  if (decRes.rows.length === 0) return c.json({ error: "Declaratie niet gevonden" }, 404);
+
+  const declaratie = decRes.rows[0] as Record<string, unknown>;
+  const nummer = declaratie.nummer as string;
+
+  const prestaties = await pool.query(
+    "SELECT * FROM openzorg.prestaties WHERE declaratie_id = $1 AND tenant_id = $2 ORDER BY datum",
+    [id, tenantUuid],
+  );
+
+  const formatBedrag = (cents: number) =>
+    (cents / 100).toFixed(2).replace(".", ",");
+
+  const header = "Declaratienummer;BSN;Clientnaam;Productcode;Productnaam;Datum;Aantal;Eenheid;Tarief;Bedrag";
+  const rows = prestaties.rows.map((r: Record<string, unknown>) => {
+    const cols = [
+      nummer,
+      r.client_id as string,
+      "—",
+      r.product_code as string,
+      r.product_naam as string,
+      r.datum as string,
+      String(r.aantal),
+      r.eenheid as string,
+      formatBedrag(Number(r.tarief)),
+      formatBedrag(Number(r.totaal)),
+    ];
+    return cols.join(";");
+  });
+
+  const csv = "\uFEFF" + [header, ...rows].join("\r\n");
+
+  return new Response(csv, {
+    headers: {
+      "Content-Type": "text/csv; charset=utf-8",
+      "Content-Disposition": `attachment; filename="declaratie-${nummer}.csv"`,
+    },
+  });
+});
+
+// GET /:id/export/pdf — Print-friendly HTML for browser PDF export
+declaratieRoutes.get("/:id/export/pdf", async (c) => {
+  const tenantId = c.get("tenantId");
+  const tenantUuid = await getTenantUuid(tenantId);
+  if (!tenantUuid) return c.json({ error: "Tenant niet gevonden" }, 404);
+
+  const id = c.req.param("id");
+  const decRes = await pool.query(
+    "SELECT * FROM openzorg.declaraties WHERE id = $1 AND tenant_id = $2",
+    [id, tenantUuid],
+  );
+  if (decRes.rows.length === 0) return c.json({ error: "Declaratie niet gevonden" }, 404);
+
+  const declaratie = decRes.rows[0] as Record<string, unknown>;
+
+  const tenantRes = await pool.query<{ naam: string }>(
+    "SELECT naam FROM openzorg.tenants WHERE id = $1",
+    [tenantUuid],
+  );
+  const tenantNaam = tenantRes.rows[0]?.naam ?? tenantId;
+
+  const prestaties = await pool.query(
+    "SELECT * FROM openzorg.prestaties WHERE declaratie_id = $1 AND tenant_id = $2 ORDER BY datum",
+    [id, tenantUuid],
+  );
+
+  const formatBedrag = (cents: number) =>
+    (cents / 100).toFixed(2).replace(".", ",");
+
+  const nummer = declaratie.nummer as string;
+  const periodeVan = declaratie.periode_van as string;
+  const periodeTot = declaratie.periode_tot as string;
+  const financieringstype = declaratie.financieringstype as string;
+  const status = declaratie.status as string;
+  const vandaag = new Date().toLocaleDateString("nl-NL");
+
+  const tableRows = prestaties.rows
+    .map((r: Record<string, unknown>) => `
+      <tr>
+        <td>${nummer}</td>
+        <td>${r.client_id as string}</td>
+        <td>—</td>
+        <td>${r.product_code as string}</td>
+        <td>${r.product_naam as string}</td>
+        <td>${r.datum as string}</td>
+        <td>${String(r.aantal)}</td>
+        <td>${r.eenheid as string}</td>
+        <td style="text-align:right">&euro; ${formatBedrag(Number(r.tarief))}</td>
+        <td style="text-align:right">&euro; ${formatBedrag(Number(r.totaal))}</td>
+      </tr>`)
+    .join("");
+
+  const totaalBedrag = Number(declaratie.totaal_bedrag);
+
+  const html = `<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8" />
+  <title>Declaratie ${nummer}</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Arial, sans-serif; font-size: 12pt; color: #111; padding: 2cm; }
+    h1 { font-size: 18pt; margin-bottom: 0.5em; }
+    .meta { margin-bottom: 1.5em; }
+    .meta table { border-collapse: collapse; }
+    .meta td { padding: 2px 12px 2px 0; }
+    .meta td:first-child { font-weight: bold; }
+    table.prestaties { width: 100%; border-collapse: collapse; margin-bottom: 1.5em; }
+    table.prestaties th { background: #f0f0f0; text-align: left; padding: 5px 6px; border: 1px solid #ccc; font-size: 10pt; }
+    table.prestaties td { padding: 4px 6px; border: 1px solid #ddd; font-size: 10pt; vertical-align: top; }
+    table.prestaties tr:nth-child(even) td { background: #fafafa; }
+    .totaal td { font-weight: bold; border-top: 2px solid #888; }
+    .footer { margin-top: 2em; font-size: 9pt; color: #666; }
+    @media print {
+      body { font-size: 10pt; padding: 1cm; }
+      table.prestaties th { background: #e8e8e8 !important; -webkit-print-color-adjust: exact; }
+      .footer { position: fixed; bottom: 1cm; width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <h1>Declaratie ${nummer}</h1>
+  <div class="meta">
+    <table>
+      <tr><td>Organisatie</td><td>${tenantNaam}</td></tr>
+      <tr><td>Periode</td><td>${periodeVan} &ndash; ${periodeTot}</td></tr>
+      <tr><td>Financieringstype</td><td>${financieringstype.toUpperCase()}</td></tr>
+      <tr><td>Status</td><td>${status.charAt(0).toUpperCase() + status.slice(1)}</td></tr>
+    </table>
+  </div>
+  <table class="prestaties">
+    <thead>
+      <tr>
+        <th>Declaratienummer</th>
+        <th>BSN</th>
+        <th>Clientnaam</th>
+        <th>Productcode</th>
+        <th>Productnaam</th>
+        <th>Datum</th>
+        <th>Aantal</th>
+        <th>Eenheid</th>
+        <th>Tarief</th>
+        <th>Bedrag</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${tableRows}
+    </tbody>
+    <tfoot>
+      <tr class="totaal">
+        <td colspan="9">Totaal</td>
+        <td style="text-align:right">&euro; ${formatBedrag(totaalBedrag)}</td>
+      </tr>
+    </tfoot>
+  </table>
+  <div class="footer">Gegenereerd door OpenZorg op ${vandaag}</div>
+</body>
+</html>`;
+
+  return new Response(html, {
+    headers: { "Content-Type": "text/html; charset=utf-8" },
+  });
+});
+
 // PUT /:id/indienen — Submit to payer
 declaratieRoutes.put("/:id/indienen", async (c) => {
   const tenantId = c.get("tenantId");

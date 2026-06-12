@@ -100,6 +100,19 @@ function getIndicatie(patient: FhirPatient): string {
   return [type.toUpperCase(), profiel].filter(Boolean).join(" - ");
 }
 
+function getTrajectStatus(patient: FhirPatient): string {
+  return patient.extension?.find((e) => e.url === "https://openzorg.nl/extensions/trajectStatus")?.valueString ?? "";
+}
+
+const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
+  aangemeld: { label: "Aangemeld", color: "bg-blue-100 text-blue-800 dark:bg-blue-950/30 dark:text-blue-300" },
+  "in-intake": { label: "In intake", color: "bg-amber-100 text-amber-800 dark:bg-amber-950/30 dark:text-amber-300" },
+  "in-zorg": { label: "In zorg", color: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300" },
+  overdracht: { label: "Overdracht", color: "bg-navy-100 text-navy-800 dark:bg-navy-950/30 dark:text-navy-300" },
+  uitgeschreven: { label: "Uitgeschreven", color: "bg-surface-200 text-fg-muted dark:bg-surface-800" },
+  overleden: { label: "Overleden", color: "bg-coral-100 text-coral-800 dark:bg-coral-950/30 dark:text-coral-300" },
+};
+
 /* ── Avatar color rotation based on name hash ── */
 const AVATAR_COLORS = [
   ["bg-brand-100 dark:bg-brand-900/40", "text-brand-700 dark:text-brand-300"],
@@ -124,6 +137,8 @@ export default function EcdPage() {
   const [error, setError] = useState<string | null>(null);
   const [zoekterm, setZoekterm] = useState("");
   const [filterLocatie, setFilterLocatie] = useState("");
+  const [filterStatus, setFilterStatus] = useState("");
+  const [showInactief, setShowInactief] = useState(false);
   const [sortKey, setSortKey] = useState<"naam" | "bsn" | "geboortedatum" | "locatie">("naam");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
@@ -131,7 +146,10 @@ export default function EcdPage() {
     async function fetchClients() {
       setLoading(true);
       setError(null);
-      const { data, error: fetchError } = await ecdFetch<FhirBundle>("/api/clients");
+      // Medplum accepteert geen comma-separated booleans; laat active-param
+      // weg zodat zowel actieve als inactieve cliënten terugkomen. De
+      // 'Toon inactief'-toggle filtert client-side.
+      const { data, error: fetchError } = await ecdFetch<FhirBundle>("/api/clients?_count=200");
       if (fetchError) {
         setError(fetchError);
         setPatients([]);
@@ -155,9 +173,19 @@ export default function EcdPage() {
   const gefilterdeClienten = useMemo(() => {
     let result = patients;
 
+    // Active-filter: standaard alleen actieve cliënten, toggle voor inactief
+    if (!showInactief) {
+      result = result.filter((p) => p.active !== false);
+    }
+
     // Locatie filter
     if (filterLocatie) {
       result = result.filter((p) => getLocatie(p) === filterLocatie);
+    }
+
+    // Status filter
+    if (filterStatus) {
+      result = result.filter((p) => getTrajectStatus(p) === filterStatus);
     }
 
     // Text search
@@ -188,7 +216,7 @@ export default function EcdPage() {
     });
 
     return result;
-  }, [patients, zoekterm, filterLocatie, sortKey, sortDir]);
+  }, [patients, zoekterm, filterLocatie, filterStatus, showInactief, sortKey, sortDir]);
 
   return (
     <AppShell>
@@ -241,6 +269,25 @@ export default function EcdPage() {
               ))}
             </select>
           )}
+          <select
+            value={filterStatus}
+            onChange={(e) => setFilterStatus(e.target.value)}
+            className="rounded-xl border border-default bg-raised px-4 py-3 text-body-sm text-fg focus:border-brand-400 focus:ring-2 focus:ring-brand-500/20 transition-[border-color,box-shadow] duration-200 ease-out outline-none"
+          >
+            <option value="">Alle statussen</option>
+            {Object.entries(STATUS_CONFIG).map(([key, { label }]) => (
+              <option key={key} value={key}>{label}</option>
+            ))}
+          </select>
+          <label className="flex items-center gap-2 rounded-xl border border-default bg-raised px-4 py-3 text-body-sm text-fg cursor-pointer hover:bg-sunken transition-colors">
+            <input
+              type="checkbox"
+              checked={showInactief}
+              onChange={(e) => setShowInactief(e.target.checked)}
+              className="rounded"
+            />
+            <span>Toon inactief</span>
+          </label>
         </div>
 
         {/* ── Content ── */}
@@ -350,17 +397,28 @@ export default function EcdPage() {
                           ) : "—"}
                         </td>
                         <td className="px-6 py-4">
-                          {patient.active !== false ? (
-                            <span className="inline-flex items-center gap-1.5 text-caption font-medium text-brand-600 dark:text-brand-400">
-                              <span className="w-1.5 h-1.5 rounded-full bg-brand-500" />
-                              Actief
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1.5 text-caption font-medium text-fg-subtle">
-                              <span className="w-1.5 h-1.5 rounded-full bg-surface-400" />
-                              Inactief
-                            </span>
-                          )}
+                          {(() => {
+                            const status = getTrajectStatus(patient);
+                            const cfg = STATUS_CONFIG[status];
+                            if (cfg) {
+                              return (
+                                <span className={`inline-flex items-center rounded-lg px-2.5 py-0.5 text-caption font-semibold ${cfg.color}`}>
+                                  {cfg.label}
+                                </span>
+                              );
+                            }
+                            return patient.active !== false ? (
+                              <span className="inline-flex items-center gap-1.5 text-caption font-medium text-brand-600 dark:text-brand-400">
+                                <span className="w-1.5 h-1.5 rounded-full bg-brand-500" />
+                                Actief
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1.5 text-caption font-medium text-fg-subtle">
+                                <span className="w-1.5 h-1.5 rounded-full bg-surface-400" />
+                                Inactief
+                              </span>
+                            );
+                          })()}
                         </td>
                       </tr>
                     );

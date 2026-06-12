@@ -28,6 +28,9 @@ COPY tsconfig.base.json ./
 COPY packages/shared-domain/ ./packages/shared-domain/
 COPY packages/shared-config/ ./packages/shared-config/
 COPY packages/shared-ui/ ./packages/shared-ui/
+
+# Cache-bust: change this arg to force rebuild of web app
+ARG CACHEBUST=1
 COPY apps/web/ ./apps/web/
 
 ENV STANDALONE=true

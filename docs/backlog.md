@@ -57,6 +57,24 @@
 |------|--------|--------|
 | Frontend tests: E2E voor kernmodules | Platform | Pilot Voorbereiding |
 | Revalidatie: GRZ behandelplan (apart van zorgplan) | Zorgplan | Later |
+| Workflow: NEN 7513 audit-log voor taak-transities (start, claim, complete) | Compliance | Workflow Engine |
+| Workflow: `zorgplan-evaluatie` BPMN-template deployen naar Flowable | Workflow | Workflow Engine |
+| Workflow: Flowable-auth uit env ipv hardcoded `admin:admin` | Compliance | Pilot Voorbereiding |
+| Werkbak: echte user-IDs ipv rol-als-candidateGroup (tenant-specifieke lookup) | Workflow | Later |
+| Werkbak: opruimen legacy-fallback in `getTasksForUser` (taken zonder tenantId-variable) | Workflow | Later |
+| BPMN-templates: volledige BPMN-DI toevoegen aan alle handgeschreven templates zodat bpmn-js ze netjes rendert (nu alleen `start` heeft bounds, bpmn-js auto-layout doet rest maar ziet er rommelig uit) | Workflow | Workflow Engine |
+| Canvas: properties-panel voor ALLE BPMN element types (niet alleen UserTask). Gateway-condities per uitgaande pijl (bv. `${goedgekeurd == true}`), StartEvent type, EndEvent type, SequenceFlow label/conditie | Workflow | Workflow Engine |
+| Canvas: dynamische assignee via expressies — routeer taak naar "manager van de locatie van deze client". Vereist Location-koppeling in datamodel + service task die FHIR query uitvoert + `flowable:assignee` als expressie | Workflow | Later |
+| Canvas: StartEvent trigger-type UI. Laat een FB kiezen tussen API-call / Formulier / Timer (cron) / Event. Elk vertaalt naar een specifiek BPMN start-event type (Message / None / Timer / Conditional). Toon de concrete trigger (bv. cURL) in het properties-panel | Workflow | Workflow Engine |
+| Form-opties configuratie per userTask als Laag 2 (H7.2): mogelijkheid om enum-waarden (ernstNiveau: laag/middel/hoog, relatie-types, etc.) via UI te configureren zonder code. Oplossing via DMN decision table of JSON-backed config in `flowable:formProperties`. Voorbeeld: MIC-melding ernstniveau. Hardcode nu in werkbak-page. | Configuratie | Workflow Engine |
+| Client ↔ Location koppeling in datamodel: FHIR Patient.managingOrganization → Location. UI om clienten aan een locatie te koppelen. Fundament voor location-gebaseerde workflow-routing | Platform | Module Diepte |
+| Home-pagina / landing-scherm voor ingelogde gebruikers: vandaag toont /dashboard een technische fallback. Moet een welkomstscherm worden met taken-teller, snelle acties, signaleringen, activiteiten-feed — de visuele pit die een nieuwe gebruiker met "wow" onthaalt | Design/UX | Pilot Voorbereiding |
+| Signaleringen-card op dashboard: toon openstaande high-risk signaleringen voor cliënten waar ingelogde gebruiker betrokken bij is (valrisico, MRSA, allergie). Koppeling naar reeds bestaande signaleringen-table | Design/UX | Pilot Voorbereiding |
+| Activiteiten-feed op dashboard: laatste 10 audit-events waar ingelogde gebruiker bij betrokken is ('Jij hebt taak X afgerond', 'Nieuwe rapportage bij cliënt Y') | Design/UX | Later |
+| Dynamische Medplum token-lifetime per tenant: Plan 2C fase 5. Login-flow leest platform_settings.session.accessTokenLifetime bij eerste request en patched tijdelijk de default Client App. Alternatief: langere default + refresh-token support | Platform | Workflow Engine |
+| Flowable ClientApplications opschonen per tenant: nu heeft elke tenant default accessTokenLifetime=1d (handmatig SQL). Formeel maken via tenants-provisioning-script | Platform | Later |
+| Dashboard cliënt-widget: "Cliënten waar ik verantwoordelijke voor ben" — koppeling tussen user-id en Patient.generalPractitioner ofzo | Design/UX | Later |
+| Zorgplan-evaluatie BPMN template: volledige DI toevoegen (nu alleen start heeft bounds). Ook: herindicatie-proces + mic-afhandeling-template met correct uitgewerkte DI | Workflow | Workflow Engine |
 
 ### P3 - Laag
 

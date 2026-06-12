@@ -6,7 +6,14 @@ import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 import { clearSession, getUserRole, isMasterAdmin, isLoggedIn } from "../lib/api";
+import { isFeatureEnabled, type FeatureFlagSlug } from "../lib/features";
 
+import { ChatPanel, useAiChatAvailable } from "./ChatPanel";
+import {
+  KeyboardShortcutsButton,
+  KeyboardShortcutsModal,
+  useKeyboardShortcuts,
+} from "./KeyboardShortcuts";
 import TenantSwitcher from "./TenantSwitcher";
 
 /* ── Navigation items ── */
@@ -15,6 +22,8 @@ interface NavItem {
   label: string;
   icon: (props: { className?: string }) => React.JSX.Element;
   permission: Permission | null;
+  /** Feature-flag vereist — als de flag uit staat verdwijnt dit item */
+  featureFlag?: FeatureFlagSlug;
 }
 
 interface NavSection {
@@ -38,7 +47,7 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { href: "/dashboard", label: "Dashboard", icon: IconGrid, permission: null },
       { href: "/berichten", label: "Berichten", icon: IconInbox, permission: "berichten:read" },
-      { href: "/werkbak", label: "Werkbak", icon: IconClipboard, permission: null },
+      { href: "/werkbak", label: "Werkbak", icon: IconClipboard, permission: null, featureFlag: "workflow-engine" },
       { href: "/wiki", label: "Wiki", icon: IconBook, permission: null },
     ],
   },
@@ -46,13 +55,26 @@ const NAV_SECTIONS: NavSection[] = [
     label: "Zorg",
     items: [
       { href: "/ecd", label: "Clienten", icon: IconUsers, permission: "clients:read" },
+      { href: "/zorgplannen", label: "Zorgplannen", icon: IconClipboard, permission: "clients:read" },
       { href: "/overdracht", label: "Overdracht", icon: IconExchange, permission: "clients:read" },
+    ],
+  },
+  {
+    label: "Overzichten",
+    items: [
+      { href: "/mic-meldingen", label: "MIC-meldingen", icon: IconShield, permission: "mic:read" as Permission },
+      { href: "/medicatie-overzicht", label: "Medicatie", icon: IconList, permission: "medicatie:read" as Permission },
+      { href: "/wilsverklaringen", label: "Wilsverklaringen", icon: IconShield, permission: "clients:read" },
+      { href: "/vaccinaties", label: "Vaccinaties", icon: IconShield, permission: "clients:read" },
+      { href: "/rapportages", label: "Rapportages", icon: IconClipboard, permission: "rapportage:read" },
+      { href: "/signaleringen", label: "Signaleringen", icon: IconList, permission: "clients:read" },
     ],
   },
   {
     label: "Planning",
     items: [
       { href: "/planning", label: "Overzicht", icon: IconCalendar, permission: "planning:read" },
+      { href: "/planning/bezetting", label: "Bezettingsrooster", icon: IconGrid, permission: "bezetting:read" },
       { href: "/planning/dagplanning", label: "Dagplanning", icon: IconCalendarDay, permission: "planning:read" },
       { href: "/planning/rooster", label: "Rooster", icon: IconClock, permission: "planning:read" },
       { href: "/planning/herhalingen", label: "Herhalingen", icon: IconRepeat, permission: "planning:write" },
@@ -68,15 +90,37 @@ const NAV_SECTIONS: NavSection[] = [
     ],
   },
   {
-    label: "Beheer",
+    label: "Financieel",
     items: [
-      { href: "/admin/facturatie", label: "Facturatie", icon: IconReceipt, permission: "configuratie:read" },
+      { href: "/admin/facturatie", label: "Facturatie", icon: IconReceipt, permission: "configuratie:read", featureFlag: "facturatie-module" },
+    ],
+  },
+  {
+    label: "Configuratie",
+    items: [
+      { href: "/admin/configuratie", label: "Overzicht", icon: IconSettings, permission: "configuratie:read" },
+      { href: "/admin/dienst-config", label: "Diensten", icon: IconClock, permission: "dienst-config:read" },
+      { href: "/admin/bezetting", label: "Bezetting & normen", icon: IconUsers, permission: "bezetting:read" },
+      { href: "/admin/competenties", label: "Competenties", icon: IconShield, permission: "competenties:read" },
+      { href: "/admin/mic-trends", label: "MIC Trends", icon: IconList, permission: "mic:read" },
+      { href: "/admin/workflows", label: "Workflows", icon: IconFlow, permission: "workflows:read", featureFlag: "workflow-engine" },
+      { href: "/admin/workflows/voorbeelden", label: "Workflow Voorbeelden", icon: IconBook, permission: "workflows:read", featureFlag: "workflow-engine" },
+      { href: "/admin/vragenlijsten", label: "Vragenlijsten", icon: IconClipboard, permission: "configuratie:read" },
       { href: "/admin/codelijsten", label: "Codelijsten", icon: IconList, permission: "configuratie:read" },
-      { href: "/admin/workflows", label: "Workflows", icon: IconFlow, permission: "workflows:read" },
-      { href: "/admin/configuratie", label: "Configuratie", icon: IconSettings, permission: "configuratie:read" },
       { href: "/admin/validatie", label: "Validatieregels", icon: IconShield, permission: "configuratie:read" },
-      { href: "/admin/rollen", label: "Rollen", icon: IconShield, permission: "rollen:read" },
+      { href: "/admin/task-form-options", label: "Taak-formulieren", icon: IconList, permission: "configuratie:read" },
       { href: "/admin/client-dashboard-config", label: "Client dashboard", icon: IconGrid, permission: "configuratie:read" },
+      { href: "/admin/audit", label: "Audit log", icon: IconList, permission: "configuratie:read" },
+      { href: "/admin/workflows/dmn", label: "DMN tabellen (bèta)", icon: IconList, permission: "workflows:read", featureFlag: "dmn-editor" },
+    ],
+  },
+  {
+    label: "Systeem",
+    items: [
+      { href: "/admin/modules", label: "Modules", icon: IconGrid, permission: "feature-flags:read" },
+      { href: "/admin/state-machines", label: "State-machines", icon: IconFlow, permission: "state-machines:read" },
+      { href: "/admin/rollen", label: "Rollen & rechten", icon: IconShield, permission: "rollen:read" },
+      { href: "/admin/ai-instellingen", label: "AI Instellingen", icon: IconSettings, permission: "ai-config:read" },
     ],
   },
   {
@@ -96,7 +140,37 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [authChecked, setAuthChecked] = useState(false);
 
+  const [chatOpen, setChatOpen] = useState(false);
+  const aiAvailable = useAiChatAvailable();
+  const { open: shortcutsOpen, setOpen: setShortcutsOpen } = useKeyboardShortcuts();
   const [sessionWarning, setSessionWarning] = useState(false);
+  // Counter die wordt verhoogd wanneer feature-flags vernieuwd worden;
+  // triggert re-render van filteredSections zodat UI live reageert.
+  const [featureFlagsVersion, setFeatureFlagsVersion] = useState(0);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const bump = () => setFeatureFlagsVersion((v) => v + 1);
+    window.addEventListener("openzorg-features-updated", bump);
+    window.addEventListener("storage", bump);
+    return () => {
+      window.removeEventListener("openzorg-features-updated", bump);
+      window.removeEventListener("storage", bump);
+    };
+  }, []);
+
+  /* Keyboard shortcut: Ctrl+. toggles AI chat panel */
+  useEffect(() => {
+    if (!aiAvailable) return;
+    function handleKey(e: KeyboardEvent) {
+      if (e.ctrlKey && e.key === ".") {
+        e.preventDefault();
+        setChatOpen((prev) => !prev);
+      }
+    }
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [aiAvailable]);
 
   /* Auth guard — redirect to login if not authenticated */
   useEffect(() => {
@@ -158,13 +232,18 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       .map((section) => ({
         ...section,
         items: section.items.filter((item) => {
+          // Feature-flag check eerst — feature uit = item weg, ongeacht rol
+          if (item.featureFlag && !isFeatureEnabled(item.featureFlag)) {
+            return false;
+          }
           // Master-only sections: show all items (no permission filtering)
           if (section.masterOnly) return true;
           return item.permission === null || rolePermissions.includes(item.permission);
         }),
       }))
       .filter((section) => section.items.length > 0);
-  }, [rolePermissions, masterAdmin]);
+    // featureFlagsVersion triggers re-render when flags are refreshed
+  }, [rolePermissions, masterAdmin, featureFlagsVersion]);
 
   /* Close mobile drawer on navigation */
   useEffect(() => {
@@ -335,6 +414,17 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           {/* Tenant switcher (master admin only) */}
           {masterAdmin && <TenantSwitcher />}
 
+          {/* AI Chat toggle */}
+          {aiAvailable && (
+            <button
+              onClick={() => setChatOpen(!chatOpen)}
+              className={`p-2 rounded-lg transition-colors ${chatOpen ? "bg-brand-100 text-brand-700 dark:bg-brand-900 dark:text-brand-300" : "text-fg-muted hover:text-fg hover:bg-sunken"}`}
+              title="AI Assistent (Ctrl+.)"
+            >
+              <IconChat className="w-5 h-5" />
+            </button>
+          )}
+
           {/* User */}
           <div className="flex items-center gap-3 ml-4">
             <div className="text-right hidden sm:block">
@@ -360,11 +450,17 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         )}
 
-        {/* Page content */}
-        <main className="flex-1 overflow-y-auto">
-          {children}
-        </main>
+        {/* Page content + AI chat panel */}
+        <div className="flex-1 flex overflow-hidden">
+          <main className="flex-1 overflow-y-auto">
+            {children}
+          </main>
+          <ChatPanel open={chatOpen} onClose={() => setChatOpen(false)} />
+        </div>
       </div>
+
+      <KeyboardShortcutsButton onClick={() => setShortcutsOpen(true)} />
+      <KeyboardShortcutsModal open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
     </div>
   );
 }
@@ -613,6 +709,14 @@ function IconClipboard({ className }: { className?: string }) {
       <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
       <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
       <path d="M9 14l2 2 4-4" />
+    </svg>
+  );
+}
+
+function IconChat({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
     </svg>
   );
 }

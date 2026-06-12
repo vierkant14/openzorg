@@ -10,7 +10,7 @@
 
 import { getExtensionUrl } from "@openzorg/shared-domain";
 
-import type { CustomFieldDefinition } from "./configuration";
+import type { CustomFieldDefinition } from "./configuration.js";
 
 /** FHIR extension with a typed value. */
 interface FhirExtension {

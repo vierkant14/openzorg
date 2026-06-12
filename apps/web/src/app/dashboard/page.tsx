@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 
 import AppShell from "../../components/AppShell";
-import { ecdFetch } from "../../lib/api";
+import { ecdFetch, getUserRole } from "../../lib/api";
+import { useFeatureFlag } from "../../lib/features";
 import { planningFetch } from "../../lib/planning-api";
 import { workflowFetch } from "../../lib/workflow-api";
 
@@ -74,6 +75,16 @@ const MODULES = [
   },
 ] as const;
 
+const SIGNALERING_ICONS: Record<string, string> = {
+  valrisico: "🚨",
+  allergie: "⚠️",
+  mrsa: "🦠",
+  infectie: "🦠",
+  agressie: "⚡",
+  dieet: "🍽️",
+  anders: "📌",
+};
+
 const QUICK_ACTIONS = [
   { label: "Nieuwe client", href: "/ecd/nieuw" },
   { label: "Nieuwe afspraak", href: "/planning/nieuw" },
@@ -81,13 +92,44 @@ const QUICK_ACTIONS = [
   { label: "Beschikbaarheid", href: "/planning/beschikbaarheid" },
 ] as const;
 
+interface PreviewTask {
+  id: string;
+  name: string;
+  processKey?: string;
+  clientNaam?: string;
+  createTime: string;
+  dueDate?: string | null;
+  assignee?: string;
+}
+
+interface Signalering {
+  id: string;
+  code?: string;
+  categorie?: string;
+  ernst?: string;
+  clientRef?: string;
+}
+
 export default function DashboardPage() {
+  const workflowEnabled = useFeatureFlag("workflow-engine");
+  const facturatieEnabled = useFeatureFlag("facturatie-module");
+  const planningEnabled = useFeatureFlag("planning-module");
+  const micEnabled = useFeatureFlag("mic-meldingen");
+
+  const [userName, setUserName] = useState<string>("");
   const [stats, setStats] = useState<QuickStat[]>([
     { label: "Clienten", value: "—" },
     { label: "Afspraken vandaag", value: "—" },
     { label: "Open taken", value: "—" },
     { label: "Wachtlijst", value: "—" },
   ]);
+  const [previewTasks, setPreviewTasks] = useState<PreviewTask[]>([]);
+  const [signaleringen, setSignaleringen] = useState<Signalering[]>([]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    setUserName(localStorage.getItem("openzorg_user_name") ?? "");
+  }, []);
 
   useEffect(() => {
     async function loadStats() {
@@ -133,7 +175,63 @@ export default function DashboardPage() {
       ]);
     }
     loadStats();
-  }, []);
+
+    // Mijn-taken preview — eerste 3 taken voor mijn rol
+    async function loadPreviewTasks() {
+      const role = typeof window !== "undefined" ? getUserRole() : "";
+      if (!role) return;
+      const { data } = await workflowFetch<{
+        data: Array<{
+          id: string;
+          name: string;
+          processDefinitionId?: string;
+          createTime: string;
+          dueDate?: string | null;
+          assignee?: string;
+          variables?: Array<{ name: string; value: unknown }>;
+        }>;
+      }>(`/api/taken?userId=${encodeURIComponent(role)}`);
+      if (!data?.data) return;
+      const items = data.data.slice(0, 3).map((t) => ({
+        id: t.id,
+        name: t.name,
+        processKey: t.processDefinitionId?.split(":")[0],
+        clientNaam: t.variables?.find((v) => v.name === "clientNaam")?.value as string | undefined,
+        createTime: t.createTime,
+        dueDate: t.dueDate,
+        assignee: t.assignee,
+      }));
+      setPreviewTasks(items);
+    }
+    if (workflowEnabled) {
+      loadPreviewTasks();
+    }
+
+    // Signaleringen overzicht — top 5 actieve flags
+    async function loadSignaleringen() {
+      const { data } = await ecdFetch<{
+        entry?: Array<{
+          resource: {
+            id?: string;
+            code?: { text?: string };
+            category?: Array<{ coding?: Array<{ code?: string; display?: string }> }>;
+            subject?: { reference?: string };
+            extension?: Array<{ url?: string; valueString?: string }>;
+          };
+        }>;
+      }>("/api/signaleringen/overzicht?limit=5");
+      if (!data?.entry) return;
+      const items = data.entry.map((e) => ({
+        id: e.resource.id ?? "",
+        code: e.resource.code?.text,
+        categorie: e.resource.category?.[0]?.coding?.[0]?.code,
+        ernst: e.resource.extension?.find((x) => x.url?.includes("signalering-ernst"))?.valueString,
+        clientRef: e.resource.subject?.reference,
+      }));
+      setSignaleringen(items);
+    }
+    loadSignaleringen();
+  }, [workflowEnabled]);
 
   const greeting = getGreeting();
 
@@ -142,7 +240,9 @@ export default function DashboardPage() {
       <div className="px-6 lg:px-10 py-8 max-w-[1400px] mx-auto">
         {/* ── Greeting ── */}
         <div className="mb-10">
-          <h1 className="text-display-lg text-fg">{greeting}</h1>
+          <h1 className="text-display-lg text-fg">
+            {greeting}{userName && <>, <span className="text-brand-600">{userName}</span></>}
+          </h1>
           <p className="text-body text-fg-muted mt-1">
             Hier is je overzicht voor vandaag.
           </p>
@@ -227,31 +327,112 @@ export default function DashboardPage() {
               ))}
             </div>
 
-            {/* Active modules status */}
+            {/* Signaleringen */}
+            {signaleringen.length > 0 && (
+              <>
+                <h2 className="text-heading text-fg mt-8 mb-4 flex items-center justify-between">
+                  Signaleringen
+                  <a href="/ecd" className="text-body-sm font-medium text-brand-600 hover:text-brand-700">
+                    Bekijk alles →
+                  </a>
+                </h2>
+                <div className="bg-raised rounded-2xl border border-subtle p-2 space-y-1">
+                  {signaleringen.map((sig) => {
+                    const isHigh = sig.ernst === "hoog";
+                    const clientId = sig.clientRef?.replace("Patient/", "");
+                    const icon = SIGNALERING_ICONS[sig.categorie ?? "anders"] ?? "📌";
+                    return (
+                      <a
+                        key={sig.id}
+                        href={clientId ? `/ecd/${clientId}` : "/ecd"}
+                        className="block rounded-xl px-4 py-3 hover:bg-sunken transition-colors"
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className="text-lg leading-none">{icon}</span>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-body-sm font-medium text-fg truncate">
+                              {sig.code ?? "Signalering"}
+                            </p>
+                            <p className="text-caption text-fg-subtle capitalize">
+                              {sig.categorie ?? "algemeen"}
+                            </p>
+                          </div>
+                          {isHigh && (
+                            <span className="inline-flex items-center rounded bg-coral-50 dark:bg-coral-950/20 px-2 py-0.5 text-caption font-semibold text-coral-700 dark:text-coral-300">
+                              Hoog
+                            </span>
+                          )}
+                        </div>
+                      </a>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+
+            {/* Mijn taken preview */}
+            {workflowEnabled && previewTasks.length > 0 && (
+              <>
+                <h2 className="text-heading text-fg mt-8 mb-4 flex items-center justify-between">
+                  Mijn taken
+                  <a href="/werkbak" className="text-body-sm font-medium text-brand-600 hover:text-brand-700">
+                    Bekijk alles →
+                  </a>
+                </h2>
+                <div className="bg-raised rounded-2xl border border-subtle p-2 space-y-1">
+                  {previewTasks.map((task) => (
+                    <a
+                      key={task.id}
+                      href="/werkbak"
+                      className="block rounded-xl px-4 py-3 hover:bg-sunken transition-colors"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-body-sm font-medium text-fg truncate">{task.name}</p>
+                          {task.clientNaam && (
+                            <p className="text-caption text-fg-subtle mt-0.5">Cliënt: {task.clientNaam}</p>
+                          )}
+                        </div>
+                        {!task.assignee && (
+                          <span className="inline-flex items-center rounded bg-amber-50 dark:bg-amber-950/20 px-2 py-0.5 text-caption font-medium text-amber-700 dark:text-amber-300">
+                            Nieuw
+                          </span>
+                        )}
+                      </div>
+                    </a>
+                  ))}
+                </div>
+              </>
+            )}
+
+            {/* Active modules status — nu feature-flag-aware */}
             <h2 className="text-heading text-fg mt-8 mb-4">Actieve modules</h2>
             <div className="bg-raised rounded-2xl border border-subtle p-5">
               <div className="space-y-3">
                 {[
-                  "Clientregistratie", "Zorgplan", "SOEP Rapportage",
-                  "MIC-meldingen", "Planning", "Workflows",
-                  "Custom velden", "Validatieregels",
-                  "Medewerkers", "Organisatie", "Berichten",
+                  { name: "Clientregistratie", enabled: true },
+                  { name: "Zorgplan", enabled: true },
+                  { name: "SOEP Rapportage", enabled: true },
+                  { name: "MIC-meldingen", enabled: micEnabled },
+                  { name: "Planning", enabled: planningEnabled },
+                  { name: "Workflows", enabled: workflowEnabled },
+                  { name: "Custom velden", enabled: true },
+                  { name: "Validatieregels", enabled: true },
+                  { name: "Medewerkers", enabled: true },
+                  { name: "Organisatie", enabled: true },
+                  { name: "Berichten", enabled: true },
+                  { name: "Facturatie", enabled: facturatieEnabled },
                 ].map((mod) => (
-                  <div key={mod} className="flex items-center justify-between">
-                    <span className="text-body-sm text-fg-muted">{mod}</span>
-                    <span className="flex items-center gap-1.5 text-caption font-medium text-brand-600 dark:text-brand-400">
-                      <span className="w-1.5 h-1.5 rounded-full bg-brand-500" />
-                      Actief
+                  <div key={mod.name} className="flex items-center justify-between">
+                    <span className={`text-body-sm ${mod.enabled ? "text-fg-muted" : "text-fg-subtle"}`}>{mod.name}</span>
+                    <span className={`flex items-center gap-1.5 text-caption font-medium ${
+                      mod.enabled ? "text-brand-600 dark:text-brand-400" : "text-fg-subtle"
+                    }`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${mod.enabled ? "bg-brand-500" : "bg-surface-400"}`} />
+                      {mod.enabled ? "Actief" : "Uit"}
                     </span>
                   </div>
                 ))}
-                <div className="flex items-center justify-between pt-2 border-t border-subtle">
-                  <span className="text-body-sm text-fg-muted">Facturatie</span>
-                  <span className="flex items-center gap-1.5 text-caption font-medium text-fg-subtle">
-                    <span className="w-1.5 h-1.5 rounded-full bg-surface-400" />
-                    Gepland
-                  </span>
-                </div>
               </div>
             </div>
           </div>

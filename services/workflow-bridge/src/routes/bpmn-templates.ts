@@ -55,6 +55,8 @@ const TEMPLATES: BpmnTemplate[] = [
 
 /**
  * Intake: Aanmelding → Beoordelen → Goedgekeurd? → Ja: Intake plannen / Nee: Afwijzing
+ * Uitlay met volledige BPMN-DI zodat het diagram direct netjes
+ * getoond wordt in bpmn-js zonder auto-layout fallback.
  */
 export function getIntakeProcessBpmn(): string {
   return `<?xml version="1.0" encoding="UTF-8"?>
@@ -63,52 +65,125 @@ export function getIntakeProcessBpmn(): string {
              xmlns:flowable="http://flowable.org/bpmn"
              xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
              xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI"
              targetNamespace="http://openzorg.nl/bpmn"
              id="intakeDefinitions">
 
   <process id="intake-proces" name="Intake Proces" isExecutable="true">
 
-    <startEvent id="start" name="Aanmelding ontvangen" />
+    <startEvent id="start" name="Aanmelding ontvangen">
+      <outgoing>flow-start-beoordelen</outgoing>
+    </startEvent>
 
     <sequenceFlow id="flow-start-beoordelen" sourceRef="start" targetRef="aanmeldingBeoordelen" />
 
     <userTask id="aanmeldingBeoordelen"
               name="Aanmelding beoordelen"
-              flowable:candidateGroups="planner" />
+              flowable:candidateGroups="planner">
+      <incoming>flow-start-beoordelen</incoming>
+      <outgoing>flow-beoordelen-gateway</outgoing>
+    </userTask>
 
     <sequenceFlow id="flow-beoordelen-gateway" sourceRef="aanmeldingBeoordelen" targetRef="goedgekeurdGateway" />
 
-    <exclusiveGateway id="goedgekeurdGateway" name="Goedgekeurd?" />
+    <exclusiveGateway id="goedgekeurdGateway" name="Goedgekeurd?">
+      <incoming>flow-beoordelen-gateway</incoming>
+      <outgoing>flow-goedgekeurd-ja</outgoing>
+      <outgoing>flow-goedgekeurd-nee</outgoing>
+    </exclusiveGateway>
 
-    <sequenceFlow id="flow-goedgekeurd-ja" sourceRef="goedgekeurdGateway" targetRef="intakeGesprekPlannen">
+    <sequenceFlow id="flow-goedgekeurd-ja" name="Ja" sourceRef="goedgekeurdGateway" targetRef="intakeGesprekPlannen">
       <conditionExpression xsi:type="tFormalExpression">\${goedgekeurd == true}</conditionExpression>
     </sequenceFlow>
 
-    <sequenceFlow id="flow-goedgekeurd-nee" sourceRef="goedgekeurdGateway" targetRef="afwijzingCommuniceren">
+    <sequenceFlow id="flow-goedgekeurd-nee" name="Nee" sourceRef="goedgekeurdGateway" targetRef="afwijzingCommuniceren">
       <conditionExpression xsi:type="tFormalExpression">\${goedgekeurd == false}</conditionExpression>
     </sequenceFlow>
 
     <userTask id="intakeGesprekPlannen"
               name="Intake gesprek plannen"
-              flowable:candidateGroups="zorgmedewerker" />
+              flowable:candidateGroups="zorgmedewerker">
+      <incoming>flow-goedgekeurd-ja</incoming>
+      <outgoing>flow-intake-end</outgoing>
+    </userTask>
 
     <sequenceFlow id="flow-intake-end" sourceRef="intakeGesprekPlannen" targetRef="endGoedgekeurd" />
 
-    <endEvent id="endGoedgekeurd" name="Intake afgerond" />
+    <endEvent id="endGoedgekeurd" name="Intake afgerond">
+      <incoming>flow-intake-end</incoming>
+    </endEvent>
 
     <userTask id="afwijzingCommuniceren"
               name="Afwijzing communiceren"
-              flowable:candidateGroups="beheerder" />
+              flowable:candidateGroups="beheerder">
+      <incoming>flow-goedgekeurd-nee</incoming>
+      <outgoing>flow-afwijzing-end</outgoing>
+    </userTask>
 
     <sequenceFlow id="flow-afwijzing-end" sourceRef="afwijzingCommuniceren" targetRef="endAfgewezen" />
 
-    <endEvent id="endAfgewezen" name="Aanmelding afgewezen" />
+    <endEvent id="endAfgewezen" name="Aanmelding afgewezen">
+      <incoming>flow-afwijzing-end</incoming>
+    </endEvent>
 
   </process>
 
   <bpmndi:BPMNDiagram id="BPMNDiagram_intake">
     <bpmndi:BPMNPlane bpmnElement="intake-proces" id="BPMNPlane_intake">
-      <bpmndi:BPMNShape bpmnElement="start" id="BPMNShape_start"><omgdc:Bounds x="100" y="200" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="start" id="Shape_start">
+        <omgdc:Bounds x="150" y="240" width="36" height="36" />
+        <bpmndi:BPMNLabel><omgdc:Bounds x="128" y="280" width="82" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="aanmeldingBeoordelen" id="Shape_beoordelen">
+        <omgdc:Bounds x="260" y="218" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="goedgekeurdGateway" id="Shape_gateway" isMarkerVisible="true">
+        <omgdc:Bounds x="450" y="238" width="42" height="42" />
+        <bpmndi:BPMNLabel><omgdc:Bounds x="440" y="210" width="62" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="intakeGesprekPlannen" id="Shape_intakePlannen">
+        <omgdc:Bounds x="560" y="130" width="140" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="endGoedgekeurd" id="Shape_endOk">
+        <omgdc:Bounds x="770" y="152" width="36" height="36" />
+        <bpmndi:BPMNLabel><omgdc:Bounds x="750" y="192" width="80" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="afwijzingCommuniceren" id="Shape_afwijzen">
+        <omgdc:Bounds x="560" y="310" width="140" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="endAfgewezen" id="Shape_endNok">
+        <omgdc:Bounds x="770" y="332" width="36" height="36" />
+        <bpmndi:BPMNLabel><omgdc:Bounds x="744" y="372" width="92" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNEdge bpmnElement="flow-start-beoordelen" id="Edge_start_beoordelen">
+        <omgdi:waypoint x="186" y="258" />
+        <omgdi:waypoint x="260" y="258" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flow-beoordelen-gateway" id="Edge_beoordelen_gateway">
+        <omgdi:waypoint x="380" y="258" />
+        <omgdi:waypoint x="450" y="259" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flow-goedgekeurd-ja" id="Edge_ja">
+        <omgdi:waypoint x="471" y="238" />
+        <omgdi:waypoint x="471" y="170" />
+        <omgdi:waypoint x="560" y="170" />
+        <bpmndi:BPMNLabel><omgdc:Bounds x="478" y="195" width="12" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flow-goedgekeurd-nee" id="Edge_nee">
+        <omgdi:waypoint x="471" y="280" />
+        <omgdi:waypoint x="471" y="350" />
+        <omgdi:waypoint x="560" y="350" />
+        <bpmndi:BPMNLabel><omgdc:Bounds x="478" y="308" width="18" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flow-intake-end" id="Edge_intake_end">
+        <omgdi:waypoint x="700" y="170" />
+        <omgdi:waypoint x="770" y="170" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flow-afwijzing-end" id="Edge_afwijzen_end">
+        <omgdi:waypoint x="700" y="350" />
+        <omgdi:waypoint x="770" y="350" />
+      </bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>
 

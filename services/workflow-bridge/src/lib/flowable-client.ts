@@ -60,8 +60,12 @@ export async function deployProcess(bpmnXml: string, name: string): Promise<unkn
 
 /**
  * Starts a new process instance for the given process definition key.
- * Uses Flowable's native tenantId field and injects tenantId as a process variable
- * so tasks can be filtered by tenant.
+ *
+ * BPMN-definities worden deployed als *global* (zonder Flowable-tenantId),
+ * omdat ze OpenZorg-templates zijn die door alle tenants worden gebruikt.
+ * Tenant-isolatie loopt daarom via een `tenantId` *process variable* op de
+ * instance — niet via Flowable's native tenantId-veld op de definition.
+ * `getTasksForUser` filtert taken op deze variabele.
  */
 export async function startProcess(
   processKey: string,
@@ -71,10 +75,6 @@ export async function startProcess(
   const body: Record<string, unknown> = {
     processDefinitionKey: processKey,
   };
-
-  if (tenantId) {
-    body.tenantId = tenantId;
-  }
 
   const allVariables: Array<{ name: string; value: unknown }> = [];
 
@@ -164,24 +164,29 @@ export async function getTasksForUser(userId: string, tenantId?: string): Promis
 
 /**
  * Verifies that a task belongs to a process instance owned by the given tenant.
- * Returns the task data if the tenant matches, throws an error otherwise.
+ * Since BPMN-definities als global templates worden deployed (Flowable's
+ * native tenantId-veld blijft leeg), loopt tenant-isolatie via de
+ * `tenantId` process variable. Deze functie leest die variable en
+ * vergelijkt met de header-tenant. Legacy-instances zonder variable
+ * worden toegestaan (back-compat).
  */
 export async function verifyTaskTenant(taskId: string, tenantId: string): Promise<void> {
   const taskResponse = await flowableFetch(
-    `/service/runtime/tasks/${encodeURIComponent(taskId)}`,
+    `/service/runtime/tasks/${encodeURIComponent(taskId)}?includeProcessVariables=true`,
   );
-  const task = (await taskResponse.json()) as { processInstanceId?: string };
+  const task = (await taskResponse.json()) as {
+    processInstanceId?: string;
+    variables?: Array<{ name: string; value: unknown; scope?: string }>;
+  };
 
   if (!task.processInstanceId) {
     throw new Error("Taak heeft geen procesinstantie");
   }
 
-  const processResponse = await flowableFetch(
-    `/service/runtime/process-instances/${encodeURIComponent(task.processInstanceId)}`,
-  );
-  const process = (await processResponse.json()) as { tenantId?: string };
-
-  if (process.tenantId !== tenantId) {
+  const tenantVar = task.variables?.find((v) => v.name === "tenantId");
+  // Legacy: geen tenantId-variable → toestaan
+  if (!tenantVar) return;
+  if (tenantVar.value !== tenantId) {
     throw new Error("Taak behoort niet tot deze tenant");
   }
 }

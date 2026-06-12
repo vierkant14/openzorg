@@ -98,11 +98,42 @@ services:
       POSTGRES_USER: openzorg
       POSTGRES_PASSWORD: openzorg_dev_password
       MASTER_ADMIN_KEY: ${MASTER_ADMIN_KEY:-dev-master-key}
+      # Ollama draait al op de Unraid host op :11434 — bereikbaar via
+      # host.docker.internal. Als je liever de meegeleverde openzorg-
+      # ollama-1 container gebruikt, zet hem in profile 'ai' aan en
+      # override OLLAMA_BASE_URL naar http://ollama:11434
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      OLLAMA_DEFAULT_MODEL: ${OLLAMA_DEFAULT_MODEL:-gemma3:4b}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:4001/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
+
+  # ── Ollama (lokale LLM runtime) ─────────────────────────────
+  # Start apart aan: `docker compose -f docker-compose.unraid.yml --profile ai up -d ollama`
+  # Eerste keer: `docker exec openzorg-ollama-1 ollama pull gemma3:4b`
+  #
+  # Port 11434 is intentioneel NIET ge-exposed naar de host — de ECD
+  # service verbindt via het docker netwerk op http://ollama:11434. Als
+  # je 'm ook vanaf buiten wilt aanroepen, voeg `ports: ["11435:11434"]`
+  # toe.
+  ollama:
+    profiles: ["ai"]
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    volumes:
+      - ollama_data:/root/.ollama
+    # GPU-acceleratie: ontkoppel de volgende lines als je een NVIDIA GPU hebt
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
 
   # ── Flowable Community REST (BPMN engine) ──────────────────
   flowable:
@@ -167,6 +198,11 @@ services:
       WORKFLOW_PORT: 4003
       MEDPLUM_BASE_URL: http://medplum:8103
       FLOWABLE_BASE_URL: http://flowable:8080/flowable-rest
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: openzorg
+      POSTGRES_USER: openzorg
+      POSTGRES_PASSWORD: openzorg_dev_password
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:4003/health || exit 1"]
       interval: 10s
@@ -204,6 +240,8 @@ services:
     build:
       context: .
       dockerfile: infra/docker/Dockerfile.web
+      args:
+        CACHEBUST: ${CACHEBUST:-1}
     restart: unless-stopped
     depends_on:
       medplum:
@@ -250,6 +288,22 @@ services:
       POSTGRES_PASSWORD: openzorg_dev_password
     restart: "no"
 
+  # ── Seed Codelijsten (runs after seed, adds rich test data) ──
+  seed-codelijsten:
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile.seed
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+    environment:
+      MEDPLUM_BASE_URL: http://medplum:8103
+    volumes:
+      - ./infra/scripts/seed-codelijsten.sh:/seed-codelijsten.sh
+    command: sh /seed-codelijsten.sh
+    restart: "no"
+
 volumes:
   postgres_data:
   medplum_data:
+  ollama_data:

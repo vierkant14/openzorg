@@ -69,7 +69,9 @@ export async function ecdFetch<T = unknown>(
       const issues = body?.issue as Array<{ diagnostics?: string }> | undefined;
       const message =
         issues?.[0]?.diagnostics || (body?.error as string | undefined) || text || `Fout ${res.status}`;
-      return { data: null, error: message, status: res.status };
+      // Return the parsed body as data even on errors so callers can inspect
+      // structured error responses (e.g. SMART-validation OperationOutcome).
+      return { data: (body ?? null) as T, error: message, status: res.status };
     }
 
     return { data: (body ?? {}) as T, error: null, status: res.status };
