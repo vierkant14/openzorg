@@ -141,6 +141,9 @@ export const ROLE_PERMISSIONS: Record<OpenZorgRole, readonly Permission[]> = {
     "organisatie:read", "organisatie:write",
     "configuratie:read", "configuratie:write",
     "workflows:read", "workflows:write",
+    // state-machine-definities zijn nodig om traject-status te renderen
+    // in gedeelde schermen (cliëntdossier); schrijven blijft tenant-admin
+    "state-machines:read",
     "ai-chat:read",
     "competenties:read", "competenties:write",
     "bezetting:read", "bezetting:write",
@@ -155,6 +158,7 @@ export const ROLE_PERMISSIONS: Record<OpenZorgRole, readonly Permission[]> = {
     "mic:read", "mic:write",
     "planning:read",
     "berichten:read", "berichten:write",
+    "state-machines:read",
     "ai-chat:read",
   ],
   planner: [
@@ -162,6 +166,7 @@ export const ROLE_PERMISSIONS: Record<OpenZorgRole, readonly Permission[]> = {
     "planning:read", "planning:write",
     "berichten:read", "berichten:write",
     "medewerkers:read",
+    "state-machines:read",
   ],
   teamleider: [
     "clients:read", "clients:write",
@@ -174,6 +179,7 @@ export const ROLE_PERMISSIONS: Record<OpenZorgRole, readonly Permission[]> = {
     "berichten:read", "berichten:write",
     "medewerkers:read",
     "organisatie:read",
+    "state-machines:read",
     "ai-chat:read",
   ],
 } as const;
