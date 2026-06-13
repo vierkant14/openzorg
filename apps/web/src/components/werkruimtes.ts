@@ -93,6 +93,18 @@ export const WERKRUIMTES: Record<string, Werkruimte> = {
       { href: "/admin/workflows", label: "Processen", icon: "processen", featureFlag: "workflow-engine" },
       { href: "/admin/vragenlijsten", label: "Formulieren & velden", icon: "formulieren" },
       { href: "/admin/validatie", label: "Regels & lijsten", icon: "regels" },
+      { href: "/admin/codelijsten", label: "Codelijsten", icon: "modules" },
+    ],
+  },
+  organisatie: {
+    slug: "organisatie",
+    label: "Organisatie",
+    startRoute: "/admin/medewerkers",
+    items: [
+      { href: "/admin/medewerkers", label: "Medewerkers", icon: "medewerkers" },
+      { href: "/admin/competenties", label: "Competenties", icon: "regels" },
+      { href: "/admin/bezetting", label: "Bezetting & normen", icon: "rooster" },
+      { href: "/admin/dienst-config", label: "Diensten", icon: "dagplanning" },
       { href: "/admin/organisatie", label: "Organisatie", icon: "organisatie" },
     ],
   },
@@ -123,9 +135,28 @@ const ROL_WERKRUIMTES: Record<OpenZorgRole, string[]> = {
   zorgmedewerker: ["vandaag"],
   planner: ["rooster"],
   teamleider: ["team"],
-  beheerder: ["bouwen"],
-  "tenant-admin": ["systeem", "bouwen"],
+  // Functioneel beheerder beheert zowel proces/config (bouwen) als de
+  // zorgorganisatie-inrichting (organisatie: medewerkers, competenties,
+  // bezetting, diensten). Twee werkruimtes → de switcher verschijnt.
+  beheerder: ["bouwen", "organisatie"],
+  "tenant-admin": ["systeem", "bouwen", "organisatie"],
 };
+
+/** Vindt de werkruimte waar een pad bij hoort (langste item-match wint). */
+export function werkruimteVoorPad(pad: string, werkruimtes: Werkruimte[]): Werkruimte | undefined {
+  let beste: Werkruimte | undefined;
+  let besteLengte = -1;
+  for (const w of werkruimtes) {
+    for (const item of w.items) {
+      const match = pad === item.href || pad.startsWith(item.href + "/");
+      if (match && item.href.length > besteLengte) {
+        beste = w;
+        besteLengte = item.href.length;
+      }
+    }
+  }
+  return beste;
+}
 
 /** Werkruimtes die deze gebruiker mag zien, op volgorde (eerste = standaard). */
 export function werkruimtesVoorGebruiker(role: OpenZorgRole, masterAdmin: boolean): Werkruimte[] {

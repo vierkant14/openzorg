@@ -15,7 +15,12 @@ import {
   useKeyboardShortcuts,
 } from "./KeyboardShortcuts";
 import TenantSwitcher from "./TenantSwitcher";
-import { WERKRUIMTES, werkruimtesVoorGebruiker, type WerkruimteIcoon } from "./werkruimtes";
+import {
+  WERKRUIMTES,
+  werkruimteVoorPad,
+  werkruimtesVoorGebruiker,
+  type WerkruimteIcoon,
+} from "./werkruimtes";
 
 /* ── Werkruimte-icoon-map ── */
 /**
@@ -126,12 +131,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const roleDef = getRoleDefinition(role);
   const masterAdmin = isMasterAdmin();
 
-  /* Werkruimtes per rol (taak-gerichte IA, zie werkruimtes.ts) */
+  /* Werkruimtes per rol (taak-gerichte IA, zie werkruimtes.ts).
+     De actieve werkruimte volgt het huidige pad — de nav reflecteert waar je
+     bent, en bij meerdere werkruimtes wissel je via de link-lijst hieronder. */
   const werkruimtes = werkruimtesVoorGebruiker(role, masterAdmin);
-  const [actieveWerkruimteSlug, setActieveWerkruimteSlug] = useState<string>(() => {
-    if (typeof window === "undefined") return werkruimtes[0]?.slug ?? "vandaag";
-    return localStorage.getItem("openzorg_werkruimte") ?? werkruimtes[0]?.slug ?? "vandaag";
-  });
+  const actieveWerkruimte =
+    werkruimteVoorPad(pathname, werkruimtes) ?? werkruimtes[0] ?? WERKRUIMTES.vandaag!;
 
   const userName = typeof window !== "undefined"
     ? localStorage.getItem("openzorg_user_name") || "Gebruiker"
@@ -139,22 +144,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   const userInitials = userName.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2) || "?";
 
-  const actieveWerkruimte =
-    werkruimtes.find((w) => w.slug === actieveWerkruimteSlug) ?? werkruimtes[0] ?? WERKRUIMTES.vandaag!;
-
-  /* Items van de actieve werkruimte, gefilterd op feature-flags.
-     featureFlagsVersion in de render-scope houdt dit reactief bij flag-refresh. */
+  /* Items van de actieve werkruimte, gefilterd op feature-flags. featureFlagsVersion
+     wordt gelezen zodat de flag-listener (boven) een re-render forceert; de filter
+     draait elke render opnieuw en pakt zo verse flag-waarden mee. */
   void featureFlagsVersion;
   const zichtbareItems = actieveWerkruimte.items.filter(
     (item) => !item.featureFlag || isFeatureEnabled(item.featureFlag),
   );
-
-  function wisselWerkruimte(slug: string) {
-    setActieveWerkruimteSlug(slug);
-    if (typeof window !== "undefined") localStorage.setItem("openzorg_werkruimte", slug);
-    const doel = werkruimtes.find((w) => w.slug === slug);
-    if (doel) window.location.href = doel.startRoute;
-  }
 
   /* Close mobile drawer on navigation */
   useEffect(() => {
@@ -178,8 +174,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   /** Check if a nav item (or any subpage) is currently active */
   function isActive(href: string): boolean {
+    // Routes die een prefix zijn van andere nav-items: exact matchen, anders
+    // lichten parent én child tegelijk op.
     if (href === "/dashboard") return pathname === "/dashboard";
     if (href === "/planning") return pathname === "/planning";
+    if (href === "/master-admin") return pathname === "/master-admin";
     return pathname === href || pathname.startsWith(href + "/");
   }
 
@@ -219,25 +218,38 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           )}
         </div>
 
-        {/* Werkruimte-switcher (alleen bij meerdere werkruimtes) */}
-        {werkruimtes.length > 1 && !collapsed && (
-          <div className="px-3 pt-1 pb-2">
-            <label htmlFor="werkruimte-kiezer" className="sr-only">
-              Werkruimte wisselen
-            </label>
-            <select
-              id="werkruimte-kiezer"
-              value={actieveWerkruimte.slug}
-              onChange={(e) => wisselWerkruimte(e.target.value)}
-              className="w-full rounded-xl px-3 py-2 text-body-sm font-medium outline-none cursor-pointer"
-              style={{ background: "var(--color-sidebar-active)", color: "var(--color-sidebar-fg)" }}
-            >
-              {werkruimtes.map((w) => (
-                <option key={w.slug} value={w.slug}>
-                  {w.label}
-                </option>
-              ))}
-            </select>
+        {/* Werkruimte-switcher: link-lijst (alleen bij meerdere werkruimtes).
+            Echte <a href> → toetsenbord-toegankelijk, default focus-ring, en
+            navigeren is een bewuste klik (geen WCAG 3.2.2 on-input-verrassing). */}
+        {werkruimtes.length > 1 && (
+          <div className="px-3 pt-1 pb-2 flex flex-col gap-0.5">
+            {werkruimtes.map((w) => {
+              const actief = w.slug === actieveWerkruimte.slug;
+              return (
+                <a
+                  key={w.slug}
+                  href={w.startRoute}
+                  aria-current={actief ? "page" : undefined}
+                  title={collapsed ? w.label : undefined}
+                  className={`
+                    rounded-xl px-3 py-1.5 text-body-sm font-semibold transition-colors duration-150
+                    ${collapsed ? "text-center" : ""}
+                  `}
+                  style={{
+                    color: actief ? "var(--color-sidebar-fg)" : "var(--color-sidebar-fg-muted)",
+                    background: actief ? "var(--color-sidebar-active)" : undefined,
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!actief) e.currentTarget.style.background = "var(--color-sidebar-hover)";
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!actief) e.currentTarget.style.background = "";
+                  }}
+                >
+                  {collapsed ? w.label.slice(0, 1) : w.label}
+                </a>
+              );
+            })}
           </div>
         )}
 

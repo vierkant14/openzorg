@@ -20,7 +20,7 @@ export function EmptyState({ titel, uitleg, actieLabel, onActie, icoon }: EmptyS
         <button
           type="button"
           onClick={onActie}
-          className="mt-2 rounded-md bg-brand-700 px-4 py-2 text-sm font-medium text-white hover:bg-brand-800"
+          className="mt-2 rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"
         >
           {actieLabel}
         </button>

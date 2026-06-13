@@ -158,10 +158,7 @@ function VandaagInhoud() {
         </select>
       </PageHeader>
 
-      {fout && <ErrorState melding={fout} onOpnieuw={laadRoute} />}
-
-      {!fout && (
-        <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
+      <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
           <Section
             titel="Mijn route vandaag"
             actie={
@@ -173,7 +170,9 @@ function VandaagInhoud() {
               </Link>
             }
           >
-            {ladenRoute ? (
+            {fout ? (
+              <ErrorState melding={fout} onOpnieuw={laadRoute} />
+            ) : ladenRoute ? (
               <LoadingSkeleton regels={5} />
             ) : !practitionerId ? (
               <EmptyState
@@ -202,7 +201,7 @@ function VandaagInhoud() {
                           {client?.actor?.display ?? a.description ?? "Afspraak"}
                         </p>
                         {a.description && client?.actor?.display && (
-                          <p className="truncate text-xs text-fg-subtle">{a.description}</p>
+                          <p className="truncate text-xs text-fg-muted">{a.description}</p>
                         )}
                       </div>
                       {clientId && (
@@ -259,8 +258,7 @@ function VandaagInhoud() {
               </p>
             </Section>
           </div>
-        </div>
-      )}
+      </div>
     </div>
   );
 }
