@@ -22,7 +22,8 @@ RUN echo "node-linker=hoisted" >> .npmrc && \
 # Create workspace symlinks that hoisted mode does not create
 RUN mkdir -p node_modules/@openzorg && \
     ln -s ../../packages/shared-domain node_modules/@openzorg/shared-domain && \
-    ln -s ../../packages/shared-config node_modules/@openzorg/shared-config
+    ln -s ../../packages/shared-config node_modules/@openzorg/shared-config && \
+    ln -s ../../packages/shared-ui node_modules/@openzorg/shared-ui
 
 COPY tsconfig.base.json ./
 COPY packages/shared-domain/ ./packages/shared-domain/
@@ -34,8 +35,10 @@ ARG CACHEBUST=1
 COPY apps/web/ ./apps/web/
 
 ENV STANDALONE=true
+# shared-ui wordt mee gebouwd: web importeert het en de package exposeert dist/
 RUN pnpm --filter @openzorg/shared-domain build && \
     pnpm --filter @openzorg/shared-config build && \
+    pnpm --filter @openzorg/shared-ui build && \
     cd apps/web && ../../node_modules/.bin/next build
 
 FROM base AS runner
