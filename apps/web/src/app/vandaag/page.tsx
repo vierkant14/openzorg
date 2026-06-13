@@ -5,17 +5,12 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import AppShell from "../../components/AppShell";
-import { ecdFetch, getUserRole } from "../../lib/api";
+import { getUserRole } from "../../lib/api";
 import { planningFetch } from "../../lib/planning-api";
 import { workflowFetch } from "../../lib/workflow-api";
 
 interface FhirBundle<T> {
   entry?: Array<{ resource: T }>;
-}
-
-interface FhirPractitioner {
-  id?: string;
-  name?: Array<{ given?: string[]; family?: string; text?: string }>;
 }
 
 interface FhirAppointment {
@@ -36,11 +31,6 @@ interface WorkflowTaak {
 interface TakenResponse {
   data: WorkflowTaak[];
   total: number;
-}
-
-function naam(p: FhirPractitioner): string {
-  const n = p.name?.[0];
-  return n?.text ?? [n?.given?.join(" "), n?.family].filter(Boolean).join(" ") ?? "Onbekend";
 }
 
 function tijd(iso?: string): string {
@@ -73,8 +63,10 @@ export default function VandaagPage() {
 }
 
 function VandaagInhoud() {
-  const [medewerkers, setMedewerkers] = useState<FhirPractitioner[]>([]);
-  const [practitionerId, setPractitionerId] = useState<string>(() =>
+  // Welke medewerker ben ik? Tot er een /api/me-koppeling is (account → Practitioner)
+  // lezen we een eventueel eerder gezette id uit localStorage. Geen medewerker-lijst
+  // ophalen: een zorgmedewerker mag /api/medewerkers niet lezen (403 → /geen-toegang).
+  const [practitionerId] = useState<string>(() =>
     typeof window === "undefined" ? "" : localStorage.getItem("openzorg_practitioner_id") ?? "",
   );
   const [afspraken, setAfspraken] = useState<FhirAppointment[]>([]);
@@ -82,12 +74,6 @@ function VandaagInhoud() {
   const [ladenRoute, setLadenRoute] = useState(true);
   const [ladenTaken, setLadenTaken] = useState(true);
   const [fout, setFout] = useState<string | null>(null);
-
-  useEffect(() => {
-    ecdFetch<FhirBundle<FhirPractitioner>>("/api/medewerkers?_count=100").then(({ data }) => {
-      setMedewerkers(data?.entry?.map((e) => e.resource) ?? []);
-    });
-  }, []);
 
   const laadRoute = useCallback(() => {
     setLadenRoute(true);
@@ -131,133 +117,110 @@ function VandaagInhoud() {
     laadTaken();
   }, [laadTaken]);
 
-  function kiesMedewerker(id: string) {
-    setPractitionerId(id);
-    if (typeof window !== "undefined") localStorage.setItem("openzorg_practitioner_id", id);
-  }
-
   return (
     <div className="mx-auto max-w-5xl px-6 py-6">
-      <PageHeader titel={begroeting()} omschrijving={datumLabel()}>
-        {/* Tijdelijk tot er een /api/me-koppeling is (zie IA-doc open punten) */}
-        <label htmlFor="vandaag-medewerker" className="sr-only">
-          Werken als medewerker
-        </label>
-        <select
-          id="vandaag-medewerker"
-          value={practitionerId}
-          onChange={(e) => kiesMedewerker(e.target.value)}
-          className="rounded-md border border-default bg-raised px-3 py-1.5 text-sm text-fg"
-        >
-          <option value="">Kies medewerker…</option>
-          {medewerkers.map((m) => (
-            <option key={m.id} value={m.id ?? ""}>
-              {naam(m)}
-            </option>
-          ))}
-        </select>
-      </PageHeader>
+      <PageHeader titel={begroeting()} omschrijving={datumLabel()} />
 
       <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
+        <Section
+          titel="Mijn route vandaag"
+          actie={
+            <Link
+              href="/planning/dagplanning"
+              className="text-xs font-medium text-brand-600 hover:text-brand-800"
+            >
+              Volledige dagplanning
+            </Link>
+          }
+        >
+          {fout ? (
+            <ErrorState melding={fout} onOpnieuw={laadRoute} />
+          ) : ladenRoute ? (
+            <LoadingSkeleton regels={5} />
+          ) : !practitionerId ? (
+            <EmptyState
+              titel="Je rooster verschijnt hier binnenkort"
+              uitleg="Zodra je account aan je medewerkerprofiel is gekoppeld, zie je hier je route en afspraken van vandaag."
+            />
+          ) : afspraken.length === 0 ? (
+            <EmptyState
+              titel="Geen afspraken vandaag"
+              uitleg="Je dag is leeg — check de dagplanning of je berichten."
+            />
+          ) : (
+            <ol className="divide-y divide-surface-100 dark:divide-surface-800">
+              {afspraken.map((a) => {
+                const client = a.participant?.find((p) =>
+                  p.actor?.reference?.startsWith("Patient/"),
+                );
+                const clientId = client?.actor?.reference?.split("/")[1];
+                return (
+                  <li key={a.id} className="flex items-center gap-4 py-2.5">
+                    <span className="w-24 shrink-0 font-mono text-sm text-fg-muted">
+                      {tijd(a.start)}–{tijd(a.end)}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium text-fg">
+                        {client?.actor?.display ?? a.description ?? "Afspraak"}
+                      </p>
+                      {a.description && client?.actor?.display && (
+                        <p className="truncate text-xs text-fg-muted">{a.description}</p>
+                      )}
+                    </div>
+                    {clientId && (
+                      <Link
+                        href={`/ecd/${clientId}`}
+                        className="shrink-0 rounded-md border border-default px-3 py-1 text-xs font-medium text-fg-muted hover:bg-sunken"
+                      >
+                        Dossier
+                      </Link>
+                    )}
+                  </li>
+                );
+              })}
+            </ol>
+          )}
+        </Section>
+
+        <div className="space-y-4">
           <Section
-            titel="Mijn route vandaag"
+            titel="Open taken"
             actie={
-              <Link
-                href="/planning/dagplanning"
-                className="text-xs font-medium text-brand-600 hover:text-brand-800"
-              >
-                Volledige dagplanning
+              <Link href="/werkbak" className="text-xs font-medium text-brand-600 hover:text-brand-800">
+                Werkbak
               </Link>
             }
           >
-            {fout ? (
-              <ErrorState melding={fout} onOpnieuw={laadRoute} />
-            ) : ladenRoute ? (
-              <LoadingSkeleton regels={5} />
-            ) : !practitionerId ? (
-              <EmptyState
-                titel="Wie ben jij vandaag?"
-                uitleg="Kies rechtsboven je naam, dan zie je hier je route en afspraken."
-              />
-            ) : afspraken.length === 0 ? (
-              <EmptyState
-                titel="Geen afspraken vandaag"
-                uitleg="Je dag is leeg — check de dagplanning of je berichten."
-              />
+            {ladenTaken ? (
+              <LoadingSkeleton regels={3} />
+            ) : taken.length === 0 ? (
+              <EmptyState titel="Geen open taken" uitleg="Alles is opgepakt. Lekker bezig." />
             ) : (
-              <ol className="divide-y divide-surface-100 dark:divide-surface-800">
-                {afspraken.map((a) => {
-                  const client = a.participant?.find((p) =>
-                    p.actor?.reference?.startsWith("Patient/"),
-                  );
-                  const clientId = client?.actor?.reference?.split("/")[1];
-                  return (
-                    <li key={a.id} className="flex items-center gap-4 py-2.5">
-                      <span className="w-24 shrink-0 font-mono text-sm text-fg-muted">
-                        {tijd(a.start)}–{tijd(a.end)}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium text-fg">
-                          {client?.actor?.display ?? a.description ?? "Afspraak"}
-                        </p>
-                        {a.description && client?.actor?.display && (
-                          <p className="truncate text-xs text-fg-muted">{a.description}</p>
-                        )}
-                      </div>
-                      {clientId && (
-                        <Link
-                          href={`/ecd/${clientId}`}
-                          className="shrink-0 rounded-md border border-default px-3 py-1 text-xs font-medium text-fg-muted hover:bg-sunken"
-                        >
-                          Dossier
-                        </Link>
-                      )}
-                    </li>
-                  );
-                })}
-              </ol>
+              <ul className="space-y-2">
+                {taken.map((t) => (
+                  <li key={t.id} className="text-sm">
+                    <Link href="/werkbak" className="font-medium text-fg hover:text-brand-700">
+                      {t.name ?? "Taak"}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
             )}
           </Section>
 
-          <div className="space-y-4">
-            <Section
-              titel="Open taken"
-              actie={
-                <Link href="/werkbak" className="text-xs font-medium text-brand-600 hover:text-brand-800">
-                  Werkbak
-                </Link>
-              }
-            >
-              {ladenTaken ? (
-                <LoadingSkeleton regels={3} />
-              ) : taken.length === 0 ? (
-                <EmptyState titel="Geen open taken" uitleg="Alles is opgepakt. Lekker bezig." />
-              ) : (
-                <ul className="space-y-2">
-                  {taken.map((t) => (
-                    <li key={t.id} className="text-sm">
-                      <Link href="/werkbak" className="font-medium text-fg hover:text-brand-700">
-                        {t.name ?? "Taak"}
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </Section>
-
-            <Section
-              titel="Overdracht"
-              actie={
-                <Link href="/overdracht" className="text-xs font-medium text-brand-600 hover:text-brand-800">
-                  Openen
-                </Link>
-              }
-            >
-              <p className="text-sm text-fg-muted">
-                Lees de overdracht van de vorige dienst voordat je begint.
-              </p>
-            </Section>
-          </div>
+          <Section
+            titel="Overdracht"
+            actie={
+              <Link href="/overdracht" className="text-xs font-medium text-brand-600 hover:text-brand-800">
+                Openen
+              </Link>
+            }
+          >
+            <p className="text-sm text-fg-muted">
+              Lees de overdracht van de vorige dienst voordat je begint.
+            </p>
+          </Section>
+        </div>
       </div>
     </div>
   );
