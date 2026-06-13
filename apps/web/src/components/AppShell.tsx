@@ -1,12 +1,12 @@
 "use client";
 
-import type { OpenZorgRole, Permission } from "@openzorg/shared-domain";
-import { ROLE_PERMISSIONS, getRoleDefinition } from "@openzorg/shared-domain";
+import type { OpenZorgRole } from "@openzorg/shared-domain";
+import { getRoleDefinition } from "@openzorg/shared-domain";
 import { usePathname } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { clearSession, getUserRole, isMasterAdmin, isLoggedIn } from "../lib/api";
-import { isFeatureEnabled, type FeatureFlagSlug } from "../lib/features";
+import { isFeatureEnabled } from "../lib/features";
 
 import { ChatPanel, useAiChatAvailable } from "./ChatPanel";
 import {
@@ -15,124 +15,36 @@ import {
   useKeyboardShortcuts,
 } from "./KeyboardShortcuts";
 import TenantSwitcher from "./TenantSwitcher";
+import { WERKRUIMTES, werkruimtesVoorGebruiker, type WerkruimteIcoon } from "./werkruimtes";
 
-/* ── Navigation items ── */
-interface NavItem {
-  href: string;
-  label: string;
-  icon: (props: { className?: string }) => React.JSX.Element;
-  permission: Permission | null;
-  /** Feature-flag vereist — als de flag uit staat verdwijnt dit item */
-  featureFlag?: FeatureFlagSlug;
-}
-
-interface NavSection {
-  label: string;
-  items: NavItem[];
-  /** If true, section is only shown to master admins */
-  masterOnly?: boolean;
-}
-
+/* ── Werkruimte-icoon-map ── */
 /**
- * Navigation structure:
- * - Overzicht: dashboard + berichten (everyone)
- * - Zorg: clienten, MIC-meldingen (zorgmedewerker/beheerder/teamleider)
- * - Planning: all planning pages (planner/beheerder/teamleider)
- * - Beheer: admin pages (beheerder only)
- * - Platform: master admin only
+ * Mapt de databestand-icoon-sleutels (werkruimtes.ts) naar de inline-SVG-iconen
+ * onderaan dit bestand. Zo blijft werkruimtes.ts vrij van React/JSX.
  */
-const NAV_SECTIONS: NavSection[] = [
-  {
-    label: "Overzicht",
-    items: [
-      { href: "/dashboard", label: "Dashboard", icon: IconGrid, permission: null },
-      { href: "/berichten", label: "Berichten", icon: IconInbox, permission: "berichten:read" },
-      { href: "/werkbak", label: "Werkbak", icon: IconClipboard, permission: null, featureFlag: "workflow-engine" },
-      { href: "/wiki", label: "Wiki", icon: IconBook, permission: null },
-    ],
-  },
-  {
-    label: "Zorg",
-    items: [
-      { href: "/ecd", label: "Clienten", icon: IconUsers, permission: "clients:read" },
-      { href: "/zorgplannen", label: "Zorgplannen", icon: IconClipboard, permission: "clients:read" },
-      { href: "/overdracht", label: "Overdracht", icon: IconExchange, permission: "clients:read" },
-    ],
-  },
-  {
-    label: "Overzichten",
-    items: [
-      { href: "/mic-meldingen", label: "MIC-meldingen", icon: IconShield, permission: "mic:read" as Permission },
-      { href: "/medicatie-overzicht", label: "Medicatie", icon: IconList, permission: "medicatie:read" as Permission },
-      { href: "/wilsverklaringen", label: "Wilsverklaringen", icon: IconShield, permission: "clients:read" },
-      { href: "/vaccinaties", label: "Vaccinaties", icon: IconShield, permission: "clients:read" },
-      { href: "/rapportages", label: "Rapportages", icon: IconClipboard, permission: "rapportage:read" },
-      { href: "/signaleringen", label: "Signaleringen", icon: IconList, permission: "clients:read" },
-    ],
-  },
-  {
-    label: "Planning",
-    items: [
-      { href: "/planning", label: "Overzicht", icon: IconCalendar, permission: "planning:read" },
-      { href: "/planning/bezetting", label: "Bezettingsrooster", icon: IconGrid, permission: "bezetting:read" },
-      { href: "/planning/dagplanning", label: "Dagplanning", icon: IconCalendarDay, permission: "planning:read" },
-      { href: "/planning/rooster", label: "Rooster", icon: IconClock, permission: "planning:read" },
-      { href: "/planning/herhalingen", label: "Herhalingen", icon: IconRepeat, permission: "planning:write" },
-      { href: "/planning/wachtlijst", label: "Wachtlijst", icon: IconQueue, permission: "planning:read" },
-    ],
-  },
-  {
-    label: "HR",
-    items: [
-      { href: "/admin/medewerkers", label: "Medewerkers", icon: IconUserCog, permission: "medewerkers:read" },
-      { href: "/admin/contracten", label: "Contracten", icon: IconContract, permission: "medewerkers:read" },
-      { href: "/admin/organisatie", label: "Organisatie", icon: IconBuilding, permission: "organisatie:read" },
-    ],
-  },
-  {
-    label: "Financieel",
-    items: [
-      { href: "/admin/facturatie", label: "Facturatie", icon: IconReceipt, permission: "configuratie:read", featureFlag: "facturatie-module" },
-    ],
-  },
-  {
-    label: "Configuratie",
-    items: [
-      { href: "/admin/configuratie", label: "Overzicht", icon: IconSettings, permission: "configuratie:read" },
-      { href: "/admin/dienst-config", label: "Diensten", icon: IconClock, permission: "dienst-config:read" },
-      { href: "/admin/bezetting", label: "Bezetting & normen", icon: IconUsers, permission: "bezetting:read" },
-      { href: "/admin/competenties", label: "Competenties", icon: IconShield, permission: "competenties:read" },
-      { href: "/admin/mic-trends", label: "MIC Trends", icon: IconList, permission: "mic:read" },
-      { href: "/admin/workflows", label: "Workflows", icon: IconFlow, permission: "workflows:read", featureFlag: "workflow-engine" },
-      { href: "/admin/workflows/voorbeelden", label: "Workflow Voorbeelden", icon: IconBook, permission: "workflows:read", featureFlag: "workflow-engine" },
-      { href: "/admin/vragenlijsten", label: "Vragenlijsten", icon: IconClipboard, permission: "configuratie:read" },
-      { href: "/admin/codelijsten", label: "Codelijsten", icon: IconList, permission: "configuratie:read" },
-      { href: "/admin/validatie", label: "Validatieregels", icon: IconShield, permission: "configuratie:read" },
-      { href: "/admin/task-form-options", label: "Taak-formulieren", icon: IconList, permission: "configuratie:read" },
-      { href: "/admin/client-dashboard-config", label: "Client dashboard", icon: IconGrid, permission: "configuratie:read" },
-      { href: "/admin/audit", label: "Audit log", icon: IconList, permission: "configuratie:read" },
-      { href: "/admin/workflows/dmn", label: "DMN tabellen (bèta)", icon: IconList, permission: "workflows:read", featureFlag: "dmn-editor" },
-    ],
-  },
-  {
-    label: "Systeem",
-    items: [
-      { href: "/admin/modules", label: "Modules", icon: IconGrid, permission: "feature-flags:read" },
-      { href: "/admin/state-machines", label: "State-machines", icon: IconFlow, permission: "state-machines:read" },
-      { href: "/admin/rollen", label: "Rollen & rechten", icon: IconShield, permission: "rollen:read" },
-      { href: "/admin/ai-instellingen", label: "AI Instellingen", icon: IconSettings, permission: "ai-config:read" },
-    ],
-  },
-  {
-    label: "Platform",
-    masterOnly: true,
-    items: [
-      { href: "/master-admin", label: "Tenants", icon: IconGlobe, permission: null },
-      { href: "/master-admin/onboarding", label: "Onboarding", icon: IconUserPlus, permission: null },
-      { href: "/master-admin/wiki", label: "Wiki", icon: IconBook, permission: null },
-    ],
-  },
-];
+const ICOON_MAP: Record<WerkruimteIcoon, (props: { className?: string }) => React.JSX.Element> = {
+  vandaag: IconCalendarDay,
+  clienten: IconUsers,
+  berichten: IconInbox,
+  rooster: IconClock,
+  dagplanning: IconCalendarDay,
+  wachtlijst: IconQueue,
+  medewerkers: IconUserCog,
+  overzicht: IconGrid,
+  mic: IconShield,
+  signaleringen: IconList,
+  processen: IconFlow,
+  formulieren: IconClipboard,
+  regels: IconShield,
+  organisatie: IconBuilding,
+  rollen: IconShield,
+  "state-machines": IconFlow,
+  modules: IconGrid,
+  ai: IconSettings,
+  tenants: IconGlobe,
+  onboarding: IconUserPlus,
+  wiki: IconBook,
+};
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -211,9 +123,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   }, []);
 
   const role = getUserRole() as OpenZorgRole;
-  const rolePermissions = ROLE_PERMISSIONS[role] ?? [];
   const roleDef = getRoleDefinition(role);
   const masterAdmin = isMasterAdmin();
+
+  /* Werkruimtes per rol (taak-gerichte IA, zie werkruimtes.ts) */
+  const werkruimtes = werkruimtesVoorGebruiker(role, masterAdmin);
+  const [actieveWerkruimteSlug, setActieveWerkruimteSlug] = useState<string>(() => {
+    if (typeof window === "undefined") return werkruimtes[0]?.slug ?? "vandaag";
+    return localStorage.getItem("openzorg_werkruimte") ?? werkruimtes[0]?.slug ?? "vandaag";
+  });
 
   const userName = typeof window !== "undefined"
     ? localStorage.getItem("openzorg_user_name") || "Gebruiker"
@@ -221,29 +139,22 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   const userInitials = userName.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2) || "?";
 
-  /* Filter nav sections based on role permissions + master admin flag */
-  const filteredSections = useMemo(() => {
-    return NAV_SECTIONS
-      .filter((section) => {
-        // Master-only sections require master admin flag
-        if (section.masterOnly && !masterAdmin) return false;
-        return true;
-      })
-      .map((section) => ({
-        ...section,
-        items: section.items.filter((item) => {
-          // Feature-flag check eerst — feature uit = item weg, ongeacht rol
-          if (item.featureFlag && !isFeatureEnabled(item.featureFlag)) {
-            return false;
-          }
-          // Master-only sections: show all items (no permission filtering)
-          if (section.masterOnly) return true;
-          return item.permission === null || rolePermissions.includes(item.permission);
-        }),
-      }))
-      .filter((section) => section.items.length > 0);
-    // featureFlagsVersion triggers re-render when flags are refreshed
-  }, [rolePermissions, masterAdmin, featureFlagsVersion]);
+  const actieveWerkruimte =
+    werkruimtes.find((w) => w.slug === actieveWerkruimteSlug) ?? werkruimtes[0] ?? WERKRUIMTES.vandaag!;
+
+  /* Items van de actieve werkruimte, gefilterd op feature-flags.
+     featureFlagsVersion in de render-scope houdt dit reactief bij flag-refresh. */
+  void featureFlagsVersion;
+  const zichtbareItems = actieveWerkruimte.items.filter(
+    (item) => !item.featureFlag || isFeatureEnabled(item.featureFlag),
+  );
+
+  function wisselWerkruimte(slug: string) {
+    setActieveWerkruimteSlug(slug);
+    if (typeof window !== "undefined") localStorage.setItem("openzorg_werkruimte", slug);
+    const doel = werkruimtes.find((w) => w.slug === slug);
+    if (doel) window.location.href = doel.startRoute;
+  }
 
   /* Close mobile drawer on navigation */
   useEffect(() => {
@@ -308,58 +219,62 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           )}
         </div>
 
-        {/* Nav sections */}
-        <nav className="flex-1 overflow-y-auto px-3 py-2 space-y-5">
-          {filteredSections.map((section, sIdx) => (
-            <div key={section.label}>
-              {/* Section divider (not on first section) */}
-              {sIdx > 0 && !collapsed && (
-                <div
-                  className="mx-2 mb-3 border-t"
-                  style={{ borderColor: "var(--color-sidebar-hover)" }}
-                />
-              )}
-              {!collapsed && (
-                <span
-                  className="block px-2 mb-1.5 text-[0.65rem] font-semibold uppercase tracking-widest"
-                  style={{ color: "var(--color-sidebar-fg-muted)", opacity: 0.6 }}
-                >
-                  {section.label}
-                </span>
-              )}
-              <ul className="space-y-0.5">
-                {section.items.map((item) => {
-                  const active = isActive(item.href);
-                  return (
-                    <li key={item.href}>
-                      <a
-                        href={item.href}
-                        className={`
-                          flex items-center gap-3 rounded-xl px-3 py-2
-                          text-body-sm font-medium transition-colors duration-150
-                          ${collapsed ? "justify-center px-0" : ""}
-                        `}
-                        style={{
-                          color: active ? "var(--color-sidebar-fg)" : "var(--color-sidebar-fg-muted)",
-                          background: active ? "var(--color-sidebar-active)" : undefined,
-                        }}
-                        onMouseEnter={(e) => {
-                          if (!active) e.currentTarget.style.background = "var(--color-sidebar-hover)";
-                        }}
-                        onMouseLeave={(e) => {
-                          if (!active) e.currentTarget.style.background = "";
-                        }}
-                        title={collapsed ? item.label : undefined}
-                      >
-                        <item.icon className="w-[1.125rem] h-[1.125rem] shrink-0 opacity-80" />
-                        {!collapsed && item.label}
-                      </a>
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
-          ))}
+        {/* Werkruimte-switcher (alleen bij meerdere werkruimtes) */}
+        {werkruimtes.length > 1 && !collapsed && (
+          <div className="px-3 pt-1 pb-2">
+            <label htmlFor="werkruimte-kiezer" className="sr-only">
+              Werkruimte wisselen
+            </label>
+            <select
+              id="werkruimte-kiezer"
+              value={actieveWerkruimte.slug}
+              onChange={(e) => wisselWerkruimte(e.target.value)}
+              className="w-full rounded-xl px-3 py-2 text-body-sm font-medium outline-none cursor-pointer"
+              style={{ background: "var(--color-sidebar-active)", color: "var(--color-sidebar-fg)" }}
+            >
+              {werkruimtes.map((w) => (
+                <option key={w.slug} value={w.slug}>
+                  {w.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {/* Nav-items van de actieve werkruimte */}
+        <nav className="flex-1 overflow-y-auto px-3 py-2" aria-label={actieveWerkruimte.label}>
+          <ul className="space-y-0.5">
+            {zichtbareItems.map((item) => {
+              const active = isActive(item.href);
+              const Icoon = ICOON_MAP[item.icon];
+              return (
+                <li key={item.href}>
+                  <a
+                    href={item.href}
+                    className={`
+                      flex items-center gap-3 rounded-xl px-3 py-2
+                      text-body-sm font-medium transition-colors duration-150
+                      ${collapsed ? "justify-center px-0" : ""}
+                    `}
+                    style={{
+                      color: active ? "var(--color-sidebar-fg)" : "var(--color-sidebar-fg-muted)",
+                      background: active ? "var(--color-sidebar-active)" : undefined,
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!active) e.currentTarget.style.background = "var(--color-sidebar-hover)";
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!active) e.currentTarget.style.background = "";
+                    }}
+                    title={collapsed ? item.label : undefined}
+                  >
+                    <Icoon className="w-[1.125rem] h-[1.125rem] shrink-0 opacity-80" />
+                    {!collapsed && item.label}
+                  </a>
+                </li>
+              );
+            })}
+          </ul>
         </nav>
 
         {/* Bottom actions */}
@@ -489,17 +404,6 @@ function IconUsers({ className }: { className?: string }) {
   );
 }
 
-function IconCalendar({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="4" width="18" height="18" rx="2" />
-      <line x1="16" y1="2" x2="16" y2="6" />
-      <line x1="8" y1="2" x2="8" y2="6" />
-      <line x1="3" y1="10" x2="21" y2="10" />
-    </svg>
-  );
-}
-
 function IconCalendarDay({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -605,27 +509,6 @@ function IconMenu({ className }: { className?: string }) {
   );
 }
 
-function IconReceipt({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z" />
-      <path d="M8 7h8M8 11h8M8 15h5" />
-    </svg>
-  );
-}
-
-function IconContract({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-      <polyline points="14 2 14 8 20 8" />
-      <line x1="16" y1="13" x2="8" y2="13" />
-      <line x1="16" y1="17" x2="8" y2="17" />
-      <polyline points="10 9 9 9 8 9" />
-    </svg>
-  );
-}
-
 function IconList({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -648,17 +531,6 @@ function IconClock({ className }: { className?: string }) {
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <circle cx="12" cy="12" r="10" />
       <polyline points="12 6 12 12 16 14" />
-    </svg>
-  );
-}
-
-function IconRepeat({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="17 1 21 5 17 9" />
-      <path d="M3 11V9a4 4 0 0 1 4-4h14" />
-      <polyline points="7 23 3 19 7 15" />
-      <path d="M21 13v2a4 4 0 0 1-4 4H3" />
     </svg>
   );
 }
@@ -717,17 +589,6 @@ function IconChat({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-    </svg>
-  );
-}
-
-function IconExchange({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="17 1 21 5 17 9" />
-      <path d="M3 5h18" />
-      <polyline points="7 23 3 19 7 15" />
-      <path d="M21 19H3" />
     </svg>
   );
 }

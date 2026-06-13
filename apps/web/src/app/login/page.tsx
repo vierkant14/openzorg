@@ -1,8 +1,10 @@
 "use client";
 
+import type { OpenZorgRole } from "@openzorg/shared-domain";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 
+import { startRouteVoorGebruiker } from "../../components/werkruimtes";
 import { refreshFeatureFlags } from "../../lib/features";
 
 const ROLES = [
@@ -65,7 +67,8 @@ function LoginForm() {
       localStorage.setItem("openzorg_user_name", displayName);
 
       // Store role — in production this comes from Medplum PractitionerRole
-      localStorage.setItem("openzorg_role", data.role || role);
+      const effectieveRol = (data.role || role) as OpenZorgRole;
+      localStorage.setItem("openzorg_role", effectieveRol);
 
       // Detect master admin — server checks against master_admins table
       const isMaster = data.isMaster === true;
@@ -75,7 +78,8 @@ function LoginForm() {
       // Fire-and-forget: als het mislukt, faalt de flag-check fail-open.
       void refreshFeatureFlags();
 
-      window.location.href = "/dashboard";
+      // Naar de startroute van de werkruimte die bij deze rol hoort.
+      window.location.href = startRouteVoorGebruiker(effectieveRol, isMaster);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Er ging iets mis");
     } finally {

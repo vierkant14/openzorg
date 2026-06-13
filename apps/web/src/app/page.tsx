@@ -1,17 +1,19 @@
 "use client";
 
+import type { OpenZorgRole } from "@openzorg/shared-domain";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { LogoLockup, LogoMark } from "../components/LogoMark";
-import { isLoggedIn } from "../lib/api";
+import { startRouteVoorGebruiker } from "../components/werkruimtes";
+import { getUserRole, isLoggedIn, isMasterAdmin } from "../lib/api";
 
 export default function HomePage() {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
     if (isLoggedIn()) {
-      window.location.href = "/dashboard";
+      window.location.href = startRouteVoorGebruiker(getUserRole() as OpenZorgRole, isMasterAdmin());
       return;
     }
     setReady(true);
