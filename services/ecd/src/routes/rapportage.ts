@@ -40,13 +40,17 @@ rapportageRoutes.get("/rapportages-overzicht", async (c) => {
 
 /**
  * GET /api/clients/:clientId/rapportages — List clinical notes (Observation resources) for a client.
+ * Honoreert optionele `_count` en `date` (bijv. `date=ge2026-06-01`) query-params,
+ * zodat de AI-samenvatting daadwerkelijk op periode/aantal kan filteren.
  */
 rapportageRoutes.get("/clients/:clientId/rapportages", async (c) => {
   const clientId = c.req.param("clientId");
-  return medplumProxy(
-    c,
-    `/fhir/R4/Observation?subject=Patient/${clientId}&category=social-history&_sort=-date`,
-  );
+  let url = `/fhir/R4/Observation?subject=Patient/${clientId}&category=social-history&_sort=-date`;
+  const count = c.req.query("_count");
+  if (count) url += `&_count=${encodeURIComponent(count)}`;
+  const date = c.req.query("date");
+  if (date) url += `&date=${encodeURIComponent(date)}`;
+  return medplumProxy(c, url);
 });
 
 /**

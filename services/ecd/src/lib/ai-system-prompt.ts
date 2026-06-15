@@ -151,7 +151,7 @@ export async function buildClientContext(c: Context<AppEnv>, clientId: string): 
       medplumFetch(c, `/fhir/R4/Flag?patient=Patient/${clientId}&status=active&_count=5`),
       medplumFetch(c, `/fhir/R4/Immunization?patient=Patient/${clientId}&_count=10&_sort=-date`),
       medplumFetch(c, `/fhir/R4/Condition?patient=Patient/${clientId}&_count=10`),
-      medplumFetch(c, `/fhir/R4/Observation?subject=Patient/${clientId}&code=https://openzorg.nl/CodeSystem/observation-type|rapportage&_count=5&_sort=-date`),
+      medplumFetch(c, `/fhir/R4/Observation?subject=Patient/${clientId}&category=social-history&_count=5&_sort=-date`),
     ]);
 
     const lines: string[] = ["\n## Clientgegevens (uit het dossier)"];
@@ -214,11 +214,6 @@ export async function buildClientContext(c: Context<AppEnv>, clientId: string): 
     }
 
     // Vaccinaties
-    console.log("[AI-Context] vaccRes.ok:", vaccRes.ok, "status:", vaccRes.status);
-    if (!vaccRes.ok) {
-      const errText = await vaccRes.text().catch(() => "?");
-      console.log("[AI-Context] vaccRes error:", errText.substring(0, 200));
-    }
     if (vaccRes.ok) {
       const bundle = (await vaccRes.json()) as { entry?: Array<{ resource: Record<string, unknown> }> };
       const vaccs = (bundle.entry ?? []).map((e) => {

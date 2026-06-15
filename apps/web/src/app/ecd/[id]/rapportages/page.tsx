@@ -1,9 +1,18 @@
 "use client";
 
+import { getExtensionUrl } from "@openzorg/shared-domain";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 import { ecdFetch } from "../../../../lib/api";
+
+/** SOEP-velden met label en bijbehorende extensie-url-sleutel. */
+const SOEP_VELDEN = [
+  { label: "Subjectief", key: "soep-subjectief" },
+  { label: "Objectief", key: "soep-objectief" },
+  { label: "Evaluatie", key: "soep-evaluatie" },
+  { label: "Plan", key: "soep-plan" },
+] as const;
 
 /* -------------------------------------------------------------------------- */
 /*  FHIR types                                                                */
@@ -437,20 +446,21 @@ export default function RapportagesPage() {
               </div>
               {isSoep ? (
                 <dl className="grid gap-1 text-sm">
-                  {(["Subjectief", "Objectief", "Evaluatie", "Plan"] as const).map(
-                    (label, idx) => {
-                      const val = obs.extension?.[idx]?.valueString;
-                      if (!val) return null;
-                      return (
-                        <div key={label} className="flex gap-2">
-                          <dt className="w-20 shrink-0 font-medium text-fg-muted">
-                            {label[0]}
-                          </dt>
-                          <dd className="text-fg">{val}</dd>
-                        </div>
-                      );
-                    },
-                  )}
+                  {SOEP_VELDEN.map(({ label, key }) => {
+                    // Lees op extensie-url, niet op index: de backend schrijft
+                    // alleen ingevulde velden, dus index zou verschuiven.
+                    const url = getExtensionUrl(key);
+                    const val = obs.extension?.find((e) => e.url === url)?.valueString;
+                    if (!val) return null;
+                    return (
+                      <div key={label} className="flex gap-2">
+                        <dt className="w-20 shrink-0 font-medium text-fg-muted">
+                          {label[0]}
+                        </dt>
+                        <dd className="text-fg">{val}</dd>
+                      </div>
+                    );
+                  })}
                 </dl>
               ) : (
                 <p className="text-sm text-fg">{obs.valueString ?? "-"}</p>
