@@ -1,7 +1,7 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 
 import { AiSamenvatting } from "./AiSamenvatting";
 import { RapportageComposer } from "./RapportageComposer";
@@ -67,6 +67,16 @@ export default function RapportagesPage() {
     Boolean(filterDateTo) ||
     Boolean(searchText);
 
+  function wisFilters() {
+    setFilterType("alle");
+    setFilterGoalId("alle");
+    setFilterDateFrom("");
+    setFilterDateTo("");
+    setSearchText("");
+  }
+
+  const filterId = useId();
+
   return (
     <section>
       <div className="mb-4 flex items-center justify-between gap-3">
@@ -88,6 +98,13 @@ export default function RapportagesPage() {
           >
             Filteren
           </button>
+          <button
+            onClick={() => window.print()}
+            className="rounded-lg border border-default px-3 py-1.5 text-sm font-medium text-fg-muted hover:bg-sunken btn-press print:hidden"
+            title="Rapportages afdrukken"
+          >
+            Afdrukken
+          </button>
           <AiSamenvatting clientId={clientId} clientNaam={clientNaam} />
         </div>
       </div>
@@ -95,8 +112,9 @@ export default function RapportagesPage() {
       {showFilters && (
         <div className="mb-4 flex flex-wrap items-end gap-3 rounded-lg border border-default bg-sunken p-3 animate-[fade-in_200ms_ease-out]">
           <div>
-            <label className="mb-1 block text-xs font-medium text-fg-muted">Type</label>
+            <label htmlFor={`${filterId}-type`} className="mb-1 block text-xs font-medium text-fg-muted">Type</label>
             <select
+              id={`${filterId}-type`}
               value={filterType}
               onChange={(e) => setFilterType(e.target.value as "alle" | "soep" | "vrij")}
               className={filterCls}
@@ -108,8 +126,9 @@ export default function RapportagesPage() {
           </div>
           {goals.length > 0 && (
             <div>
-              <label className="mb-1 block text-xs font-medium text-fg-muted">Doel</label>
+              <label htmlFor={`${filterId}-doel`} className="mb-1 block text-xs font-medium text-fg-muted">Doel</label>
               <select
+                id={`${filterId}-doel`}
                 value={filterGoalId}
                 onChange={(e) => setFilterGoalId(e.target.value)}
                 className={filterCls}
@@ -125,8 +144,9 @@ export default function RapportagesPage() {
             </div>
           )}
           <div>
-            <label className="mb-1 block text-xs font-medium text-fg-muted">Van</label>
+            <label htmlFor={`${filterId}-van`} className="mb-1 block text-xs font-medium text-fg-muted">Van</label>
             <input
+              id={`${filterId}-van`}
               type="date"
               value={filterDateFrom}
               onChange={(e) => setFilterDateFrom(e.target.value)}
@@ -134,8 +154,9 @@ export default function RapportagesPage() {
             />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-fg-muted">Tot</label>
+            <label htmlFor={`${filterId}-tot`} className="mb-1 block text-xs font-medium text-fg-muted">Tot</label>
             <input
+              id={`${filterId}-tot`}
               type="date"
               value={filterDateTo}
               onChange={(e) => setFilterDateTo(e.target.value)}
@@ -143,8 +164,9 @@ export default function RapportagesPage() {
             />
           </div>
           <div className="min-w-[200px] flex-1">
-            <label className="mb-1 block text-xs font-medium text-fg-muted">Zoeken</label>
+            <label htmlFor={`${filterId}-zoek`} className="mb-1 block text-xs font-medium text-fg-muted">Zoeken</label>
             <input
+              id={`${filterId}-zoek`}
               type="text"
               value={searchText}
               onChange={(e) => setSearchText(e.target.value)}
@@ -154,13 +176,7 @@ export default function RapportagesPage() {
           </div>
           {heeftActieveFilter && (
             <button
-              onClick={() => {
-                setFilterType("alle");
-                setFilterGoalId("alle");
-                setFilterDateFrom("");
-                setFilterDateTo("");
-                setSearchText("");
-              }}
+              onClick={wisFilters}
               className="pb-1.5 text-xs font-medium text-coral-600 hover:text-coral-800 btn-press"
             >
               Wissen
@@ -177,6 +193,8 @@ export default function RapportagesPage() {
         loading={loading}
         error={error}
         onRetry={reload}
+        heeftActieveFilter={heeftActieveFilter}
+        onWisFilters={wisFilters}
       />
     </section>
   );

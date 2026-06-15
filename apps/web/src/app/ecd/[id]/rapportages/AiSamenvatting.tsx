@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useId, useState } from "react";
 
 import { ecdFetch } from "../../../../lib/api";
 
@@ -30,6 +30,17 @@ export function AiSamenvatting({ clientId, clientNaam }: AiSamenvattingProps) {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<SamenvattingResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const titelId = useId();
+
+  // Sluit de modal met Escape.
+  useEffect(() => {
+    if (!open) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
 
   async function generate() {
     setLoading(true);
@@ -96,12 +107,15 @@ export function AiSamenvatting({ clientId, clientNaam }: AiSamenvattingProps) {
           onClick={() => setOpen(false)}
         >
           <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={titelId}
             onClick={(e) => e.stopPropagation()}
             className="w-full max-w-2xl rounded-2xl border border-default bg-page shadow-xl"
           >
             <div className="border-b border-default p-5">
               <div className="flex items-center justify-between">
-                <h2 className="text-lg font-semibold text-fg">✨ AI samenvatting (lokaal)</h2>
+                <h2 id={titelId} className="text-lg font-semibold text-fg">✨ AI samenvatting (lokaal)</h2>
                 <button
                   onClick={() => setOpen(false)}
                   className="text-xl leading-none text-fg-muted hover:text-fg"
@@ -116,8 +130,8 @@ export function AiSamenvatting({ clientId, clientNaam }: AiSamenvattingProps) {
             </div>
 
             <div className="space-y-4 p-5">
-              <div>
-                <label className="mb-2 block text-xs font-medium text-fg-muted">Doel</label>
+              <div role="radiogroup" aria-label="Doel van de samenvatting">
+                <span className="mb-2 block text-xs font-medium text-fg-muted">Doel</span>
                 <div className="grid grid-cols-3 gap-2">
                   {(
                     [
@@ -128,6 +142,9 @@ export function AiSamenvatting({ clientId, clientNaam }: AiSamenvattingProps) {
                   ).map((opt) => (
                     <button
                       key={opt.v}
+                      type="button"
+                      role="radio"
+                      aria-checked={doel === opt.v}
                       onClick={() => setDoel(opt.v)}
                       className={`rounded-lg border p-3 text-left text-sm btn-press ${
                         doel === opt.v
@@ -161,7 +178,7 @@ export function AiSamenvatting({ clientId, clientNaam }: AiSamenvattingProps) {
               )}
 
               {error && (
-                <div className="rounded-lg border border-coral-200 bg-coral-50 p-3 text-sm text-coral-700 dark:bg-coral-950/20 dark:text-coral-300">
+                <div className="rounded-lg border border-coral-200 bg-coral-50 p-3 text-sm text-coral-700 dark:border-coral-800 dark:bg-coral-900/20 dark:text-coral-300">
                   {error}
                 </div>
               )}

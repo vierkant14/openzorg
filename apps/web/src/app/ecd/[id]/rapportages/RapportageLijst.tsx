@@ -23,6 +23,9 @@ interface RapportageLijstProps {
   loading: boolean;
   error: string | null;
   onRetry: () => void;
+  /** Of er momenteel een filter actief is — bepaalt de lege-staat-tekst. */
+  heeftActieveFilter: boolean;
+  onWisFilters: () => void;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -165,15 +168,28 @@ function RapportageItem({
  * Rapportagelijst, gegroepeerd per kalenderdag met dag-koppen
  * (Vandaag/Gisteren/NL-datum). Toont laad-, fout- en lege staten.
  */
-export function RapportageLijst({ items, goalsById, loading, error, onRetry }: RapportageLijstProps) {
+export function RapportageLijst({
+  items,
+  goalsById,
+  loading,
+  error,
+  onRetry,
+  heeftActieveFilter,
+  onWisFilters,
+}: RapportageLijstProps) {
   if (loading) return <LoadingSkeleton regels={5} />;
   if (error) return <ErrorState melding={error} onOpnieuw={onRetry} />;
   if (items.length === 0) {
-    return (
+    // Onderscheid: niets door een actief filter vs. nog geen rapportages.
+    return heeftActieveFilter ? (
       <EmptyState
-        titel="Nog geen rapportages"
-        uitleg="Schrijf hierboven je eerste rapportage."
+        titel="Geen rapportages met deze filters"
+        uitleg="Pas de filters aan of wis ze om alles te zien."
+        actieLabel="Filters wissen"
+        onActie={onWisFilters}
       />
+    ) : (
+      <EmptyState titel="Nog geen rapportages" uitleg="Schrijf hierboven je eerste rapportage." />
     );
   }
 

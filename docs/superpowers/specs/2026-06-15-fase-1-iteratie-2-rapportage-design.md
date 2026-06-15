@@ -34,7 +34,7 @@ Knab-gevoel (`.impeccable.md`): taak af, weer weg. Warm, snel, minimale frictie.
 - Koppel SOEP-labels aan textareas (`htmlFor`/`id`) — a11y.
 
 ### 4b. Schrijf-flow (de kern — hier wil ik je mening)
-Voorstel: een **persistente, compacte composer bovenaan** (denk: berichtenbalk) i.p.v. een verborgen toggle-formulier. Eén klik op "SOEP" vouwt de vier velden uit; "Vrij" toont één veld. Doel-koppeling als kleine dropdown ernaast. Opslaan = optimistic (verschijnt meteen in de lijst).
+Voorstel: een **persistente, compacte composer bovenaan** (denk: berichtenbalk) i.p.v. een verborgen toggle-formulier. Eén klik op "SOEP" vouwt de vier velden uit; "Vrij" toont één veld. Doel-koppeling als kleine dropdown ernaast. Opslaan = POST + snelle reload; de velden worden direct geleegd zodat het snel voelt. (Echte optimistic insert met rollback is een latere verfijning — bewust gede-scoped in deze slice.)
 
 ### 4c. Lees-flow
 - Tijdlijn van rapportages, **gegroepeerd per dag** (lichte stap richting D-03 dagstructuur) met dag-kop; per item: tijd, type-badge, doel-badge, auteur.
@@ -61,7 +61,7 @@ Per blok leeg/laden/fout/succes, conform de patroonlaag. Lege lijst leert: "Nog 
 
 ## 8. Definition of done
 - Nieuw design toegepast (patroonlaag, splitsing, a11y-fix)
-- Schrijf-flow < 30s, optimistic
+- Schrijf-flow < 30s (POST + snelle reload; echte optimistic update = latere verfijning)
 - Alle vier states per blok
 - Tests: e2e voor vrij én partieel-SOEP-schrijven+teruglezen (lockt de extensie-bug-fix vast); unit waar zinvol
 - Golden-path E2E blijft groen
