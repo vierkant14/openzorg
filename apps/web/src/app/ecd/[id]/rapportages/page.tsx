@@ -8,6 +8,7 @@ import { RapportageComposer } from "./RapportageComposer";
 import { RapportageLijst } from "./RapportageLijst";
 import {
   getGoalIdFromObservation,
+  isSoepRapportage,
   useRapportages,
   type FhirObservation,
 } from "./useRapportages";
@@ -33,8 +34,7 @@ export default function RapportagesPage() {
   const filteredItems = useMemo(
     () =>
       items.filter((obs: FhirObservation) => {
-        const type = obs.code?.text?.toLowerCase() ?? "vrij";
-        const isSoep = type === "soep";
+        const isSoep = isSoepRapportage(obs);
         if (filterType === "soep" && !isSoep) return false;
         if (filterType === "vrij" && isSoep) return false;
         if (filterGoalId !== "alle") {

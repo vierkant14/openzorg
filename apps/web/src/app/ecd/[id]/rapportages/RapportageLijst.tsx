@@ -5,6 +5,7 @@ import { EmptyState, ErrorState, LoadingSkeleton } from "@openzorg/shared-ui";
 
 import {
   getGoalIdFromObservation,
+  isSoepRapportage,
   type FhirGoal,
   type FhirObservation,
 } from "./useRapportages";
@@ -108,8 +109,7 @@ function RapportageItem({
   obs: FhirObservation;
   goalsById: Map<string, FhirGoal>;
 }) {
-  const type = obs.code?.text ?? "vrij";
-  const isSoep = type.toLowerCase() === "soep";
+  const isSoep = isSoepRapportage(obs);
   const goalId = getGoalIdFromObservation(obs);
   const linkedGoal = goalId ? goalsById.get(goalId) : undefined;
 

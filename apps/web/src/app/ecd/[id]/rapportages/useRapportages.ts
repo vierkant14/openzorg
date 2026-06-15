@@ -42,6 +42,15 @@ interface FhirPatient {
 /*  Helpers                                                                   */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * Of een rapportage een SOEP-rapportage is. De backend zet `code.text` op
+ * "SOEP rapportage" of "Vrije rapportage", dus we matchen op het bevatten van
+ * "soep" (een exacte `=== "soep"`-check faalde en toonde SOEP als vrije tekst).
+ */
+export function isSoepRapportage(obs: FhirObservation): boolean {
+  return (obs.code?.text ?? "").toLowerCase().includes("soep");
+}
+
 /** Leest een Goal-id uit het `focus`-veld van een rapportage (Observation). */
 export function getGoalIdFromObservation(obs: FhirObservation): string | undefined {
   const ref = obs.focus?.[0]?.reference;
