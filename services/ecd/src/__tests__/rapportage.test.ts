@@ -115,5 +115,23 @@ describe("Rapportage routes", () => {
     expect(res.status).toBe(200);
     const url = mockFetch.mock.calls[0]?.[0] as string;
     expect(url).toContain("subject=Patient/p1");
+    expect(url).toContain("category=social-history");
+  });
+
+  it("GET passes _count and date filters through to Medplum", async () => {
+    mockFetch.mockResolvedValueOnce(
+      jsonResponse({ resourceType: "Bundle", type: "searchset", entry: [] }),
+    );
+
+    const res = await app.request(
+      "/api/clients/p1/rapportages?_count=50&date=ge2026-06-01",
+      { headers: TENANT_HEADER },
+    );
+
+    expect(res.status).toBe(200);
+    const url = mockFetch.mock.calls[0]?.[0] as string;
+    expect(url).toContain("subject=Patient/p1");
+    expect(url).toContain("_count=50");
+    expect(url).toContain("date=ge2026-06-01");
   });
 });
