@@ -1,8 +1,10 @@
 # Fase 1 — Iteratie 2: Rapportage-slice (design brief / spec)
 
-**Versie**: 0.9 (concept — wacht op Kevin-review)
+**Versie**: 1.0
 **Datum**: 2026-06-15
-**Status**: Concept, ter review
+**Status**: Goedgekeurd door Kevin (2026-06-15)
+
+**Besluiten op de open vragen (§7):** (1) **persistente composer bovenaan**; (2) **groeperen per dag**; (3) **duidelijke "Vat samen"-knop bij de lijst**; (4) **scope = herontwerp + flow nu; D-02/04/07/08 als latere slices**.
 **Relatie**: Eerste verticale slice uit `2026-06-11-production-ready-traject-design.md` Fase 2-volgorde (Rapportage eerst). Bouwt op de shared-ui patroonlaag en het Vandaag-referentiescherm uit Fase 1 iteratie 1.
 
 > **Vooraf al gedaan (los van dit ontwerp):** drie correctheidsbugs in de rapportage-module zijn gefixt in PR #10 (SOEP-extensies op url, AI-context-query, GET _count/date). Dit ontwerp gaat over de UX-/structuur-slag erbovenop.
