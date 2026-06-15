@@ -38,26 +38,21 @@ test.describe("Golden path: zorgmedewerker", () => {
       page.getByRole("heading", { name: /^Rapportages/ }),
     ).toBeVisible({ timeout: 10_000 });
 
-    // 4. Nieuwe rapportage-formulier openen
+    // 4. De composer staat persistent bovenaan (geen "Nieuwe rapportage"-knop meer)
     const uniekeMarker = `E2E_TEST_${Date.now()}`;
-    await page.getByRole("button", { name: "Nieuwe rapportage" }).click();
 
     // Kies type "Vrij" (één textarea, simpelste automatisering)
     await page.getByRole("radio", { name: "Vrij" }).check();
 
-    // Vul het vrije tekstveld (enige textarea in het formulier na Vrij-selectie)
-    const tekstVeld = page.locator("form").getByRole("textbox").first();
+    // Vul het vrije tekstveld via het gekoppelde label
+    const tekstVeld = page.getByLabel("Rapportage", { exact: true });
     await expect(tekstVeld).toBeVisible();
     await tekstVeld.fill(uniekeMarker);
 
     // Opslaan
     await page.getByRole("button", { name: "Opslaan", exact: true }).click();
 
-    // 5. Verifiëren dat de rapportage in de lijst staat
-    // Formulier sluit na succesvol opslaan (showForm = false)
-    await expect(
-      page.getByRole("button", { name: "Nieuwe rapportage" }),
-    ).toBeVisible({ timeout: 15_000 });
+    // 5. Verifiëren dat de rapportage in de lijst verschijnt
     await expect(page.getByText(uniekeMarker)).toBeVisible({ timeout: 15_000 });
   });
 });

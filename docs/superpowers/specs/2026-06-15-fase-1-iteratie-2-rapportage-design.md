@@ -1,8 +1,10 @@
 # Fase 1 — Iteratie 2: Rapportage-slice (design brief / spec)
 
-**Versie**: 0.9 (concept — wacht op Kevin-review)
+**Versie**: 1.0
 **Datum**: 2026-06-15
-**Status**: Concept, ter review
+**Status**: Goedgekeurd door Kevin (2026-06-15)
+
+**Besluiten op de open vragen (§7):** (1) **persistente composer bovenaan**; (2) **groeperen per dag**; (3) **duidelijke "Vat samen"-knop bij de lijst**; (4) **scope = herontwerp + flow nu; D-02/04/07/08 als latere slices**.
 **Relatie**: Eerste verticale slice uit `2026-06-11-production-ready-traject-design.md` Fase 2-volgorde (Rapportage eerst). Bouwt op de shared-ui patroonlaag en het Vandaag-referentiescherm uit Fase 1 iteratie 1.
 
 > **Vooraf al gedaan (los van dit ontwerp):** drie correctheidsbugs in de rapportage-module zijn gefixt in PR #10 (SOEP-extensies op url, AI-context-query, GET _count/date). Dit ontwerp gaat over de UX-/structuur-slag erbovenop.
@@ -32,7 +34,7 @@ Knab-gevoel (`.impeccable.md`): taak af, weer weg. Warm, snel, minimale frictie.
 - Koppel SOEP-labels aan textareas (`htmlFor`/`id`) — a11y.
 
 ### 4b. Schrijf-flow (de kern — hier wil ik je mening)
-Voorstel: een **persistente, compacte composer bovenaan** (denk: berichtenbalk) i.p.v. een verborgen toggle-formulier. Eén klik op "SOEP" vouwt de vier velden uit; "Vrij" toont één veld. Doel-koppeling als kleine dropdown ernaast. Opslaan = optimistic (verschijnt meteen in de lijst).
+Voorstel: een **persistente, compacte composer bovenaan** (denk: berichtenbalk) i.p.v. een verborgen toggle-formulier. Eén klik op "SOEP" vouwt de vier velden uit; "Vrij" toont één veld. Doel-koppeling als kleine dropdown ernaast. Opslaan = POST + snelle reload; de velden worden direct geleegd zodat het snel voelt. (Echte optimistic insert met rollback is een latere verfijning — bewust gede-scoped in deze slice.)
 
 ### 4c. Lees-flow
 - Tijdlijn van rapportages, **gegroepeerd per dag** (lichte stap richting D-03 dagstructuur) met dag-kop; per item: tijd, type-badge, doel-badge, auteur.
@@ -59,7 +61,7 @@ Per blok leeg/laden/fout/succes, conform de patroonlaag. Lege lijst leert: "Nog 
 
 ## 8. Definition of done
 - Nieuw design toegepast (patroonlaag, splitsing, a11y-fix)
-- Schrijf-flow < 30s, optimistic
+- Schrijf-flow < 30s (POST + snelle reload; echte optimistic update = latere verfijning)
 - Alle vier states per blok
 - Tests: e2e voor vrij én partieel-SOEP-schrijven+teruglezen (lockt de extensie-bug-fix vast); unit waar zinvol
 - Golden-path E2E blijft groen
