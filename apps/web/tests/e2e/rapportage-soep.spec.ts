@@ -28,10 +28,10 @@ test.describe("Rapportage: partiële SOEP", () => {
     await clientLink.click();
     await expect(page).toHaveURL(/\/ecd\/[^/]+$/, { timeout: 15_000 });
 
-    // 3. Naar Rapportages-tab
+    // 3. Naar werkgebied "Rapportage" (één sub-tab → direct naar /rapportages)
     await page
       .locator('[role="tablist"]')
-      .getByRole("tab", { name: "Rapportages", exact: true })
+      .getByRole("tab", { name: "Rapportage", exact: true })
       .click();
     await expect(page).toHaveURL(/\/ecd\/[^/]+\/rapportages$/, { timeout: 15_000 });
     await expect(page.getByRole("heading", { name: /^Rapportages/ })).toBeVisible({
