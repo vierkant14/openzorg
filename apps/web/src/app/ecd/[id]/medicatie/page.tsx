@@ -1,7 +1,8 @@
 "use client";
 
+import { EmptyState, ErrorState, LoadingSkeleton } from "@openzorg/shared-ui";
 import { useParams } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useId, useState } from "react";
 
 import { CodelijstPicker } from "../../../../components/CodelijstPicker";
 import { PractitionerPicker } from "../../../../components/PractitionerPicker";
@@ -79,18 +80,6 @@ function medicatieStatusLabel(status?: string): string {
     default:
       return status ?? "Onbekend";
   }
-}
-
-function Spinner() {
-  return (
-    <div className="flex justify-center py-8">
-      <div className="h-6 w-6 animate-spin rounded-full border-4 border-brand-300 border-t-brand-700" />
-    </div>
-  );
-}
-
-function ErrorMsg({ msg }: { msg: string }) {
-  return <p className="my-2 text-sm text-coral-600">{msg}</p>;
 }
 
 export default function MedicatiePage() {
@@ -171,16 +160,19 @@ export default function MedicatiePage() {
         />
       )}
 
-      {loading && <Spinner />}
-      {error && <ErrorMsg msg={error} />}
+      {loading && <LoadingSkeleton regels={5} />}
+      {!loading && error && <ErrorState melding={error} onOpnieuw={load} />}
 
       {!loading && !error && items.length === 0 && (
-        <p className="py-8 text-center text-sm text-fg-subtle">
-          Geen medicatie gevonden.
-        </p>
+        <EmptyState
+          titel="Nog geen medicatie"
+          uitleg="Voeg het eerste voorschrift toe om het medicatieoverzicht op te bouwen."
+          actieLabel="Medicatie toevoegen"
+          onActie={() => { setShowForm(true); setEditingMed(null); }}
+        />
       )}
 
-      {items.length > 0 && (
+      {!loading && !error && items.length > 0 && (
         <div className="overflow-hidden rounded-lg border border-default bg-raised shadow-sm">
           <table className="min-w-full divide-y divide-default text-sm">
             <thead className="bg-page">
@@ -307,6 +299,13 @@ function MedicatieForm({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const naamId = useId();
+  const doseringId = useId();
+  const frequentieId = useId();
+  const periodUnitId = useId();
+  const startdatumId = useId();
+  const einddatumId = useId();
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
@@ -369,10 +368,11 @@ function MedicatieForm({
     >
       <div className="grid gap-3 sm:grid-cols-2">
         <div>
-          <label className="mb-1 block text-sm font-medium text-fg-muted">
+          <label htmlFor={naamId} className="mb-1 block text-sm font-medium text-fg-muted">
             Medicatienaam <span className="text-coral-500">*</span>
           </label>
           <CodelijstPicker
+            id={naamId}
             type="medicatie"
             value={naam}
             onChange={(display) => setNaam(display)}
@@ -384,8 +384,9 @@ function MedicatieForm({
           </p>
         </div>
         <div>
-          <label className="mb-1 block text-sm font-medium text-fg-muted">Dosering</label>
+          <label htmlFor={doseringId} className="mb-1 block text-sm font-medium text-fg-muted">Dosering</label>
           <input
+            id={doseringId}
             type="text"
             value={dosering}
             onChange={(e) => setDosering(e.target.value)}
@@ -397,16 +398,19 @@ function MedicatieForm({
 
       <div className="mt-3 grid gap-3 sm:grid-cols-4">
         <div>
-          <label className="mb-1 block text-sm font-medium text-fg-muted">Frequentie</label>
+          <label htmlFor={frequentieId} className="mb-1 block text-sm font-medium text-fg-muted">Frequentie</label>
           <div className="flex gap-2">
             <input
+              id={frequentieId}
               type="number"
               min="1"
               value={frequentie}
               onChange={(e) => setFrequentie(e.target.value)}
               className="w-20 rounded-md border border-default px-3 py-2 text-sm shadow-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
             />
+            <label htmlFor={periodUnitId} className="sr-only">Periode</label>
             <select
+              id={periodUnitId}
               value={periodUnit}
               onChange={(e) => setPeriodUnit(e.target.value)}
               className="rounded-md border border-default px-3 py-2 text-sm shadow-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
@@ -426,8 +430,9 @@ function MedicatieForm({
           />
         </div>
         <div>
-          <label className="mb-1 block text-sm font-medium text-fg-muted">Startdatum</label>
+          <label htmlFor={startdatumId} className="mb-1 block text-sm font-medium text-fg-muted">Startdatum</label>
           <input
+            id={startdatumId}
             type="date"
             value={startdatum}
             onChange={(e) => setStartdatum(e.target.value)}
@@ -435,8 +440,9 @@ function MedicatieForm({
           />
         </div>
         <div>
-          <label className="mb-1 block text-sm font-medium text-fg-muted">Einddatum</label>
+          <label htmlFor={einddatumId} className="mb-1 block text-sm font-medium text-fg-muted">Einddatum</label>
           <input
+            id={einddatumId}
             type="date"
             value={einddatum}
             onChange={(e) => setEinddatum(e.target.value)}

@@ -1,7 +1,8 @@
 "use client";
 
+import { EmptyState, ErrorState, LoadingSkeleton } from "@openzorg/shared-ui";
 import { useParams } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useId, useState } from "react";
 
 import { ecdFetch } from "../../../../lib/api";
 
@@ -52,18 +53,6 @@ function formatDateTime(iso?: string): string {
   }
 }
 
-function Spinner() {
-  return (
-    <div className="flex justify-center py-8">
-      <div className="h-6 w-6 animate-spin rounded-full border-4 border-brand-300 border-t-brand-700" />
-    </div>
-  );
-}
-
-function ErrorMsg({ msg }: { msg: string }) {
-  return <p className="my-2 text-sm text-coral-600">{msg}</p>;
-}
-
 function ToedieningForm({
   clientId,
   medicatieList,
@@ -81,6 +70,11 @@ function ToedieningForm({
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const medicamentId = useId();
+  const datumId = useId();
+  const statusId = useId();
+  const redenId = useId();
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -105,12 +99,12 @@ function ToedieningForm({
   return (
     <form onSubmit={handleSubmit} className="mb-5 rounded-lg border border-default bg-raised p-5 shadow-sm">
       <h3 className="mb-4 font-semibold text-fg">Toediening registreren</h3>
-      {error && <ErrorMsg msg={error} />}
+      {error && <p className="my-2 text-sm text-coral-600">{error}</p>}
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
-          <label className="mb-1 block text-sm font-medium text-fg-muted">Medicament</label>
-          <select value={medicatieRequestId} onChange={(e) => setMedicatieRequestId(e.target.value)} className={inputCls}>
+          <label htmlFor={medicamentId} className="mb-1 block text-sm font-medium text-fg-muted">Medicament</label>
+          <select id={medicamentId} value={medicatieRequestId} onChange={(e) => setMedicatieRequestId(e.target.value)} className={inputCls}>
             <option value="">— Kies uit actieve medicatie —</option>
             {medicatieList.map((m) => (
               <option key={m.id} value={m.id ?? ""}>
@@ -121,13 +115,13 @@ function ToedieningForm({
         </div>
 
         <div>
-          <label className="mb-1 block text-sm font-medium text-fg-muted">Datum & tijd</label>
-          <input type="datetime-local" value={toedieningsdatum} onChange={(e) => setToedieningsdatum(e.target.value)} className={inputCls} />
+          <label htmlFor={datumId} className="mb-1 block text-sm font-medium text-fg-muted">Datum & tijd</label>
+          <input id={datumId} type="datetime-local" value={toedieningsdatum} onChange={(e) => setToedieningsdatum(e.target.value)} className={inputCls} />
         </div>
 
         <div>
-          <label className="mb-1 block text-sm font-medium text-fg-muted">Status</label>
-          <select value={status} onChange={(e) => setStatus(e.target.value as "completed" | "not-done")} className={inputCls}>
+          <label htmlFor={statusId} className="mb-1 block text-sm font-medium text-fg-muted">Status</label>
+          <select id={statusId} value={status} onChange={(e) => setStatus(e.target.value as "completed" | "not-done")} className={inputCls}>
             <option value="completed">Toegediend</option>
             <option value="not-done">Niet gegeven</option>
           </select>
@@ -135,8 +129,8 @@ function ToedieningForm({
 
         {status === "not-done" && (
           <div>
-            <label className="mb-1 block text-sm font-medium text-fg-muted">Reden niet gegeven</label>
-            <input type="text" value={reden} onChange={(e) => setReden(e.target.value)} className={inputCls} placeholder="bijv. client weigert" />
+            <label htmlFor={redenId} className="mb-1 block text-sm font-medium text-fg-muted">Reden niet gegeven</label>
+            <input id={redenId} type="text" value={reden} onChange={(e) => setReden(e.target.value)} className={inputCls} placeholder="bijv. client weigert" />
           </div>
         )}
       </div>
@@ -212,13 +206,19 @@ export default function ToedieningPage() {
         />
       )}
 
-      {loading && <Spinner />}
-      {error && <ErrorMsg msg={error} />}
+      {loading && <LoadingSkeleton regels={4} />}
+      {!loading && error && <ErrorState melding={error} onOpnieuw={load} />}
 
       {!loading && !error && items.length === 0 && (
-        <p className="py-8 text-center text-sm text-fg-subtle">Nog geen toedienregistraties.</p>
+        <EmptyState
+          titel="Nog geen toedienregistraties"
+          uitleg="Registreer de eerste toediening om de toedienhistorie op te bouwen."
+          actieLabel="Registreer toediening"
+          onActie={() => setShowForm(true)}
+        />
       )}
 
+      {!loading && !error && items.length > 0 && (
       <ul className="space-y-3">
         {items.map((item, i) => {
           const st = item.status ?? "completed";
@@ -254,6 +254,7 @@ export default function ToedieningPage() {
           );
         })}
       </ul>
+      )}
     </section>
   );
 }
