@@ -1,7 +1,8 @@
 "use client";
 
+import { EmptyState, ErrorState, LoadingSkeleton } from "@openzorg/shared-ui";
 import { useParams } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useId, useState } from "react";
 
 import { ecdFetch } from "../../../../lib/api";
 
@@ -46,18 +47,6 @@ function formatDate(iso?: string): string {
   }
 }
 
-function Spinner() {
-  return (
-    <div className="flex justify-center py-8">
-      <div className="h-6 w-6 animate-spin rounded-full border-4 border-brand-300 border-t-brand-700" />
-    </div>
-  );
-}
-
-function ErrorMsg({ msg }: { msg: string }) {
-  return <p className="my-2 text-sm text-coral-600">{msg}</p>;
-}
-
 export default function MedicatieOverzichtPage() {
   const params = useParams<{ id: string }>();
   const clientId = params?.id ?? "";
@@ -78,6 +67,14 @@ export default function MedicatieOverzichtPage() {
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const medicijnNaamId = useId();
+  const doseringId = useId();
+  const frequentieId = useId();
+  const routeId = useId();
+  const startdatumId = useId();
+  const statusId = useId();
+  const opmerkingId = useId();
 
   const load = useCallback(() => {
     setLoading(true);
@@ -174,39 +171,39 @@ export default function MedicatieOverzichtPage() {
       {showForm && (
         <form onSubmit={handleSubmit} className="mb-5 rounded-lg border border-default bg-raised p-5 shadow-sm">
           <h3 className="mb-4 font-semibold text-fg">{editingItem ? "Medicatie bewerken" : "Nieuwe medicatie"}</h3>
-          {formError && <ErrorMsg msg={formError} />}
+          {formError && <p className="my-2 text-sm text-coral-600">{formError}</p>}
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
-              <label className="mb-1 block text-sm font-medium text-fg-muted">Medicijn naam *</label>
-              <input type="text" value={medicijnNaam} onChange={(e) => setMedicijnNaam(e.target.value)} required placeholder="bijv. Paracetamol 500mg" className={inputCls} />
+              <label htmlFor={medicijnNaamId} className="mb-1 block text-sm font-medium text-fg-muted">Medicijn naam *</label>
+              <input id={medicijnNaamId} type="text" value={medicijnNaam} onChange={(e) => setMedicijnNaam(e.target.value)} required placeholder="bijv. Paracetamol 500mg" className={inputCls} />
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium text-fg-muted">Dosering *</label>
-              <input type="text" value={dosering} onChange={(e) => setDosering(e.target.value)} required placeholder="bijv. 2 tabletten" className={inputCls} />
+              <label htmlFor={doseringId} className="mb-1 block text-sm font-medium text-fg-muted">Dosering *</label>
+              <input id={doseringId} type="text" value={dosering} onChange={(e) => setDosering(e.target.value)} required placeholder="bijv. 2 tabletten" className={inputCls} />
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium text-fg-muted">Frequentie *</label>
-              <input type="text" value={frequentie} onChange={(e) => setFrequentie(e.target.value)} required placeholder="bijv. 3x per dag" className={inputCls} />
+              <label htmlFor={frequentieId} className="mb-1 block text-sm font-medium text-fg-muted">Frequentie *</label>
+              <input id={frequentieId} type="text" value={frequentie} onChange={(e) => setFrequentie(e.target.value)} required placeholder="bijv. 3x per dag" className={inputCls} />
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium text-fg-muted">Toedieningsweg *</label>
-              <select value={route} onChange={(e) => setRoute(e.target.value)} required className={inputCls}>
+              <label htmlFor={routeId} className="mb-1 block text-sm font-medium text-fg-muted">Toedieningsweg *</label>
+              <select id={routeId} value={route} onChange={(e) => setRoute(e.target.value)} required className={inputCls}>
                 {MEDICATIE_ROUTES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
               </select>
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium text-fg-muted">Startdatum *</label>
-              <input type="date" value={startdatum} onChange={(e) => setStartdatum(e.target.value)} required className={inputCls} />
+              <label htmlFor={startdatumId} className="mb-1 block text-sm font-medium text-fg-muted">Startdatum *</label>
+              <input id={startdatumId} type="date" value={startdatum} onChange={(e) => setStartdatum(e.target.value)} required className={inputCls} />
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium text-fg-muted">Status *</label>
-              <select value={status} onChange={(e) => setStatus(e.target.value)} required className={inputCls}>
+              <label htmlFor={statusId} className="mb-1 block text-sm font-medium text-fg-muted">Status *</label>
+              <select id={statusId} value={status} onChange={(e) => setStatus(e.target.value)} required className={inputCls}>
                 {MEDICATIE_STATUSSEN.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
               </select>
             </div>
             <div className="sm:col-span-2">
-              <label className="mb-1 block text-sm font-medium text-fg-muted">Opmerking</label>
-              <textarea rows={2} value={opmerking} onChange={(e) => setOpmerking(e.target.value)} placeholder="Aanvullende opmerkingen" className={inputCls} />
+              <label htmlFor={opmerkingId} className="mb-1 block text-sm font-medium text-fg-muted">Opmerking</label>
+              <textarea id={opmerkingId} rows={2} value={opmerking} onChange={(e) => setOpmerking(e.target.value)} placeholder="Aanvullende opmerkingen" className={inputCls} />
             </div>
           </div>
           <div className="mt-4 flex justify-end gap-2">
@@ -223,14 +220,19 @@ export default function MedicatieOverzichtPage() {
         </form>
       )}
 
-      {loading && <Spinner />}
-      {error && <ErrorMsg msg={error} />}
+      {loading && <LoadingSkeleton regels={5} />}
+      {!loading && error && <ErrorState melding={error} onOpnieuw={load} />}
 
       {!loading && !error && items.length === 0 && (
-        <p className="py-8 text-center text-sm text-fg-subtle">Geen medicatie gevonden.</p>
+        <EmptyState
+          titel="Nog geen medicatie"
+          uitleg="Voeg de eerste medicatie toe om het overzicht op te bouwen."
+          actieLabel="Medicatie toevoegen"
+          onActie={() => { setShowForm(true); setEditingItem(null); resetForm(); }}
+        />
       )}
 
-      {items.length > 0 && (
+      {!loading && !error && items.length > 0 && (
         <div className="overflow-hidden rounded-lg border border-default bg-raised shadow-sm">
           <table className="min-w-full divide-y divide-default text-sm">
             <thead className="bg-page">
