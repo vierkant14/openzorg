@@ -40,9 +40,11 @@ export async function workflowFetch<T = unknown>(
 
     if (!res.ok) {
       if (res.status === 401 && typeof window !== "undefined") {
-        localStorage.removeItem("openzorg_token");
-        localStorage.removeItem("openzorg_tenant_id");
-        window.location.href = "/login?expired=1";
+        if (!window.location.pathname.startsWith("/login")) {
+          localStorage.removeItem("openzorg_token");
+          localStorage.removeItem("openzorg_tenant_id");
+          window.location.href = "/login?expired=1";
+        }
         return { data: null, error: "Sessie verlopen", status: 401 };
       }
       const issues = body?.issue as Array<{ diagnostics?: string }> | undefined;
@@ -70,10 +72,20 @@ function getTenantId(): string {
 
 function getAuthHeaders(): Record<string, string> {
   if (typeof window !== "undefined") {
+    const headers: Record<string, string> = {};
     const token = localStorage.getItem("openzorg_token");
     if (token) {
-      return { Authorization: `Bearer ${token}` };
+      headers["Authorization"] = `Bearer ${token}`;
     }
+    const role = localStorage.getItem("openzorg_role");
+    if (role) {
+      headers["X-User-Role"] = role;
+    }
+    const userId = localStorage.getItem("openzorg_user_id");
+    if (userId) {
+      headers["X-User-Id"] = userId;
+    }
+    return headers;
   }
   return {};
 }
