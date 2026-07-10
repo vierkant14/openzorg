@@ -5,7 +5,7 @@ import { getRoleDefinition } from "@openzorg/shared-domain";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
-import { clearSession, getUserRole, isMasterAdmin, isLoggedIn } from "../lib/api";
+import { clearSession, getRoleSource, getUserRole, isMasterAdmin, isLoggedIn } from "../lib/api";
 import { isFeatureEnabled } from "../lib/features";
 
 import { ChatPanel, useAiChatAvailable } from "./ChatPanel";
@@ -356,7 +356,17 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           <div className="flex items-center gap-3 ml-4">
             <div className="text-right hidden sm:block">
               <p className="text-body-sm font-medium text-fg">{userName}</p>
-              <p className="text-caption text-fg-subtle">{roleDef.displayName}</p>
+              <p className="text-caption text-fg-subtle">
+                {roleDef.displayName}
+                {typeof window !== "undefined" && getRoleSource() === "demo" && (
+                  <span
+                    className="ml-1.5 inline-flex items-center rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 dark:bg-amber-950/30 dark:text-amber-300"
+                    title="Deze rol komt uit de demo-rolkeuze bij het inloggen, niet uit een gekoppeld medewerkersprofiel."
+                  >
+                    demo-rol
+                  </span>
+                )}
+              </p>
             </div>
             <div className="w-9 h-9 rounded-full bg-brand-100 dark:bg-brand-900 flex items-center justify-center">
               <span className="text-body-sm font-bold text-brand-700 dark:text-brand-300">{userInitials}</span>

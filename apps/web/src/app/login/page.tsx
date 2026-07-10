@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 
 import { startRouteVoorGebruiker } from "../../components/werkruimtes";
+import { haalMe, setIdentiteit } from "../../lib/api";
 import { refreshFeatureFlags } from "../../lib/features";
 
 const ROLES = [
@@ -66,9 +67,20 @@ function LoginForm() {
       const displayName = data.profile?.display || email.split("@")[0] || "Gebruiker";
       localStorage.setItem("openzorg_user_name", displayName);
 
-      // Store role — in production this comes from Medplum PractitionerRole
-      const effectieveRol = (data.role || role) as OpenZorgRole;
-      localStorage.setItem("openzorg_role", effectieveRol);
+      // Identiteitslaag (ME-01): serverrol uit /api/me wint van de demo-
+      // rolkeuze in het formulier. Zonder gekoppelde Practitioner-rol vallen
+      // we terug op de formulierkeuze en markeren de sessie als demo-modus.
+      const me = await haalMe();
+      let effectieveRol: OpenZorgRole;
+      if (me?.rol) {
+        setIdentiteit(me);
+        effectieveRol = me.rol as OpenZorgRole;
+      } else {
+        if (me) setIdentiteit(me); // bewaart practitionerId/naam indien aanwezig
+        else localStorage.setItem("openzorg_role_source", "demo");
+        effectieveRol = (data.role || role) as OpenZorgRole;
+        localStorage.setItem("openzorg_role", effectieveRol);
+      }
 
       // Detect master admin — server checks against master_admins table
       const isMaster = data.isMaster === true;

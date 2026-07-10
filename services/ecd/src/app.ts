@@ -27,6 +27,7 @@ import { indicatieRoutes } from "./routes/indicaties.js";
 import { integratieRoutes } from "./routes/integraties.js";
 import { masterAdminRoutes } from "./routes/master-admins.js";
 import { mdoRoutes } from "./routes/mdo.js";
+import { meRoutes } from "./routes/me.js";
 import { medewerkerRoutes } from "./routes/medewerkers.js";
 import { medicatieOverzichtRoutes } from "./routes/medicatie-overzicht.js";
 import { medicatieRoutes } from "./routes/medicatie.js";
@@ -89,6 +90,9 @@ app.get("/api/status", (c) => {
     status: "ok",
   });
 });
+
+// Identiteitslaag: ingelogde gebruiker → Practitioner + rol (ME-01)
+app.route("/api", meRoutes);
 
 // Client (Patient) CRUD
 app.route("/api/clients", clientRoutes);
