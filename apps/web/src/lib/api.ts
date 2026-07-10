@@ -43,10 +43,13 @@ export async function ecdFetch<T = unknown>(
     }
 
     if (!res.ok) {
-      // Auto-redirect to login on 401 (expired token)
+      // Auto-redirect to login on 401 (expired token) — behalve op de
+      // login-pagina zelf (voorkomt een reload-loop tijdens het inloggen)
       if (res.status === 401 && typeof window !== "undefined") {
-        clearSession();
-        window.location.href = "/login?expired=1";
+        if (!window.location.pathname.startsWith("/login")) {
+          clearSession();
+          window.location.href = "/login?expired=1";
+        }
         return { data: null, error: "Sessie verlopen, opnieuw inloggen", status: 401 };
       }
 
@@ -98,6 +101,10 @@ function getAuthHeaders(): Record<string, string> {
     if (role) {
       headers["X-User-Role"] = role;
     }
+    const userId = localStorage.getItem("openzorg_user_id");
+    if (userId) {
+      headers["X-User-Id"] = userId;
+    }
     return headers;
   }
   return {};
@@ -115,6 +122,8 @@ export function clearSession(): void {
   localStorage.removeItem("openzorg_token");
   localStorage.removeItem("openzorg_tenant_id");
   localStorage.removeItem("openzorg_role");
+  localStorage.removeItem("openzorg_role_source");
+  localStorage.removeItem("openzorg_user_id");
   localStorage.removeItem("openzorg_user_name");
   localStorage.removeItem("openzorg_project_name");
 }
@@ -127,6 +136,56 @@ export function isLoggedIn(): boolean {
 export function getUserRole(): string {
   if (typeof window === "undefined") return "zorgmedewerker";
   return localStorage.getItem("openzorg_role") || "zorgmedewerker";
+}
+
+/* ---------- Identiteitslaag (ME-01) ---------- */
+
+export interface MeInfo {
+  practitionerId: string | null;
+  naam: string | null;
+  rol: string | null;
+  projectId: string | null;
+}
+
+/** Haalt de server-identiteit op (login → Practitioner + rol). Null bij fout. */
+export async function haalMe(): Promise<MeInfo | null> {
+  const { data, error } = await ecdFetch<MeInfo>("/api/me");
+  if (error || !data) return null;
+  return data;
+}
+
+/**
+ * Slaat de server-identiteit op. De serverrol wint van de demo-rolkeuze;
+ * zonder serverrol blijft de bestaande rol staan en markeren we de sessie
+ * als demo-modus (zichtbaar in het AppShell-gebruikersblok).
+ */
+export function setIdentiteit(me: MeInfo): void {
+  if (me.practitionerId) {
+    localStorage.setItem("openzorg_user_id", me.practitionerId);
+  } else {
+    localStorage.removeItem("openzorg_user_id");
+  }
+  if (me.naam) {
+    localStorage.setItem("openzorg_user_name", me.naam);
+  }
+  if (me.rol) {
+    localStorage.setItem("openzorg_role", me.rol);
+    localStorage.setItem("openzorg_role_source", "server");
+  } else {
+    localStorage.setItem("openzorg_role_source", "demo");
+  }
+}
+
+/** Practitioner-ID van de ingelogde gebruiker, of null (geen koppeling). */
+export function getUserId(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem("openzorg_user_id");
+}
+
+/** Komt de rol van de server ("server") of uit de demo-rolkeuze ("demo")? */
+export function getRoleSource(): "server" | "demo" {
+  if (typeof window === "undefined") return "demo";
+  return localStorage.getItem("openzorg_role_source") === "server" ? "server" : "demo";
 }
 
 export function isMasterAdmin(): boolean {
