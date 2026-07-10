@@ -3,10 +3,21 @@ import { expect, type Page } from "@playwright/test";
 export async function login(
   page: Page,
   user: { email: string; password: string },
+  opties?: { rol?: string },
 ): Promise<void> {
   await page.goto("/login");
   await page.getByLabel(/e-?mail/i).fill(user.email);
   await page.getByLabel(/wachtwoord/i).fill(user.password);
+
+  // Demo-rolkeuze (zolang accounts geen server-rol hebben; verdwijnt in W3).
+  // De rol-select is alleen aanwezig zolang de identiteitslaag geen rol geeft.
+  if (opties?.rol) {
+    const rolSelect = page.getByLabel("Rol", { exact: true });
+    if (await rolSelect.isVisible().catch(() => false)) {
+      await rolSelect.selectOption(opties.rol);
+    }
+  }
+
   await page.getByRole("button", { name: /inloggen|aanmelden/i }).click();
 
   // Login slaagt als we van /login wegnavigeren

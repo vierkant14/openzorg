@@ -8,6 +8,7 @@ import type { FeatureFlagSlug } from "../lib/features";
  */
 export type WerkruimteIcoon =
   | "vandaag"
+  | "werkbak"
   | "clienten"
   | "berichten"
   | "rooster"
@@ -56,6 +57,7 @@ export const WERKRUIMTES: Record<string, Werkruimte> = {
     startRoute: "/vandaag",
     items: [
       { href: "/vandaag", label: "Vandaag", icon: "vandaag" },
+      { href: "/werkbak", label: "Werkbak", icon: "werkbak", featureFlag: "workflow-engine" },
       { href: "/ecd", label: "Cliënten", icon: "clienten" },
       { href: "/berichten", label: "Berichten", icon: "berichten" },
     ],
@@ -65,10 +67,12 @@ export const WERKRUIMTES: Record<string, Werkruimte> = {
     label: "Rooster",
     startRoute: "/planning/rooster",
     items: [
+      // Werkbak verving "Medewerkers" (max-5-regel; medewerkers blijft via
+      // directe URL en de organisatie-werkruimte bereikbaar) — spec §8 punt 3.
       { href: "/planning/rooster", label: "Rooster", icon: "rooster" },
       { href: "/planning/dagplanning", label: "Dagplanning", icon: "dagplanning" },
       { href: "/planning/wachtlijst", label: "Wachtlijst", icon: "wachtlijst" },
-      { href: "/admin/medewerkers", label: "Medewerkers", icon: "medewerkers" },
+      { href: "/werkbak", label: "Werkbak", icon: "werkbak", featureFlag: "workflow-engine" },
       { href: "/berichten", label: "Berichten", icon: "berichten" },
     ],
   },
@@ -77,8 +81,10 @@ export const WERKRUIMTES: Record<string, Werkruimte> = {
     label: "Team",
     startRoute: "/dashboard",
     items: [
+      // Werkbak verving "Cliënten" (max-5-regel; cliënten blijft via /ecd en
+      // het dashboard bereikbaar) — spec §8 punt 3.
       { href: "/dashboard", label: "Overzicht", icon: "overzicht" },
-      { href: "/ecd", label: "Cliënten", icon: "clienten" },
+      { href: "/werkbak", label: "Werkbak", icon: "werkbak", featureFlag: "workflow-engine" },
       { href: "/mic-meldingen", label: "MIC-meldingen", icon: "mic" },
       { href: "/signaleringen", label: "Signaleringen", icon: "signaleringen" },
       { href: "/berichten", label: "Berichten", icon: "berichten" },

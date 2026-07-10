@@ -5,6 +5,7 @@ import { logger } from "hono/logger";
 import { authMiddleware } from "./middleware/auth.js";
 import { tenantMiddleware } from "./middleware/tenant.js";
 import { bpmnTemplateRoutes } from "./routes/bpmn-templates.js";
+import { catalogusRoutes } from "./routes/catalogus.js";
 import { healthRoutes } from "./routes/health.js";
 import { processenRoutes } from "./routes/processen.js";
 import { takenRoutes } from "./routes/taken.js";
@@ -49,3 +50,6 @@ app.route("/api/taken", takenRoutes);
 
 // BPMN templates
 app.route("/api/bpmn-templates", bpmnTemplateRoutes);
+
+// Proces-catalogus (domeintaal, Laag 1 ⊕ Laag 2)
+app.route("/api/catalogus", catalogusRoutes);
