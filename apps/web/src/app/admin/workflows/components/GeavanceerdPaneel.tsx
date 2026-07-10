@@ -39,9 +39,14 @@ export function GeavanceerdPaneel({ definities, dmnBeschikbaar }: GeavanceerdPan
             href="/admin/workflows/dmn"
             className="rounded-xl border border-default bg-raised p-5 transition-shadow duration-200 hover:shadow-md"
           >
-            <h3 className="text-base font-semibold text-fg">Beslisregels</h3>
+            <div className="flex items-center gap-2">
+              <h3 className="text-base font-semibold text-fg">Beslisregels</h3>
+              <span className="inline-flex items-center rounded bg-amber-50 px-1.5 py-0.5 text-xs font-semibold text-amber-700 dark:bg-amber-950/30 dark:text-amber-300">
+                Experimenteel
+              </span>
+            </div>
             <p className="mt-1 text-sm text-fg-muted">
-              Beslistabellen (DMN) voor automatische keuzes binnen een zorgpad.
+              Beslistabellen (DMN) verkennen. Opslaan naar de proces-engine staat op de roadmap.
             </p>
           </Link>
         )}

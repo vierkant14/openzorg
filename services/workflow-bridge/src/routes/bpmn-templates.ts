@@ -2,6 +2,7 @@ import { Hono } from "hono";
 
 import type { AppEnv } from "../app.js";
 import { writeWorkflowAudit } from "../lib/audit.js";
+import { genereerDi } from "../lib/bpmn-di.js";
 import { deployProcess } from "../lib/flowable-client.js";
 
 export const bpmnTemplateRoutes = new Hono<AppEnv>();
@@ -209,6 +210,7 @@ function getZorgplanEvaluatieBpmn(): string {
              xmlns:flowable="http://flowable.org/bpmn"
              xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
              xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI"
              targetNamespace="http://openzorg.nl/bpmn"
              id="zorgplanEvaluatieDefinitions">
 
@@ -273,11 +275,30 @@ function getZorgplanEvaluatieBpmn(): string {
 
   </process>
 
-  <bpmndi:BPMNDiagram id="BPMNDiagram_zorgplanEval">
-    <bpmndi:BPMNPlane bpmnElement="zorgplan-evaluatie" id="BPMNPlane_zorgplanEval">
-      <bpmndi:BPMNShape bpmnElement="start" id="BPMNShape_start"><omgdc:Bounds x="100" y="200" width="36" height="36" /></bpmndi:BPMNShape>
-    </bpmndi:BPMNPlane>
-  </bpmndi:BPMNDiagram>
+${genereerDi(
+    "zorgplan-evaluatie",
+    [
+      { id: "start", type: "event", kolom: 0 },
+      { id: "voorbereiding", type: "task", kolom: 1 },
+      { id: "mdoPlannen", type: "task", kolom: 2 },
+      { id: "mdoUitvoeren", type: "task", kolom: 3 },
+      { id: "evaluatieVastleggen", type: "task", kolom: 4 },
+      { id: "bijstellingGateway", type: "gateway", kolom: 5 },
+      { id: "endEvaluatie", type: "event", kolom: 6 },
+      { id: "zorgplanBijstellen", type: "task", kolom: 6, rij: 1 },
+      { id: "endBijgesteld", type: "event", kolom: 7, rij: 1 },
+    ],
+    [
+      { id: "f1", van: "start", naar: "voorbereiding" },
+      { id: "f2", van: "voorbereiding", naar: "mdoPlannen" },
+      { id: "f3", van: "mdoPlannen", naar: "mdoUitvoeren" },
+      { id: "f4", van: "mdoUitvoeren", naar: "evaluatieVastleggen" },
+      { id: "f5", van: "evaluatieVastleggen", naar: "bijstellingGateway" },
+      { id: "f6-nee", van: "bijstellingGateway", naar: "endEvaluatie" },
+      { id: "f6-ja", van: "bijstellingGateway", naar: "zorgplanBijstellen" },
+      { id: "f7", van: "zorgplanBijstellen", naar: "endBijgesteld" },
+    ],
+  )}
 
 </definitions>`;
 }
@@ -296,6 +317,7 @@ function getHerindicatieBpmn(): string {
              xmlns:flowable="http://flowable.org/bpmn"
              xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
              xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI"
              targetNamespace="http://openzorg.nl/bpmn"
              id="herindicatieDefinitions">
 
@@ -352,11 +374,28 @@ function getHerindicatieBpmn(): string {
 
   </process>
 
-  <bpmndi:BPMNDiagram id="BPMNDiagram_herindicatie">
-    <bpmndi:BPMNPlane bpmnElement="herindicatie" id="BPMNPlane_herindicatie">
-      <bpmndi:BPMNShape bpmnElement="start" id="BPMNShape_start"><omgdc:Bounds x="100" y="200" width="36" height="36" /></bpmndi:BPMNShape>
-    </bpmndi:BPMNPlane>
-  </bpmndi:BPMNDiagram>
+${genereerDi(
+    "herindicatie",
+    [
+      { id: "start", type: "event", kolom: 0 },
+      { id: "signaleringControleren", type: "task", kolom: 1 },
+      { id: "nodigGateway", type: "gateway", kolom: 2 },
+      { id: "gegevensActualiseren", type: "task", kolom: 3 },
+      { id: "aanvraagIndienen", type: "task", kolom: 4 },
+      { id: "besluitVerwerken", type: "task", kolom: 5 },
+      { id: "endVerwerkt", type: "event", kolom: 6 },
+      { id: "endNietNodig", type: "event", kolom: 3, rij: 1 },
+    ],
+    [
+      { id: "f1", van: "start", naar: "signaleringControleren" },
+      { id: "f2", van: "signaleringControleren", naar: "nodigGateway" },
+      { id: "f3-ja", van: "nodigGateway", naar: "gegevensActualiseren" },
+      { id: "f3-nee", van: "nodigGateway", naar: "endNietNodig" },
+      { id: "f4", van: "gegevensActualiseren", naar: "aanvraagIndienen" },
+      { id: "f5", van: "aanvraagIndienen", naar: "besluitVerwerken" },
+      { id: "f6", van: "besluitVerwerken", naar: "endVerwerkt" },
+    ],
+  )}
 
 </definitions>`;
 }
@@ -374,6 +413,7 @@ function getMicAfhandelingBpmn(): string {
              xmlns:flowable="http://flowable.org/bpmn"
              xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
              xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI"
              targetNamespace="http://openzorg.nl/bpmn"
              id="micAfhandelingDefinitions">
 
@@ -439,11 +479,30 @@ function getMicAfhandelingBpmn(): string {
 
   </process>
 
-  <bpmndi:BPMNDiagram id="BPMNDiagram_mic">
-    <bpmndi:BPMNPlane bpmnElement="mic-afhandeling" id="BPMNPlane_mic">
-      <bpmndi:BPMNShape bpmnElement="start" id="BPMNShape_start"><omgdc:Bounds x="100" y="200" width="36" height="36" /></bpmndi:BPMNShape>
-    </bpmndi:BPMNPlane>
-  </bpmndi:BPMNDiagram>
+${genereerDi(
+    "mic-afhandeling",
+    [
+      { id: "start", type: "event", kolom: 0 },
+      { id: "meldingAnalyseren", type: "task", kolom: 1 },
+      { id: "ernstGateway", type: "gateway", kolom: 2 },
+      { id: "maatregelenBepalen", type: "task", kolom: 3 },
+      { id: "maatregelenUitvoeren", type: "task", kolom: 4 },
+      { id: "evalueren", type: "task", kolom: 5 },
+      { id: "endHoog", type: "event", kolom: 6 },
+      { id: "maatregelenRegistreren", type: "task", kolom: 3, rij: 1 },
+      { id: "endLaag", type: "event", kolom: 4, rij: 1 },
+    ],
+    [
+      { id: "f1", van: "start", naar: "meldingAnalyseren" },
+      { id: "f2", van: "meldingAnalyseren", naar: "ernstGateway" },
+      { id: "f3-hoog", van: "ernstGateway", naar: "maatregelenBepalen" },
+      { id: "f3-laag", van: "ernstGateway", naar: "maatregelenRegistreren" },
+      { id: "f4-laag", van: "maatregelenRegistreren", naar: "endLaag" },
+      { id: "f5", van: "maatregelenBepalen", naar: "maatregelenUitvoeren" },
+      { id: "f6", van: "maatregelenUitvoeren", naar: "evalueren" },
+      { id: "f7", van: "evalueren", naar: "endHoog" },
+    ],
+  )}
 
 </definitions>`;
 }
@@ -464,6 +523,7 @@ function getVaccinatieCampagneBpmn(): string {
              xmlns:flowable="http://flowable.org/bpmn"
              xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
              xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI"
              targetNamespace="http://openzorg.nl/bpmn"
              id="vaccinatieCampagneDefinitions">
 
@@ -511,11 +571,24 @@ function getVaccinatieCampagneBpmn(): string {
 
   </process>
 
-  <bpmndi:BPMNDiagram id="BPMNDiagram_vaccinatie">
-    <bpmndi:BPMNPlane bpmnElement="vaccinatie-campagne" id="BPMNPlane_vaccinatie">
-      <bpmndi:BPMNShape bpmnElement="start" id="BPMNShape_start"><omgdc:Bounds x="100" y="200" width="36" height="36" /></bpmndi:BPMNShape>
-    </bpmndi:BPMNPlane>
-  </bpmndi:BPMNDiagram>
+${genereerDi(
+    "vaccinatie-campagne",
+    [
+      { id: "start", type: "event", kolom: 0 },
+      { id: "clientenInventariseren", type: "task", kolom: 1 },
+      { id: "afsprakenInplannen", type: "task", kolom: 2 },
+      { id: "vaccinatieToedienen", type: "task", kolom: 3 },
+      { id: "registratieInDossier", type: "task", kolom: 4 },
+      { id: "end", type: "event", kolom: 5 },
+    ],
+    [
+      { id: "f1", van: "start", naar: "clientenInventariseren" },
+      { id: "f2", van: "clientenInventariseren", naar: "afsprakenInplannen" },
+      { id: "f3", van: "afsprakenInplannen", naar: "vaccinatieToedienen" },
+      { id: "f4", van: "vaccinatieToedienen", naar: "registratieInDossier" },
+      { id: "f5", van: "registratieInDossier", naar: "end" },
+    ],
+  )}
 
 </definitions>`;
 }

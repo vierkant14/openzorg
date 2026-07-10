@@ -316,26 +316,26 @@ function BpmnCanvasInner() {
     if (!templateId || !editorRef.current) return;
     setResult(null);
     try {
-      const res = await fetch(`/api/workflow/api/bpmn-templates/${templateId}`, {
-        headers: {
-          "X-Tenant-ID": typeof window !== "undefined" ? (localStorage.getItem("openzorg_tenant_id") ?? "") : "",
-        },
-      });
+      // XML-respons — daarom een directe fetch, maar wél met dezelfde
+      // auth-headers als workflowFetch (de bridge verifieert tokens sinds W1-1).
+      const headers: Record<string, string> = {};
+      if (typeof window !== "undefined") {
+        headers["X-Tenant-ID"] = localStorage.getItem("openzorg_tenant_id") ?? "";
+        const token = localStorage.getItem("openzorg_token");
+        if (token) headers["Authorization"] = `Bearer ${token}`;
+        const rol = localStorage.getItem("openzorg_role");
+        if (rol) headers["X-User-Role"] = rol;
+      }
+      const res = await fetch(`/api/workflow/api/bpmn-templates/${templateId}`, { headers });
       if (!res.ok) {
         setResult({ ok: false, message: `Template ophalen mislukt (${res.status})` });
         return;
       }
       let xml = await res.text();
 
-      // Templates uit bpmn-templates.ts hebben alleen de start-shape in DI;
-      // laat bpmn-auto-layout de rest uittekenen voordat we importeren.
-      try {
-        xml = ensureFlowRefs(xml);
-        const { layoutProcess } = await import("bpmn-auto-layout");
-        xml = await layoutProcess(xml);
-      } catch (layoutErr) {
-        console.warn("bpmn-auto-layout faalde, importeer ongeauto-layout'de XML", layoutErr);
-      }
+      // Templates hebben sinds W1-5 volledige BPMN-DI — direct importeren,
+      // geen auto-layout meer nodig (die zou onze nette layout overschrijven).
+      xml = ensureFlowRefs(xml);
 
       await editorRef.current.loadXml(xml);
       const found = templates.find((t) => t.id === templateId);
@@ -351,6 +351,15 @@ function BpmnCanvasInner() {
     }
   }
 
+  /**
+   * De proces-id in de XML is de énige deploy/start-identiteit (Flowable
+   * gebruikt <process id>). Het key-veld in de UI is daarvan een weergave —
+   * dit voorkomt de oude mismatch tussen form-key en XML-id.
+   */
+  function keyUitXml(xml: string): string | null {
+    return /<(?:bpmn2?:)?process[^>]*\sid="([^"]+)"/.exec(xml)?.[1] ?? null;
+  }
+
   async function handleDeploy() {
     if (!editorRef.current) return;
     setDeploying(true);
@@ -361,17 +370,19 @@ function BpmnCanvasInner() {
       setResult({ ok: false, message: "Kon BPMN XML niet exporteren." });
       return;
     }
+    const effectieveKey = keyUitXml(xml) ?? processKey;
+    setProcessKey(effectieveKey);
     const { error } = await workflowFetch("/api/processen/deploy", {
       method: "POST",
-      body: JSON.stringify({ xml, name: processKey }),
+      body: JSON.stringify({ xml, name: effectieveKey }),
     });
     setDeploying(false);
     if (error) {
-      setResult({ ok: false, message: `Deploy mislukt: ${error}` });
+      setResult({ ok: false, message: `Activeren mislukt: ${error}` });
     } else {
       setResult({
         ok: true,
-        message: `Proces '${processName}' is gedeployed naar Flowable. Je vindt 'm terug in /admin/workflows.`,
+        message: `Zorgpad '${processName}' is geactiveerd voor jouw organisatie. Je vindt het terug onder Processen.`,
       });
     }
   }
@@ -390,18 +401,22 @@ function BpmnCanvasInner() {
       setResult({ ok: false, message: "Kon BPMN XML niet exporteren." });
       return;
     }
+    // De XML-proces-id is de identiteit — deploy en start gebruiken dezelfde
+    // key, dus geen mismatch meer tussen form-veld en XML.
+    const effectieveKey = keyUitXml(xml) ?? processKey;
+    setProcessKey(effectieveKey);
     // Stap 1: deploy
     const deployRes = await workflowFetch("/api/processen/deploy", {
       method: "POST",
-      body: JSON.stringify({ xml, name: processKey }),
+      body: JSON.stringify({ xml, name: effectieveKey }),
     });
     if (deployRes.error) {
       setTesting(false);
-      setResult({ ok: false, message: `Deploy mislukt: ${deployRes.error}` });
+      setResult({ ok: false, message: `Activeren mislukt: ${deployRes.error}` });
       return;
     }
     // Stap 2: start instance met test-clientnaam
-    const startRes = await workflowFetch(`/api/processen/${encodeURIComponent(processKey)}/start`, {
+    const startRes = await workflowFetch(`/api/processen/${encodeURIComponent(effectieveKey)}/start`, {
       method: "POST",
       body: JSON.stringify({ variables: { clientNaam: "Test cliënt (canvas)" } }),
     });
@@ -424,10 +439,8 @@ function BpmnCanvasInner() {
     setSelectedElement((prev) => (prev ? { ...prev, assignee: value } : prev));
   }
 
-  function applyFormKey(value: string) {
-    editorRef.current?.setFormKey(value);
-    setSelectedElement((prev) => (prev ? { ...prev, formKey: value } : prev));
-  }
+  // applyFormKey is verwijderd: formuliervelden per stap leven onder
+  // Taakformulieren (Laag 2 op de proces-catalogus), niet in de BPMN.
 
   function applyDueDate(value: string) {
     editorRef.current?.setDueDate(value);
@@ -577,12 +590,13 @@ function BpmnCanvasInner() {
             </select>
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-fg-muted">Proces-key (uniek, technisch)</label>
+            <label className="mb-1 block text-xs font-medium text-fg-muted">Proces-key (volgt uit de XML)</label>
             <input
               type="text"
               value={processKey}
-              onChange={(e) => setProcessKey(e.target.value.replace(/[^a-z0-9-]/gi, "-").toLowerCase())}
-              className="w-full rounded-lg border border-default bg-raised px-3 py-2 text-sm text-fg"
+              readOnly
+              title="De key komt uit het proces-id in de BPMN-XML — dat is de identiteit waarmee Flowable deployt en start."
+              className="w-full rounded-lg border border-default bg-sunken px-3 py-2 text-sm text-fg-muted"
             />
           </div>
           <div>
@@ -759,19 +773,13 @@ function BpmnCanvasInner() {
                           : "Leeg = iedereen met de rol kan claimen. Vul in om aan één persoon te geven."}
                       </p>
                     </div>
-                    <div>
-                      <label className="mb-1 block text-xs font-medium text-fg-muted">Formulier (formKey, optioneel)</label>
-                      <input
-                        type="text"
-                        value={selectedElement.formKey ?? ""}
-                        onChange={(e) => applyFormKey(e.target.value)}
-                        placeholder="bv. intake-formulier"
-                        className="w-full rounded-lg border border-default bg-raised px-3 py-2 text-sm text-fg"
-                      />
-                      <p className="mt-1 text-xs text-fg-subtle">
-                        Verwijst naar een JSONForms-template; voorlopig informatief.
-                      </p>
-                    </div>
+                    <p className="rounded-lg bg-sunken px-3 py-2 text-xs text-fg-subtle">
+                      Formuliervelden voor deze stap beheer je onder{" "}
+                      <a href="/admin/task-form-options" className="font-medium text-brand-600 hover:underline">
+                        Taakformulieren
+                      </a>
+                      .
+                    </p>
                     <div>
                       <label className="mb-1 block text-xs font-medium text-fg-muted">Deadline / SLA (dueDate)</label>
                       <input
@@ -819,6 +827,11 @@ function BpmnCanvasInner() {
                 {/* StartEvent-specifiek: trigger-type kiezer + config */}
                 {selectedElement.kind === "StartEvent" && (
                   <div className="space-y-3">
+                    <p className="rounded-lg bg-sunken px-3 py-2 text-xs text-fg-subtle">
+                      Documentatie bij het startpunt: hoe wordt dit zorgpad in de praktijk
+                      gestart? De keuze wordt als metadata bij het proces bewaard maar
+                      verandert het BPMN-startevent niet (roadmap).
+                    </p>
                     <div>
                       <label className="mb-1 block text-xs font-medium text-fg-muted">Trigger-type</label>
                       <select
