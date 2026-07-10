@@ -1,5 +1,6 @@
 "use client";
 
+import { ErrorState, PageHeader } from "@openzorg/shared-ui";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -116,13 +117,14 @@ export default function NieuweAfspraakPage() {
   return (
     <AppShell>
       <main className="max-w-2xl mx-auto px-6 py-8">
-        <h2 className="text-2xl font-bold text-fg mb-6">
-          Nieuwe afspraak aanmaken
-        </h2>
+        <PageHeader
+          titel="Nieuwe afspraak"
+          omschrijving="Plan een afspraak in voor een client en medewerker."
+        />
 
         {error && (
-          <div className="rounded-xl bg-coral-50 dark:bg-coral-950/20 border border-coral-200 dark:border-coral-800 p-4 mb-4 text-body-sm text-coral-700 dark:text-coral-300">
-            {error}
+          <div className="mb-4">
+            <ErrorState melding={error} />
           </div>
         )}
 

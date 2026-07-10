@@ -1,7 +1,9 @@
 "use client";
 
+import { EmptyState, ErrorState, LoadingSkeleton, PageHeader } from "@openzorg/shared-ui";
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useId, useState } from "react";
 
 import AppShell from "../../components/AppShell";
 import { planningFetch } from "../../lib/planning-api";
@@ -41,14 +43,16 @@ function getParticipant(
 }
 
 const STATUS_COLORS: Record<string, string> = {
-  booked: "bg-blue-100 text-blue-800",
-  arrived: "bg-brand-50 text-brand-700",
-  fulfilled: "bg-gray-100 text-fg-muted",
-  cancelled: "bg-red-100 text-red-800",
-  noshow: "bg-yellow-100 text-yellow-800",
+  booked: "bg-navy-50 text-navy-700 dark:bg-navy-900/30 dark:text-navy-200",
+  arrived: "bg-brand-50 text-brand-700 dark:bg-brand-900/30 dark:text-brand-200",
+  fulfilled: "bg-surface-100 text-fg-muted dark:bg-surface-800",
+  cancelled: "bg-coral-100 text-coral-800 dark:bg-coral-900/30 dark:text-coral-200",
+  noshow: "bg-coral-50 text-coral-700 dark:bg-coral-900/20 dark:text-coral-300",
 };
 
 export default function PlanningPage() {
+  const router = useRouter();
+  const datumId = useId();
   const today = new Date().toISOString().slice(0, 10);
   const [date, setDate] = useState(today);
   const [appointments, setAppointments] = useState<AppointmentResource[]>([]);
@@ -167,41 +171,39 @@ export default function PlanningPage() {
   return (
     <AppShell>
       <main className="max-w-7xl mx-auto px-6 py-8">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-2xl font-bold text-fg">Dagplanning</h2>
+        <PageHeader titel="Dagplanning" omschrijving="Afspraken per dag">
           <Link
             href="/planning/nieuw"
             className="bg-brand-600 text-white px-4 py-2 rounded hover:bg-brand-700 text-sm font-medium"
           >
             Nieuwe afspraak
           </Link>
-        </div>
+        </PageHeader>
 
         <div className="mb-6">
-          <label htmlFor="date" className="block text-sm font-medium text-fg-muted mb-1">
+          <label htmlFor={datumId} className="block text-sm font-medium text-fg-muted mb-1">
             Datum
           </label>
           <input
-            id="date"
+            id={datumId}
             type="date"
             value={date}
             onChange={(e) => setDate(e.target.value)}
-            className="border rounded px-3 py-2 text-sm"
+            className="border border-default rounded px-3 py-2 text-sm"
           />
         </div>
 
-        {error && (
-          <div className="bg-coral-50 border border-coral-200 text-coral-600 rounded p-4 mb-4 text-sm">
-            {error}
-          </div>
-        )}
-
-        {loading ? (
-          <p className="text-fg-subtle text-sm">Laden...</p>
+        {error ? (
+          <ErrorState melding={error} onOpnieuw={fetchAppointments} />
+        ) : loading ? (
+          <LoadingSkeleton regels={5} />
         ) : appointments.length === 0 ? (
-          <p className="text-fg-subtle text-sm">
-            Geen afspraken gevonden voor {date}.
-          </p>
+          <EmptyState
+            titel="Geen afspraken op deze dag"
+            uitleg="Kies een andere datum of plan een nieuwe afspraak in."
+            actieLabel="Nieuwe afspraak"
+            onActie={() => router.push("/planning/nieuw")}
+          />
         ) : (
           <div className="bg-raised rounded-lg border overflow-hidden">
             <table className="min-w-full divide-y divide-default">
@@ -244,7 +246,7 @@ export default function PlanningPage() {
                     </td>
                     <td className="px-4 py-3 text-sm">
                       <span
-                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[appt.status] || "bg-gray-100 text-fg-muted"}`}
+                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[appt.status] || "bg-surface-100 text-fg-muted dark:bg-surface-800"}`}
                       >
                         {appt.status}
                       </span>

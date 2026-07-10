@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { EmptyState, ErrorState, LoadingSkeleton, PageHeader } from "@openzorg/shared-ui";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 
 import AppShell from "../../../components/AppShell";
 import { ecdFetch } from "../../../lib/api";
@@ -119,6 +120,8 @@ interface Practitioner {
 }
 
 export default function DagplanningPage() {
+  const medewerkerId = useId();
+  const datumId = useId();
   const [datum, setDatum] = useState(todayString());
   const [practitionerId, setPractitionerId] = useState("");
   const [practitioners, setPractitioners] = useState<Practitioner[]>([]);
@@ -193,14 +196,20 @@ export default function DagplanningPage() {
   return (
     <AppShell>
       <main className="max-w-7xl mx-auto px-6 py-8">
+        <PageHeader
+          titel="Dagplanning"
+          omschrijving={practitionerId ? formatDatum(datum) : "Kies een medewerker om de route te bekijken"}
+        />
+
         {/* Controls */}
         <div className="mb-6 rounded-lg border border-default bg-raised p-4 shadow-sm">
           <div className="flex flex-wrap items-end gap-4">
             <div>
-              <label className="mb-1 block text-sm font-medium text-fg-muted">
+              <label htmlFor={medewerkerId} className="mb-1 block text-sm font-medium text-fg-muted">
                 Medewerker
               </label>
               <select
+                id={medewerkerId}
                 value={practitionerId}
                 onChange={(e) => {
                   userSelected.current = true;
@@ -216,7 +225,7 @@ export default function DagplanningPage() {
             </div>
 
             <div>
-              <label className="mb-1 block text-sm font-medium text-fg-muted">Datum</label>
+              <label htmlFor={datumId} className="mb-1 block text-sm font-medium text-fg-muted">Datum</label>
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => navigateDay(-1)}
@@ -228,6 +237,7 @@ export default function DagplanningPage() {
                   </svg>
                 </button>
                 <input
+                  id={datumId}
                   type="date"
                   value={datum}
                   onChange={(e) => setDatum(e.target.value)}
@@ -253,39 +263,22 @@ export default function DagplanningPage() {
           </div>
         </div>
 
-        {/* Date header */}
-        {practitionerId && (
-          <h2 className="mb-4 text-lg font-semibold text-fg capitalize">
-            {formatDatum(datum)}
-          </h2>
-        )}
+        {error && <ErrorState melding={error} onOpnieuw={loadAfspraken} />}
 
-        {error && (
-          <div className="mb-4 rounded-md bg-coral-50 border border-coral-200 p-3 text-sm text-coral-600">
-            {error}
-          </div>
-        )}
-
-        {loading && (
-          <div className="flex justify-center py-12">
-            <div className="h-8 w-8 animate-spin rounded-full border-4 border-brand-300 border-t-brand-700" />
-          </div>
-        )}
+        {loading && <LoadingSkeleton regels={6} />}
 
         {!practitionerId && !loading && (
-          <div className="rounded-lg border border-default bg-raised p-12 text-center shadow-sm">
-            <p className="text-sm text-fg-subtle">
-              Selecteer een medewerker om de dagplanning te bekijken.
-            </p>
-          </div>
+          <EmptyState
+            titel="Kies eerst een medewerker"
+            uitleg="Selecteer hierboven een medewerker om de dagplanning en route te bekijken."
+          />
         )}
 
         {practitionerId && !loading && appointments.length === 0 && !error && (
-          <div className="rounded-lg border border-default bg-raised p-12 text-center shadow-sm">
-            <p className="text-sm text-fg-subtle">
-              Geen afspraken gevonden voor deze dag.
-            </p>
-          </div>
+          <EmptyState
+            titel="Geen afspraken op deze dag"
+            uitleg="Voor deze medewerker staat er niets gepland. Probeer een andere dag of medewerker."
+          />
         )}
 
         {/* Timeline view */}
@@ -297,12 +290,12 @@ export default function DagplanningPage() {
                 const duur = getDuur(apt.start, apt.end);
                 const statusKleur =
                   apt.status === "booked"
-                    ? "bg-blue-100 text-blue-800"
+                    ? "bg-navy-50 text-navy-700 dark:bg-navy-900/30 dark:text-navy-200"
                     : apt.status === "fulfilled"
-                      ? "bg-brand-50 text-brand-700"
+                      ? "bg-brand-50 text-brand-700 dark:bg-brand-900/30 dark:text-brand-200"
                       : apt.status === "cancelled"
-                        ? "bg-red-100 text-red-800"
-                        : "bg-gray-100 text-fg-muted";
+                        ? "bg-coral-100 text-coral-800 dark:bg-coral-900/30 dark:text-coral-200"
+                        : "bg-surface-100 text-fg-muted dark:bg-surface-800";
 
                 return (
                   <div key={apt.id ?? i} className="flex items-stretch">
