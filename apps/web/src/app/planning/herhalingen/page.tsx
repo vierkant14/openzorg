@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { ErrorState, PageHeader } from "@openzorg/shared-ui";
+import { useEffect, useId, useState, type FormEvent } from "react";
 
 import AppShell from "../../../components/AppShell";
 import { ecdFetch } from "../../../lib/api";
@@ -55,6 +56,16 @@ const APPOINTMENT_TYPES = ["Huisbezoek", "Telefonisch", "Kantoor", "Groepssessie
 /* ---------- Component ---------- */
 
 export default function HerhalingenPage() {
+  const clientFieldId = useId();
+  const medewerkerId = useId();
+  const startDateId = useId();
+  const startTimeId = useId();
+  const endTimeId = useId();
+  const typeId = useId();
+  const descriptionId = useId();
+  const frequencyId = useId();
+  const endTypeId = useId();
+  const endValueId = useId();
   const [practitioners, setPractitioners] = useState<Practitioner[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
 
@@ -190,18 +201,12 @@ export default function HerhalingenPage() {
   return (
     <AppShell>
       <main className="max-w-4xl mx-auto px-6 py-8 space-y-8">
-        <div>
-          <h1 className="text-display-lg text-fg">Terugkerende afspraken</h1>
-          <p className="text-body text-fg-muted mt-1">
-            Plan een reeks afspraken in op basis van een herhalingspatroon.
-          </p>
-        </div>
+        <PageHeader
+          titel="Terugkerende afspraken"
+          omschrijving="Plan een reeks afspraken in op basis van een herhalingspatroon."
+        />
 
-        {error && (
-          <div className="bg-coral-50 border border-coral-200 text-coral-600 rounded-lg p-4 text-sm">
-            {error}
-          </div>
-        )}
+        {error && <ErrorState melding={error} />}
 
         {result && (
           <div className="bg-brand-50 border border-brand-200 text-brand-700 rounded-lg p-4 text-sm">
@@ -214,19 +219,19 @@ export default function HerhalingenPage() {
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="bg-raised rounded-lg border p-6 space-y-6">
+        <form onSubmit={handleSubmit} className="bg-raised rounded-lg border border-default p-6 space-y-6">
           {/* Client & Medewerker */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-fg-muted mb-1">Client</label>
-              <select required value={clientId} onChange={(e) => setClientId(e.target.value)} className={inputClass}>
+              <label htmlFor={clientFieldId} className="block text-sm font-medium text-fg-muted mb-1">Client</label>
+              <select id={clientFieldId} required value={clientId} onChange={(e) => setClientId(e.target.value)} className={inputClass}>
                 <option value="">Selecteer client...</option>
                 {clients.map((c) => <option key={c.id} value={c.id}>{c.naam}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-fg-muted mb-1">Medewerker</label>
-              <select required value={practitionerId} onChange={(e) => setPractitionerId(e.target.value)} className={inputClass}>
+              <label htmlFor={medewerkerId} className="block text-sm font-medium text-fg-muted mb-1">Medewerker</label>
+              <select id={medewerkerId} required value={practitionerId} onChange={(e) => setPractitionerId(e.target.value)} className={inputClass}>
                 <option value="">Selecteer medewerker...</option>
                 {practitioners.map((p) => <option key={p.id} value={p.id}>{p.naam}</option>)}
               </select>
@@ -236,30 +241,30 @@ export default function HerhalingenPage() {
           {/* Datum & Tijd */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
-              <label className="block text-sm font-medium text-fg-muted mb-1">Startdatum</label>
-              <input type="date" required value={startDate} onChange={(e) => setStartDate(e.target.value)} className={inputClass} />
+              <label htmlFor={startDateId} className="block text-sm font-medium text-fg-muted mb-1">Startdatum</label>
+              <input id={startDateId} type="date" required value={startDate} onChange={(e) => setStartDate(e.target.value)} className={inputClass} />
             </div>
             <div>
-              <label className="block text-sm font-medium text-fg-muted mb-1">Starttijd</label>
-              <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className={inputClass} />
+              <label htmlFor={startTimeId} className="block text-sm font-medium text-fg-muted mb-1">Starttijd</label>
+              <input id={startTimeId} type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className={inputClass} />
             </div>
             <div>
-              <label className="block text-sm font-medium text-fg-muted mb-1">Eindtijd</label>
-              <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className={inputClass} />
+              <label htmlFor={endTimeId} className="block text-sm font-medium text-fg-muted mb-1">Eindtijd</label>
+              <input id={endTimeId} type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className={inputClass} />
             </div>
           </div>
 
           {/* Type & Beschrijving */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-fg-muted mb-1">Type afspraak</label>
-              <select value={appointmentType} onChange={(e) => setAppointmentType(e.target.value)} className={inputClass}>
+              <label htmlFor={typeId} className="block text-sm font-medium text-fg-muted mb-1">Type afspraak</label>
+              <select id={typeId} value={appointmentType} onChange={(e) => setAppointmentType(e.target.value)} className={inputClass}>
                 {APPOINTMENT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-fg-muted mb-1">Beschrijving (optioneel)</label>
-              <input type="text" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="bijv. Wondverzorging" className={inputClass} />
+              <label htmlFor={descriptionId} className="block text-sm font-medium text-fg-muted mb-1">Beschrijving (optioneel)</label>
+              <input id={descriptionId} type="text" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="bijv. Wondverzorging" className={inputClass} />
             </div>
           </div>
 
@@ -268,8 +273,8 @@ export default function HerhalingenPage() {
             <legend className="text-sm font-semibold text-fg px-2">Herhalingspatroon</legend>
 
             <div className="flex items-center gap-4">
-              <label className="block text-sm font-medium text-fg-muted">Frequentie</label>
-              <select value={frequency} onChange={(e) => setFrequency(e.target.value as "DAILY" | "WEEKLY")} className="rounded-md border border-default px-3 py-2 text-sm">
+              <label htmlFor={frequencyId} className="block text-sm font-medium text-fg-muted">Frequentie</label>
+              <select id={frequencyId} value={frequency} onChange={(e) => setFrequency(e.target.value as "DAILY" | "WEEKLY")} className="rounded-md border border-default px-3 py-2 text-sm">
                 <option value="WEEKLY">Wekelijks</option>
                 <option value="DAILY">Dagelijks</option>
               </select>
@@ -298,15 +303,15 @@ export default function HerhalingenPage() {
             )}
 
             <div className="flex items-center gap-4">
-              <label className="block text-sm font-medium text-fg-muted">Eindigt na</label>
-              <select value={endType} onChange={(e) => setEndType(e.target.value as "count" | "until")} className="rounded-md border border-default px-3 py-2 text-sm">
+              <label htmlFor={endTypeId} className="block text-sm font-medium text-fg-muted">Eindigt na</label>
+              <select id={endTypeId} value={endType} onChange={(e) => setEndType(e.target.value as "count" | "until")} className="rounded-md border border-default px-3 py-2 text-sm">
                 <option value="count">Aantal keer</option>
                 <option value="until">Datum</option>
               </select>
               {endType === "count" ? (
-                <input type="number" min={1} max={52} value={count} onChange={(e) => setCount(Number(e.target.value))} className="w-20 rounded-md border border-default px-3 py-2 text-sm" />
+                <input id={endValueId} aria-label="Aantal keer" type="number" min={1} max={52} value={count} onChange={(e) => setCount(Number(e.target.value))} className="w-20 rounded-md border border-default px-3 py-2 text-sm" />
               ) : (
-                <input type="date" value={untilDate} onChange={(e) => setUntilDate(e.target.value)} className="rounded-md border border-default px-3 py-2 text-sm" />
+                <input id={endValueId} aria-label="Einddatum" type="date" value={untilDate} onChange={(e) => setUntilDate(e.target.value)} className="rounded-md border border-default px-3 py-2 text-sm" />
               )}
             </div>
           </fieldset>

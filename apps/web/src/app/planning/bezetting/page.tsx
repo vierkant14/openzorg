@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { EmptyState, ErrorState, LoadingSkeleton, PageHeader } from "@openzorg/shared-ui";
+import { useCallback, useEffect, useId, useMemo, useState } from "react";
 
 import AppShell from "../../../components/AppShell";
 import { ecdFetch } from "../../../lib/api";
@@ -116,6 +117,7 @@ function getWeekLabel(days: Date[]): string {
 /* ---------- Page ---------- */
 
 export default function BezettingsroosterPage() {
+  const locatieId = useId();
   const [locaties, setLocaties] = useState<Array<{ id: string; naam: string }>>([]);
   const [selectedLocatie, setSelectedLocatie] = useState<string>("");
   const [afdelingen, setAfdelingen] = useState<Array<{ id: string; naam: string }>>([]);
@@ -346,10 +348,19 @@ export default function BezettingsroosterPage() {
       <div className="flex h-full">
         {/* Main content */}
         <div className="flex-1 overflow-auto p-6">
+          <PageHeader
+            titel="Bezettingsrooster"
+            omschrijving="Bekijk en vul de minimumbezetting per afdeling, dienst en dag."
+          />
+
           {/* Toolbar */}
           <div className="mb-6 flex flex-wrap items-center gap-4">
             {/* Locatie picker */}
+            <label htmlFor={locatieId} className="sr-only">
+              Locatie
+            </label>
             <select
+              id={locatieId}
               value={selectedLocatie}
               onChange={(e) => setSelectedLocatie(e.target.value)}
               className="rounded-lg border border-default bg-raised px-3 py-2 text-body-sm text-fg focus:outline-none focus:ring-2 focus:ring-brand-500"
@@ -401,8 +412,15 @@ export default function BezettingsroosterPage() {
 
           {/* Error message */}
           {error && (
-            <div className="mb-4 rounded-lg border border-coral-200 bg-coral-50 dark:bg-coral-900/20 dark:border-coral-800 p-3 text-body-sm text-coral-700 dark:text-coral-300">
-              {error}
+            <div className="mb-4">
+              <ErrorState
+                melding={error}
+                onOpnieuw={
+                  selectedLocatie
+                    ? () => void validateBezetting(selectedLocatie, weekISO)
+                    : undefined
+                }
+              />
             </div>
           )}
 
@@ -428,14 +446,12 @@ export default function BezettingsroosterPage() {
 
           {/* Grid */}
           {loading ? (
-            <div className="flex items-center justify-center py-20">
-              <div className="h-8 w-8 rounded-full border-[3px] border-brand-200 border-t-brand-600 animate-spin" />
-            </div>
+            <LoadingSkeleton regels={8} />
           ) : afdelingen.length === 0 ? (
-            <div className="text-center py-20 text-fg-muted">
-              <p className="text-heading-sm">Geen afdelingen gevonden</p>
-              <p className="mt-1 text-body-sm">Selecteer een locatie met afdelingen</p>
-            </div>
+            <EmptyState
+              titel="Geen afdelingen gevonden"
+              uitleg="Deze locatie heeft nog geen afdelingen. Kies een andere locatie of richt eerst de organisatiestructuur in."
+            />
           ) : (
             <div className="overflow-x-auto rounded-xl border border-default bg-raised">
               <table className="w-full border-collapse text-body-sm">

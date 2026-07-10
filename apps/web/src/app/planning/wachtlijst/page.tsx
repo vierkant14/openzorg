@@ -1,5 +1,6 @@
 "use client";
 
+import { EmptyState, ErrorState, LoadingSkeleton, PageHeader } from "@openzorg/shared-ui";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
@@ -37,9 +38,9 @@ interface FhirBundle<T> {
 type Prioriteit = "urgent" | "asap" | "routine";
 
 const PRIORITEIT_CONFIG: Record<Prioriteit, { label: string; kleur: string; sortOrder: number }> = {
-  urgent: { label: "Urgent", kleur: "bg-red-100 text-red-800 border-coral-200", sortOrder: 0 },
-  asap: { label: "Normaal", kleur: "bg-yellow-100 text-yellow-800 border-yellow-200", sortOrder: 1 },
-  routine: { label: "Laag", kleur: "bg-gray-100 text-fg-muted border-default", sortOrder: 2 },
+  urgent: { label: "Urgent", kleur: "bg-coral-100 text-coral-800 border-coral-200 dark:bg-coral-900/30 dark:text-coral-200 dark:border-coral-800", sortOrder: 0 },
+  asap: { label: "Normaal", kleur: "bg-coral-50 text-coral-700 border-coral-200 dark:bg-coral-900/20 dark:text-coral-300 dark:border-coral-800", sortOrder: 1 },
+  routine: { label: "Laag", kleur: "bg-surface-100 text-fg-muted border-default dark:bg-surface-800", sortOrder: 2 },
 };
 
 function getPrioriteit(sr: FhirServiceRequest): Prioriteit {
@@ -308,27 +309,26 @@ export default function WachtlijstPage() {
   return (
     <AppShell>
       <main className="max-w-7xl mx-auto px-6 py-8">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h2 className="text-2xl font-bold text-fg">Wachtlijst</h2>
-            {!loading && (
-              <p className="text-sm text-fg-subtle mt-1">
-                {entries.length} {entries.length === 1 ? "registratie" : "registraties"}
-              </p>
-            )}
-          </div>
+        <PageHeader
+          titel="Wachtlijst"
+          omschrijving={
+            loading
+              ? undefined
+              : `${entries.length} ${entries.length === 1 ? "registratie" : "registraties"}`
+          }
+        >
           <button
             onClick={() => setShowForm(!showForm)}
             className="bg-brand-600 text-white px-4 py-2 rounded hover:bg-brand-700 text-sm font-medium"
           >
             {showForm ? "Annuleren" : "Toevoegen"}
           </button>
-        </div>
+        </PageHeader>
 
         {showForm && (
           <form
             onSubmit={handleAdd}
-            className="bg-raised rounded-lg border p-6 mb-6 space-y-4"
+            className="bg-raised rounded-lg border border-default p-6 mb-6 space-y-4"
           >
             <h3 className="font-semibold text-fg-muted">
               Nieuwe wachtlijst-registratie
@@ -351,7 +351,7 @@ export default function WachtlijstPage() {
                   value={formClientNaam}
                   onChange={(e) => setFormClientNaam(e.target.value)}
                   required
-                  className="w-full border rounded px-3 py-2 text-sm"
+                  className="w-full border border-default rounded px-3 py-2 text-sm"
                 />
               </div>
               <div>
@@ -365,7 +365,7 @@ export default function WachtlijstPage() {
                   value={formClientRef}
                   onChange={(e) => setFormClientRef(e.target.value)}
                   required
-                  className="w-full border rounded px-3 py-2 text-sm"
+                  className="w-full border border-default rounded px-3 py-2 text-sm"
                 />
               </div>
             </div>
@@ -380,7 +380,7 @@ export default function WachtlijstPage() {
                   value={formReden}
                   onChange={(e) => setFormReden(e.target.value)}
                   rows={2}
-                  className="w-full border rounded px-3 py-2 text-sm"
+                  className="w-full border border-default rounded px-3 py-2 text-sm"
                 />
               </div>
               <div>
@@ -391,7 +391,7 @@ export default function WachtlijstPage() {
                   id="wl-prio"
                   value={formPrioriteit}
                   onChange={(e) => setFormPrioriteit(e.target.value as Prioriteit)}
-                  className="w-full border rounded px-3 py-2 text-sm"
+                  className="w-full border border-default rounded px-3 py-2 text-sm"
                 >
                   <option value="urgent">Urgent</option>
                   <option value="asap">Normaal</option>
@@ -411,19 +411,22 @@ export default function WachtlijstPage() {
         )}
 
         {error && (
-          <div className="bg-coral-50 border border-coral-200 text-coral-600 rounded p-4 mb-4 text-sm">
-            {error}
+          <div className="mb-4">
+            <ErrorState melding={error} onOpnieuw={fetchEntries} />
           </div>
         )}
 
         {loading ? (
-          <div className="flex justify-center py-12">
-            <div className="h-8 w-8 animate-spin rounded-full border-4 border-brand-300 border-t-brand-700" />
-          </div>
+          <LoadingSkeleton regels={6} />
         ) : entries.length === 0 ? (
-          <p className="text-fg-subtle text-sm">Geen wachtlijst-registraties gevonden.</p>
+          <EmptyState
+            titel="De wachtlijst is leeg"
+            uitleg="Er staat niemand op de wachtlijst. Voeg een registratie toe wanneer een client wacht op zorg."
+            actieLabel="Toevoegen"
+            onActie={() => setShowForm(true)}
+          />
         ) : (
-          <div className="bg-raised rounded-lg border overflow-hidden">
+          <div className="bg-raised rounded-lg border border-default overflow-hidden">
             <table className="min-w-full divide-y divide-default">
               <thead className="bg-page">
                 <tr>

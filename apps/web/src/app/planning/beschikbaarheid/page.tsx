@@ -1,7 +1,8 @@
 "use client";
 
+import { EmptyState, ErrorState, PageHeader } from "@openzorg/shared-ui";
 import Link from "next/link";
-import { useState, type FormEvent } from "react";
+import { useId, useState, type FormEvent } from "react";
 
 import AppShell from "../../../components/AppShell";
 import { planningFetch } from "../../../lib/planning-api";
@@ -27,13 +28,20 @@ interface BeschikbaarheidResponse {
 }
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
-  free: { label: "Beschikbaar", color: "bg-brand-50 text-brand-700" },
-  busy: { label: "Bezet", color: "bg-yellow-100 text-yellow-800" },
-  "busy-unavailable": { label: "Niet beschikbaar", color: "bg-red-100 text-red-800" },
-  "busy-tentative": { label: "Voorlopig bezet", color: "bg-orange-100 text-orange-800" },
+  free: { label: "Beschikbaar", color: "bg-brand-50 text-brand-700 dark:bg-brand-900/30 dark:text-brand-200" },
+  busy: { label: "Bezet", color: "bg-surface-200 text-fg-muted dark:bg-surface-700" },
+  "busy-unavailable": { label: "Niet beschikbaar", color: "bg-coral-100 text-coral-800 dark:bg-coral-900/30 dark:text-coral-200" },
+  "busy-tentative": { label: "Voorlopig bezet", color: "bg-coral-50 text-coral-700 dark:bg-coral-900/20 dark:text-coral-300" },
 };
 
 export default function BeschikbaarheidPage() {
+  const medewerkerId = useId();
+  const datumId = useId();
+  const slotStartId = useId();
+  const slotEndId = useId();
+  const blockStartId = useId();
+  const blockEndId = useId();
+  const blockRedenId = useId();
   const [practitionerId, setPractitionerId] = useState("");
   const [datum, setDatum] = useState(new Date().toISOString().slice(0, 10));
   const [slots, setSlots] = useState<SlotResource[]>([]);
@@ -162,18 +170,22 @@ export default function BeschikbaarheidPage() {
           &larr; Terug naar planning
         </Link>
 
-        <h2 className="text-2xl font-bold text-fg">Beschikbaarheid beheren</h2>
+        <PageHeader
+          titel="Beschikbaarheid beheren"
+          omschrijving="Bekijk en beheer beschikbaarheid en blokkades per medewerker."
+        />
 
         {/* Search form */}
         <form
           onSubmit={loadBeschikbaarheid}
-          className="bg-raised rounded-lg border p-5 flex flex-wrap gap-4 items-end"
+          className="bg-raised rounded-lg border border-default p-5 flex flex-wrap gap-4 items-end"
         >
           <div className="flex-1 min-w-[200px]">
-            <label className="block text-sm font-medium text-fg-muted mb-1">
+            <label htmlFor={medewerkerId} className="block text-sm font-medium text-fg-muted mb-1">
               Medewerker ID (Practitioner)
             </label>
             <input
+              id={medewerkerId}
               type="text"
               value={practitionerId}
               onChange={(e) => setPractitionerId(e.target.value)}
@@ -183,10 +195,11 @@ export default function BeschikbaarheidPage() {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-fg-muted mb-1">
+            <label htmlFor={datumId} className="block text-sm font-medium text-fg-muted mb-1">
               Datum
             </label>
             <input
+              id={datumId}
               type="date"
               value={datum}
               onChange={(e) => setDatum(e.target.value)}
@@ -202,24 +215,20 @@ export default function BeschikbaarheidPage() {
           </button>
         </form>
 
-        {error && (
-          <div className="bg-coral-50 border border-coral-200 text-coral-600 rounded p-4 text-sm">
-            {error}
-          </div>
-        )}
+        {error && <ErrorState melding={error} onOpnieuw={() => loadBeschikbaarheid()} />}
 
         {/* Actions */}
         {practitionerId && (
           <div className="flex gap-3">
             <button
               onClick={() => { setShowSlotForm(!showSlotForm); setShowBlockForm(false); }}
-              className="bg-green-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-green-700"
+              className="bg-brand-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-brand-700"
             >
               {showSlotForm ? "Annuleren" : "+ Beschikbaarheid toevoegen"}
             </button>
             <button
               onClick={() => { setShowBlockForm(!showBlockForm); setShowSlotForm(false); }}
-              className="bg-red-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-red-700"
+              className="bg-coral-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-coral-700"
             >
               {showBlockForm ? "Annuleren" : "Tijd blokkeren"}
             </button>
@@ -228,16 +237,16 @@ export default function BeschikbaarheidPage() {
 
         {/* Add slot form */}
         {showSlotForm && (
-          <div className="bg-raised rounded-lg border p-5 space-y-3">
+          <div className="bg-raised rounded-lg border border-default p-5 space-y-3">
             <h3 className="text-sm font-semibold text-fg">Beschikbaarheid toevoegen</h3>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-medium text-fg-muted mb-1">Starttijd</label>
-                <input type="time" value={slotStart} onChange={(e) => setSlotStart(e.target.value)} className={inputCls} />
+                <label htmlFor={slotStartId} className="block text-xs font-medium text-fg-muted mb-1">Starttijd</label>
+                <input id={slotStartId} type="time" value={slotStart} onChange={(e) => setSlotStart(e.target.value)} className={inputCls} />
               </div>
               <div>
-                <label className="block text-xs font-medium text-fg-muted mb-1">Eindtijd</label>
-                <input type="time" value={slotEnd} onChange={(e) => setSlotEnd(e.target.value)} className={inputCls} />
+                <label htmlFor={slotEndId} className="block text-xs font-medium text-fg-muted mb-1">Eindtijd</label>
+                <input id={slotEndId} type="time" value={slotEnd} onChange={(e) => setSlotEnd(e.target.value)} className={inputCls} />
               </div>
             </div>
             <button
@@ -252,21 +261,21 @@ export default function BeschikbaarheidPage() {
 
         {/* Block form */}
         {showBlockForm && (
-          <div className="bg-raised rounded-lg border p-5 space-y-3">
+          <div className="bg-raised rounded-lg border border-default p-5 space-y-3">
             <h3 className="text-sm font-semibold text-fg">Tijd blokkeren (verlof, ziekte)</h3>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-medium text-fg-muted mb-1">Van (datum+tijd)</label>
-                <input type="datetime-local" value={blockStart} onChange={(e) => setBlockStart(e.target.value)} className={inputCls} />
+                <label htmlFor={blockStartId} className="block text-xs font-medium text-fg-muted mb-1">Van (datum+tijd)</label>
+                <input id={blockStartId} type="datetime-local" value={blockStart} onChange={(e) => setBlockStart(e.target.value)} className={inputCls} />
               </div>
               <div>
-                <label className="block text-xs font-medium text-fg-muted mb-1">Tot (datum+tijd)</label>
-                <input type="datetime-local" value={blockEnd} onChange={(e) => setBlockEnd(e.target.value)} className={inputCls} />
+                <label htmlFor={blockEndId} className="block text-xs font-medium text-fg-muted mb-1">Tot (datum+tijd)</label>
+                <input id={blockEndId} type="datetime-local" value={blockEnd} onChange={(e) => setBlockEnd(e.target.value)} className={inputCls} />
               </div>
             </div>
             <div>
-              <label className="block text-xs font-medium text-fg-muted mb-1">Reden</label>
-              <select value={blockReden} onChange={(e) => setBlockReden(e.target.value)} className={inputCls}>
+              <label htmlFor={blockRedenId} className="block text-xs font-medium text-fg-muted mb-1">Reden</label>
+              <select id={blockRedenId} value={blockReden} onChange={(e) => setBlockReden(e.target.value)} className={inputCls}>
                 <option value="">Selecteer reden</option>
                 <option value="Vakantie">Vakantie</option>
                 <option value="Ziekmelding">Ziekmelding</option>
@@ -281,7 +290,7 @@ export default function BeschikbaarheidPage() {
             <button
               onClick={handleBlock}
               disabled={blockSaving || !blockStart || !blockEnd}
-              className="bg-red-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-red-700 disabled:opacity-50"
+              className="bg-coral-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-coral-700 disabled:opacity-50"
             >
               {blockSaving ? "Blokkeren..." : "Tijd blokkeren"}
             </button>
@@ -290,7 +299,7 @@ export default function BeschikbaarheidPage() {
 
         {/* Slots table */}
         {slots.length > 0 && (
-          <div className="bg-raised rounded-lg border overflow-hidden">
+          <div className="bg-raised rounded-lg border border-default overflow-hidden">
             <table className="min-w-full divide-y divide-default">
               <thead className="bg-page">
                 <tr>
@@ -301,7 +310,7 @@ export default function BeschikbaarheidPage() {
               </thead>
               <tbody className="divide-y divide-default">
                 {slots.map((slot, i) => {
-                  const statusInfo = STATUS_LABELS[slot.status] ?? { label: slot.status, color: "bg-gray-100 text-fg-muted" };
+                  const statusInfo = STATUS_LABELS[slot.status] ?? { label: slot.status, color: "bg-surface-100 text-fg-muted dark:bg-surface-800" };
                   return (
                     <tr key={slot.id ?? i} className="hover:bg-sunken">
                       <td className="px-4 py-3 text-sm text-fg">
@@ -325,9 +334,10 @@ export default function BeschikbaarheidPage() {
         )}
 
         {!loading && slots.length === 0 && practitionerId && (
-          <p className="text-center text-sm text-fg-subtle py-8">
-            Geen beschikbaarheid gevonden voor deze medewerker.
-          </p>
+          <EmptyState
+            titel="Nog geen beschikbaarheid"
+            uitleg="Voor deze medewerker staat er niets ingepland. Voeg beschikbaarheid toe of blokkeer tijd."
+          />
         )}
       </main>
     </AppShell>
