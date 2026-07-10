@@ -3,10 +3,51 @@ const FLOWABLE_USER = process.env.FLOWABLE_ADMIN_USER || "admin";
 const FLOWABLE_PASSWORD = process.env.FLOWABLE_ADMIN_PASSWORD || "admin";
 const FLOWABLE_AUTH = Buffer.from(`${FLOWABLE_USER}:${FLOWABLE_PASSWORD}`).toString("base64");
 
+if (!process.env.FLOWABLE_ADMIN_USER || !process.env.FLOWABLE_ADMIN_PASSWORD) {
+  console.warn(
+    "[flowable-client] FLOWABLE_ADMIN_USER/PASSWORD niet gezet — val terug op de dev-default. " +
+      "Zet deze env-vars in elke niet-lokale omgeving.",
+  );
+}
+
 interface FlowableRequestOptions {
   method?: string;
   body?: unknown;
   headers?: Record<string, string>;
+}
+
+/**
+ * Tenant-model (W1-1, spec §4.3.1): élke deployment, proces-start en query
+ * loopt via Flowable's native tenantId (= Medplum project-ID). "Een zorgpad
+ * activeren" betekent: de template voor déze tenant deployen. Er is géén
+ * legacy-fallback — een taak of instantie zonder tenant hoort bij geen enkele
+ * tenant (fail-closed). De proces-variabele `tenantId` blijft daarnaast
+ * bestaan voor FHIR-context in taak-formulieren en back-compat van views.
+ */
+
+export interface FlowableTaak {
+  id: string;
+  name: string;
+  description?: string;
+  assignee?: string | null;
+  createTime: string;
+  dueDate?: string | null;
+  tenantId?: string;
+  processInstanceId?: string;
+  processDefinitionId?: string;
+  taskDefinitionKey?: string;
+  variables?: Array<{ name: string; value: unknown; scope?: string }>;
+}
+
+export interface TakenQuery {
+  /** Verplicht — fail-closed tenant-isolatie. */
+  tenantId: string;
+  /** Practitioner-ID van de persoon (assignee). */
+  assignee?: string;
+  /** Rol (candidateGroup) voor beschikbare taken. */
+  candidateGroup?: string;
+  /** Beperk tot één procesinstantie (instantie-detailweergave). */
+  processInstanceId?: string;
 }
 
 /**
@@ -35,14 +76,15 @@ export async function flowableFetch(path: string, options: FlowableRequestOption
 }
 
 /**
- * Deploys a BPMN process definition to Flowable.
+ * Deploys a BPMN process definition to Flowable, binnen de gegeven tenant.
  */
-export async function deployProcess(bpmnXml: string, name: string): Promise<unknown> {
+export async function deployProcess(bpmnXml: string, name: string, tenantId: string): Promise<unknown> {
   const url = `${FLOWABLE_BASE}/service/repository/deployments`;
 
   const formData = new FormData();
   const blob = new Blob([bpmnXml], { type: "application/xml" });
   formData.append("file", blob, `${name}.bpmn20.xml`);
+  formData.append("tenantId", tenantId);
 
   const response = await fetch(url, {
     method: "POST",
@@ -61,136 +103,94 @@ export async function deployProcess(bpmnXml: string, name: string): Promise<unkn
 }
 
 /**
- * Starts a new process instance for the given process definition key.
- *
- * BPMN-definities worden deployed als *global* (zonder Flowable-tenantId),
- * omdat ze OpenZorg-templates zijn die door alle tenants worden gebruikt.
- * Tenant-isolatie loopt daarom via een `tenantId` *process variable* op de
- * instance — niet via Flowable's native tenantId-veld op de definition.
- * `getTasksForUser` filtert taken op deze variabele.
+ * Start een nieuwe procesinstantie binnen de tenant. De native tenantId
+ * bepaalt wélke definitie start (de tenant-deployment); de variabele
+ * `tenantId` gaat daarnaast mee voor formulier-/FHIR-context.
  */
 export async function startProcess(
   processKey: string,
-  variables?: Record<string, unknown>,
-  tenantId?: string,
-): Promise<unknown> {
-  const body: Record<string, unknown> = {
-    processDefinitionKey: processKey,
-  };
-
-  const allVariables: Array<{ name: string; value: unknown }> = [];
-
-  if (tenantId) {
-    allVariables.push({ name: "tenantId", value: tenantId });
-  }
+  variables: Record<string, unknown> | undefined,
+  tenantId: string,
+): Promise<{ id: string }> {
+  const allVariables: Array<{ name: string; value: unknown }> = [
+    { name: "tenantId", value: tenantId },
+  ];
 
   if (variables) {
     for (const [name, value] of Object.entries(variables)) {
+      if (name === "tenantId") continue;
       allVariables.push({ name, value });
     }
   }
 
-  if (allVariables.length > 0) {
-    body.variables = allVariables;
-  }
-
   const response = await flowableFetch("/service/runtime/process-instances", {
     method: "POST",
-    body,
+    body: {
+      processDefinitionKey: processKey,
+      tenantId,
+      variables: allVariables,
+    },
   });
 
-  return response.json();
+  return (await response.json()) as { id: string };
 }
 
 /**
- * Gets tasks assigned to or available for a specific user/role, optionally filtered by tenant.
- * Searches both directly assigned tasks AND unclaimed tasks for candidate groups.
- * Uses includeProcessVariables to retrieve the tenantId variable from the parent process,
- * then filters results to only include tasks belonging to the specified tenant.
+ * Query op taken, altijd binnen één tenant (native filter).
  */
-export async function getTasksForUser(userId: string, tenantId?: string): Promise<unknown> {
-  // Fetch directly assigned tasks
-  const assignedResponse = await flowableFetch(
-    `/service/runtime/tasks?assignee=${encodeURIComponent(userId)}&includeProcessVariables=true`,
-  );
-  const assignedData = (await assignedResponse.json()) as {
-    data: Array<{ variables?: Array<{ name: string; value: unknown; scope?: string }>; [key: string]: unknown }>;
-    [key: string]: unknown;
-  };
-
-  // Also fetch unclaimed tasks for this user's role (candidateGroup)
-  // The userId is treated as a potential candidate group name (e.g. "teamleider", "beheerder")
-  let candidateData: typeof assignedData = { data: [] };
-  try {
-    const candidateResponse = await flowableFetch(
-      `/service/runtime/tasks?candidateGroup=${encodeURIComponent(userId)}&includeProcessVariables=true`,
-    );
-    candidateData = (await candidateResponse.json()) as typeof assignedData;
-  } catch {
-    // candidateGroup query failed — continue with only assigned tasks
+export async function queryTasks(q: TakenQuery): Promise<FlowableTaak[]> {
+  if (!q.tenantId) {
+    throw new Error("tenantId is verplicht voor taak-query's");
   }
 
-  // Merge results, avoiding duplicates
-  const seenIds = new Set<string>();
-  const allTasks: Array<Record<string, unknown>> = [];
+  const params = new URLSearchParams();
+  params.set("tenantId", q.tenantId);
+  params.set("includeProcessVariables", "true");
+  if (q.assignee) params.set("assignee", q.assignee);
+  if (q.candidateGroup) params.set("candidateGroup", q.candidateGroup);
+  if (q.processInstanceId) params.set("processInstanceId", q.processInstanceId);
 
-  for (const task of [...assignedData.data, ...candidateData.data]) {
-    const taskId = task["id"] as string;
-    if (taskId && !seenIds.has(taskId)) {
-      seenIds.add(taskId);
-      allTasks.push(task);
-    }
-  }
-
-  if (!tenantId) {
-    return { ...assignedData, data: allTasks, total: allTasks.length, size: allTasks.length };
-  }
-
-  // Filter by tenant — match on tenantId process variable.
-  // The variable may contain the Medplum project ID or a tenant slug.
-  // We accept tasks where tenantId matches OR where no tenantId variable exists
-  // (backward compatibility with process instances started without tenantId).
-  const filtered = allTasks.filter((task) => {
-    const vars = task["variables"] as Array<{ name: string; value: unknown; scope?: string }> | undefined;
-    const tenantVar = vars?.find(
-      (v) => v.name === "tenantId",
-    );
-    // No tenantId variable → show task (legacy process instance)
-    if (!tenantVar) return true;
-    // Match on exact value (could be project ID or slug)
-    return tenantVar.value === tenantId;
-  });
-
-  return { ...assignedData, data: filtered, total: filtered.length, size: filtered.length };
+  const response = await flowableFetch(`/service/runtime/tasks?${params.toString()}`);
+  const data = (await response.json()) as { data?: FlowableTaak[] };
+  return data.data ?? [];
 }
 
 /**
- * Verifies that a task belongs to a process instance owned by the given tenant.
- * Since BPMN-definities als global templates worden deployed (Flowable's
- * native tenantId-veld blijft leeg), loopt tenant-isolatie via de
- * `tenantId` process variable. Deze functie leest die variable en
- * vergelijkt met de header-tenant. Legacy-instances zonder variable
- * worden toegestaan (back-compat).
+ * Verifieert dat een taak bij de gegeven tenant hoort (native tenantId,
+ * fail-closed: taken zonder tenant worden geweigerd) en retourneert de
+ * taakdetails zodat aanroepers geen tweede fetch nodig hebben.
  */
-export async function verifyTaskTenant(taskId: string, tenantId: string): Promise<void> {
-  const taskResponse = await flowableFetch(
+export async function verifyTaskTenant(taskId: string, tenantId: string): Promise<FlowableTaak> {
+  const response = await flowableFetch(
     `/service/runtime/tasks/${encodeURIComponent(taskId)}?includeProcessVariables=true`,
   );
-  const task = (await taskResponse.json()) as {
-    processInstanceId?: string;
-    variables?: Array<{ name: string; value: unknown; scope?: string }>;
-  };
+  const taak = (await response.json()) as FlowableTaak;
 
-  if (!task.processInstanceId) {
-    throw new Error("Taak heeft geen procesinstantie");
-  }
-
-  const tenantVar = task.variables?.find((v) => v.name === "tenantId");
-  // Legacy: geen tenantId-variable → toestaan
-  if (!tenantVar) return;
-  if (tenantVar.value !== tenantId) {
+  if (!taak.tenantId || taak.tenantId !== tenantId) {
     throw new Error("Taak behoort niet tot deze tenant");
   }
+
+  return taak;
+}
+
+/**
+ * Claimt een taak voor een persoon (practitioner-ID).
+ */
+export async function claimTask(taskId: string, assignee: string): Promise<void> {
+  await flowableFetch(`/service/runtime/tasks/${encodeURIComponent(taskId)}`, {
+    method: "POST",
+    body: { action: "claim", assignee },
+  });
+}
+
+/**
+ * Geeft een geclaimde taak terug aan de groep.
+ */
+export async function unclaimTask(taskId: string): Promise<void> {
+  await flowableFetch(`/service/runtime/tasks/${encodeURIComponent(taskId)}`, {
+    method: "POST",
+    body: { action: "claim", assignee: null },
+  });
 }
 
 /**
@@ -218,22 +218,47 @@ export async function completeTask(
 }
 
 /**
- * Lists process instances, optionally filtered by process definition key and tenant.
+ * Procesdefinities van één tenant.
  */
-export async function getProcessInstances(processKey?: string, tenantId?: string): Promise<unknown> {
-  const params = new URLSearchParams();
+export async function getProcessDefinitions(tenantId: string): Promise<unknown> {
+  const params = new URLSearchParams({ tenantId });
+  const response = await flowableFetch(`/service/repository/process-definitions?${params.toString()}`);
+  return response.json();
+}
 
+/**
+ * Lopende procesinstanties van één tenant, optioneel per proces-key.
+ */
+export async function getProcessInstances(tenantId: string, processKey?: string): Promise<unknown> {
+  const params = new URLSearchParams({ tenantId });
   if (processKey) {
     params.set("processDefinitionKey", processKey);
   }
+  params.set("includeProcessVariables", "true");
 
-  if (tenantId) {
-    params.set("tenantId", tenantId);
+  const response = await flowableFetch(`/service/runtime/process-instances?${params.toString()}`);
+  return response.json();
+}
+
+/**
+ * Annuleert een lopende procesinstantie (met reden), na tenant-verificatie.
+ */
+export async function cancelProcessInstance(
+  processInstanceId: string,
+  tenantId: string,
+  reden: string,
+): Promise<void> {
+  const detailRes = await flowableFetch(
+    `/service/runtime/process-instances/${encodeURIComponent(processInstanceId)}`,
+  );
+  const instance = (await detailRes.json()) as { tenantId?: string };
+
+  if (!instance.tenantId || instance.tenantId !== tenantId) {
+    throw new Error("Procesinstantie behoort niet tot deze tenant");
   }
 
-  const query = params.toString() ? `?${params.toString()}` : "";
-
-  const response = await flowableFetch(`/service/runtime/process-instances${query}`);
-
-  return response.json();
+  await flowableFetch(
+    `/service/runtime/process-instances/${encodeURIComponent(processInstanceId)}?deleteReason=${encodeURIComponent(reden)}`,
+    { method: "DELETE" },
+  );
 }

@@ -2,26 +2,17 @@ import { Hono } from "hono";
 
 import type { AppEnv } from "../app.js";
 import { writeWorkflowAudit } from "../lib/audit.js";
-import { completeTask, flowableFetch, getTasksForUser, verifyTaskTenant } from "../lib/flowable-client.js";
+import {
+  claimTask,
+  completeTask,
+  queryTasks,
+  unclaimTask,
+  verifyTaskTenant,
+} from "../lib/flowable-client.js";
 
 export const takenRoutes = new Hono<AppEnv>();
 
-interface FlowableTaskDetails {
-  id?: string;
-  name?: string;
-  assignee?: string;
-  processInstanceId?: string;
-  processDefinitionId?: string;
-}
-
-async function fetchTaskDetails(taskId: string): Promise<FlowableTaskDetails | null> {
-  try {
-    const res = await flowableFetch(`/service/runtime/tasks/${encodeURIComponent(taskId)}`);
-    return (await res.json()) as FlowableTaskDetails;
-  } catch {
-    return null;
-  }
-}
+const OVERSIGHT_ROLLEN = new Set(["teamleider", "beheerder", "tenant-admin"]);
 
 function extractProcessKey(processDefinitionId?: string): string | undefined {
   if (!processDefinitionId) return undefined;
@@ -30,19 +21,70 @@ function extractProcessKey(processDefinitionId?: string): string | undefined {
 }
 
 /**
- * GET / — Get tasks for a user (query param userId).
+ * GET / — Taken van de tenant, per scope of per procesinstantie.
+ *
+ *   ?scope=mijn         → taken toegewezen aan de ingelogde persoon
+ *   ?scope=beschikbaar  → onbeclaimde taken voor de eigen rol (X-User-Role)
+ *   ?scope=alle         → alle taken van de tenant (alleen oversight-rollen)
+ *   ?processInstanceId= → taken van één lopende instantie
  */
 takenRoutes.get("/", async (c) => {
   try {
-    const userId = c.req.query("userId");
+    const tenantId = c.get("tenantId");
+    const processInstanceId = c.req.query("processInstanceId");
+    const scope = c.req.query("scope");
+    const rol = c.req.header("X-User-Role") ?? "";
 
-    if (!userId) {
-      return c.json({ error: "Query parameter 'userId' is vereist" }, 400);
+    if (processInstanceId) {
+      const taken = await queryTasks({ tenantId, processInstanceId });
+      return c.json({ data: taken, total: taken.length });
     }
 
-    const tenantId = c.get("tenantId");
-    const data = await getTasksForUser(userId, tenantId);
-    return c.json(data);
+    // DEPRECATED overgangsalias (verwijderen in W1-3): oude frontends sturen
+    // ?userId=<rol-of-persoon>. Gedraagt zich als vroeger (assignee óf
+    // candidateGroup), maar nu wél tenant-native gefilterd.
+    const deprecatedUserId = c.req.query("userId");
+    if (!scope && deprecatedUserId) {
+      const [toegewezen, kandidaat] = await Promise.all([
+        queryTasks({ tenantId, assignee: deprecatedUserId }),
+        queryTasks({ tenantId, candidateGroup: deprecatedUserId }).catch(() => []),
+      ]);
+      const gezien = new Set<string>();
+      const taken = [...toegewezen, ...kandidaat].filter((t) => {
+        if (gezien.has(t.id)) return false;
+        gezien.add(t.id);
+        return true;
+      });
+      return c.json({ data: taken, total: taken.length });
+    }
+
+    if (scope === "mijn") {
+      const taken = await queryTasks({ tenantId, assignee: c.get("userId") });
+      return c.json({ data: taken, total: taken.length });
+    }
+
+    if (scope === "beschikbaar") {
+      if (!rol) {
+        return c.json({ error: "X-User-Role-header is vereist voor scope 'beschikbaar'" }, 400);
+      }
+      const taken = (await queryTasks({ tenantId, candidateGroup: rol })).filter(
+        (taak) => !taak.assignee,
+      );
+      return c.json({ data: taken, total: taken.length });
+    }
+
+    if (scope === "alle") {
+      if (!OVERSIGHT_ROLLEN.has(rol)) {
+        return c.json({ error: "Scope 'alle' is alleen beschikbaar voor oversight-rollen" }, 403);
+      }
+      const taken = await queryTasks({ tenantId });
+      return c.json({ data: taken, total: taken.length });
+    }
+
+    return c.json(
+      { error: "Query-parameter 'scope' (mijn|beschikbaar|alle) of 'processInstanceId' is vereist" },
+      400,
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : "Onbekende fout bij ophalen taken";
     return c.json({ error: message }, 500);
@@ -55,15 +97,82 @@ takenRoutes.get("/", async (c) => {
 takenRoutes.get("/:taskId", async (c) => {
   try {
     const taskId = c.req.param("taskId");
-    const tenantId = c.get("tenantId");
-
-    await verifyTaskTenant(taskId, tenantId);
-
-    const response = await flowableFetch(`/service/runtime/tasks/${encodeURIComponent(taskId)}`);
-    const data = await response.json();
-    return c.json(data);
+    const taak = await verifyTaskTenant(taskId, c.get("tenantId"));
+    return c.json(taak);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Onbekende fout bij ophalen taakdetails";
+    return c.json({ error: message }, 500);
+  }
+});
+
+/**
+ * POST /:taskId/claim — Claim een taak voor de ingelogde persoon.
+ * Optioneel body { assignee } om namens iemand anders te claimen
+ * (seed/beheer); de audit registreert altijd wie de actie uitvoerde.
+ */
+takenRoutes.post("/:taskId/claim", async (c) => {
+  try {
+    const taskId = c.req.param("taskId");
+    const tenantId = c.get("tenantId");
+
+    const taak = await verifyTaskTenant(taskId, tenantId);
+
+    const body = await c.req
+      .json<{ assignee?: string }>()
+      .catch((): { assignee?: string } => ({}));
+    const assignee = body.assignee?.trim() || c.get("userId");
+
+    if (!assignee) {
+      return c.json({ error: "Geen persoon om aan toe te wijzen (token zonder profiel)" }, 400);
+    }
+
+    await claimTask(taskId, assignee);
+
+    writeWorkflowAudit({
+      tenantId,
+      userId: c.get("userRef") || assignee,
+      role: c.req.header("X-User-Role"),
+      action: "workflow.task.claim",
+      taskId,
+      taskName: taak.name,
+      processKey: extractProcessKey(taak.processDefinitionId),
+      processInstanceId: taak.processInstanceId,
+      details: { claimedBy: assignee },
+    });
+
+    return c.json({ status: "geclaimd", taskId, assignee });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Onbekende fout bij claimen van taak";
+    return c.json({ error: message }, 500);
+  }
+});
+
+/**
+ * POST /:taskId/unclaim — Geef een taak terug aan de groep.
+ */
+takenRoutes.post("/:taskId/unclaim", async (c) => {
+  try {
+    const taskId = c.req.param("taskId");
+    const tenantId = c.get("tenantId");
+
+    const taak = await verifyTaskTenant(taskId, tenantId);
+    await unclaimTask(taskId);
+
+    writeWorkflowAudit({
+      tenantId,
+      userId: c.get("userRef"),
+      role: c.req.header("X-User-Role"),
+      action: "workflow.task.unclaim",
+      taskId,
+      taskName: taak.name,
+      processKey: extractProcessKey(taak.processDefinitionId),
+      processInstanceId: taak.processInstanceId,
+      details: { assigneeVoor: taak.assignee ?? null },
+    });
+
+    return c.json({ status: "teruggegeven", taskId });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Onbekende fout bij teruggeven van taak";
     return c.json({ error: message }, 500);
   }
 });
@@ -75,85 +184,34 @@ takenRoutes.post("/:taskId/complete", async (c) => {
   try {
     const taskId = c.req.param("taskId");
     const tenantId = c.get("tenantId");
-    const userId = c.req.header("X-User-Id") ?? c.req.header("X-User-Role") ?? "anonymous";
-    const role = c.req.header("X-User-Role");
 
-    await verifyTaskTenant(taskId, tenantId);
+    // Taak-details via de tenant-check — na complete bestaat de taak niet meer
+    const taak = await verifyTaskTenant(taskId, tenantId);
 
-    const body = await c.req.json<{ variables?: Record<string, unknown> }>().catch((): { variables?: Record<string, unknown> } => ({}));
-
-    // Taak-details ophalen vóór complete — na complete bestaat de taak niet meer
-    const taskDetails = await fetchTaskDetails(taskId);
+    const body = await c.req
+      .json<{ variables?: Record<string, unknown> }>()
+      .catch((): { variables?: Record<string, unknown> } => ({}));
 
     await completeTask(taskId, body.variables);
 
     writeWorkflowAudit({
       tenantId,
-      userId,
-      role,
+      userId: c.get("userRef"),
+      role: c.req.header("X-User-Role"),
       action: "workflow.task.complete",
       taskId,
-      taskName: taskDetails?.name,
-      processKey: extractProcessKey(taskDetails?.processDefinitionId),
-      processInstanceId: taskDetails?.processInstanceId,
+      taskName: taak.name,
+      processKey: extractProcessKey(taak.processDefinitionId),
+      processInstanceId: taak.processInstanceId,
       details: {
         variables: body.variables ?? {},
-        assigneeVoor: taskDetails?.assignee,
+        assigneeVoor: taak.assignee ?? null,
       },
     });
 
     return c.json({ status: "voltooid", taskId });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Onbekende fout bij voltooien van taak";
-    return c.json({ error: message }, 500);
-  }
-});
-
-/**
- * POST /:taskId/claim — Claim an unclaimed task.
- */
-takenRoutes.post("/:taskId/claim", async (c) => {
-  try {
-    const taskId = c.req.param("taskId");
-    const tenantId = c.get("tenantId");
-    const role = c.req.header("X-User-Role");
-    const headerUserId = c.req.header("X-User-Id");
-
-    await verifyTaskTenant(taskId, tenantId);
-
-    const body = await c.req.json<{ userId: string }>();
-
-    if (!body.userId) {
-      return c.json({ error: "Veld 'userId' is vereist" }, 400);
-    }
-
-    await flowableFetch(`/service/runtime/tasks/${encodeURIComponent(taskId)}`, {
-      method: "POST",
-      body: {
-        action: "claim",
-        assignee: body.userId,
-      },
-    });
-
-    const taskDetails = await fetchTaskDetails(taskId);
-
-    writeWorkflowAudit({
-      tenantId,
-      userId: headerUserId ?? body.userId,
-      role,
-      action: "workflow.task.claim",
-      taskId,
-      taskName: taskDetails?.name,
-      processKey: extractProcessKey(taskDetails?.processDefinitionId),
-      processInstanceId: taskDetails?.processInstanceId,
-      details: {
-        claimedBy: body.userId,
-      },
-    });
-
-    return c.json({ status: "geclaimd", taskId, userId: body.userId });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Onbekende fout bij claimen van taak";
     return c.json({ error: message }, 500);
   }
 });

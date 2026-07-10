@@ -157,6 +157,8 @@ services:
       WORKFLOW_PORT: 4003
       MEDPLUM_BASE_URL: http://medplum:8103
       FLOWABLE_BASE_URL: http://flowable:8080/flowable-rest
+      FLOWABLE_ADMIN_USER: admin
+      FLOWABLE_ADMIN_PASSWORD: admin
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
       POSTGRES_DB: openzorg

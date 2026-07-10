@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 
+import { authMiddleware } from "./middleware/auth.js";
 import { tenantMiddleware } from "./middleware/tenant.js";
 import { bpmnTemplateRoutes } from "./routes/bpmn-templates.js";
 import { healthRoutes } from "./routes/health.js";
@@ -11,6 +12,12 @@ import { takenRoutes } from "./routes/taken.js";
 export type AppEnv = {
   Variables: {
     tenantId: string;
+    /** Practitioner-ID zonder resource-prefix (uit het geverifieerde token). */
+    userId: string;
+    /** Volledige profile-reference, bv. "Practitioner/abc" (voor audit). */
+    userRef: string;
+    /** Medplum project-ID van het token. */
+    projectId: string;
   };
 };
 
@@ -22,7 +29,8 @@ app.use("*", cors());
 // Health check does not require tenant context
 app.route("/health", healthRoutes);
 
-// All other routes require tenant context
+// Alle API-routes: eerst token-verificatie (401/403), dan tenant-context (400)
+app.use("/api/*", authMiddleware);
 app.use("/api/*", tenantMiddleware);
 
 app.get("/api/status", (c) => {
