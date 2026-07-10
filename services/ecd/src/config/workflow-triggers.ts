@@ -76,20 +76,25 @@ export const DEFAULT_TRIGGERS: WorkflowTrigger[] = [
     },
     enabled: false,
   },
+  // NB: timer.cron-triggers worden niet door deze trigger-engine uitgevoerd.
+  // De evaluatie-herinnering draait in lib/timer-service.ts (W1-5); de
+  // herindicatie-signalering staat op de roadmap (vereist een eigen
+  // SearchParameter-build). Beide staan hier op enabled:false zodat de
+  // beheerder-UI geen schijn-actieve triggers toont.
   {
     id: "evaluatie-signalering-timer",
-    name: "Evaluatie herinnering (6-maandelijks)",
+    name: "Evaluatie herinnering (6-maandelijks) — via timer-service",
     event: "timer.cron",
     processKey: "zorgplan-evaluatie",
     variables: {},
-    enabled: true,
+    enabled: false,
   },
   {
     id: "herindicatie-signalering-timer",
-    name: "Herindicatie signalering (8 weken voor einddatum)",
+    name: "Herindicatie signalering (roadmap)",
     event: "timer.cron",
     processKey: "herindicatie",
     variables: {},
-    enabled: true,
+    enabled: false,
   },
 ];

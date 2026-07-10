@@ -84,7 +84,9 @@ export function LopendeZorgpaden({ catalogus, instanties, takenPerInstantie, onG
             (taken.length === 0 ? "Wacht op systeem-stap" : undefined);
           const clientNaam = instantieVariabele(instantie, "clientNaam");
           const clientRef = instantieVariabele(instantie, "clientRef");
-          const clientId = clientRef?.replace("Patient/", "");
+          // Triggers leveren een kale clientId; handmatige starts een clientRef
+          const clientId =
+            clientRef?.replace("Patient/", "") ?? instantieVariabele(instantie, "clientId");
           const isAnnuleren = annuleerOpen === instantie.id;
 
           return (

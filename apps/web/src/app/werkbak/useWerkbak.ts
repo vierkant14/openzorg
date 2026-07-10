@@ -169,6 +169,8 @@ export function useWerkbak() {
       const key = processKeyVan(taak.processDefinitionId);
       const proces = procesOpKey.get(key);
       const stap = proces?.stappen.find((s) => s.taskKey === taak.taskDefinitionKey);
+      // clientRef ("Patient/x") of kale clientId — triggers leveren clientId
+      const clientId = variabele(taak, "clientId");
       return {
         id: taak.id,
         bron: "flowable",
@@ -176,7 +178,7 @@ export function useWerkbak() {
         omschrijving: taak.description,
         processKey: key,
         procesNaam: proces?.naam ?? (key || "Proces"),
-        clientRef: variabele(taak, "clientRef"),
+        clientRef: variabele(taak, "clientRef") ?? (clientId ? `Patient/${clientId}` : undefined),
         clientNaam: variabele(taak, "clientNaam"),
         aangemaakt: taak.createTime,
         deadline: taak.dueDate ?? null,
