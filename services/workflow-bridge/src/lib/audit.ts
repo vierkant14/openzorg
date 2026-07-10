@@ -15,7 +15,14 @@ export interface WorkflowAuditEntry {
   tenantId: string;
   userId: string;
   role?: string;
-  action: "workflow.task.claim" | "workflow.task.complete" | "workflow.task.start" | "workflow.task.deploy";
+  action:
+    | "workflow.task.claim"
+    | "workflow.task.unclaim"
+    | "workflow.task.complete"
+    | "workflow.task.start"
+    | "workflow.task.deploy"
+    | "workflow.instance.start"
+    | "workflow.instance.cancel";
   taskId?: string;
   taskName?: string;
   processKey?: string;

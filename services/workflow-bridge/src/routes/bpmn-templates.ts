@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 
 import type { AppEnv } from "../app.js";
+import { writeWorkflowAudit } from "../lib/audit.js";
 import { deployProcess } from "../lib/flowable-client.js";
 
 export const bpmnTemplateRoutes = new Hono<AppEnv>();
@@ -9,11 +10,16 @@ export const bpmnTemplateRoutes = new Hono<AppEnv>();
 /*  Template definitions                                                      */
 /* -------------------------------------------------------------------------- */
 
-interface BpmnTemplate {
+export interface BpmnTemplate {
   id: string;
   name: string;
   description: string;
   getBpmn: () => string;
+}
+
+/** Template-registry-lookup — o.a. gebruikt door ensure-deployed in processen.ts. */
+export function getTemplateById(id: string): BpmnTemplate | undefined {
+  return TEMPLATES.find((t) => t.id === id);
 }
 
 const TEMPLATES: BpmnTemplate[] = [
@@ -559,8 +565,19 @@ bpmnTemplateRoutes.post("/:templateId/deploy", async (c) => {
   }
 
   try {
+    const tenantId = c.get("tenantId");
     const bpmnXml = template.getBpmn();
-    const result = await deployProcess(bpmnXml, template.id);
+    const result = await deployProcess(bpmnXml, template.id, tenantId);
+
+    writeWorkflowAudit({
+      tenantId,
+      userId: c.get("userRef"),
+      role: c.req.header("X-User-Role"),
+      action: "workflow.task.deploy",
+      processKey: template.id,
+      details: { bron: "template", templateNaam: template.name },
+    });
+
     return c.json(result, 201);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Deployment mislukt";
