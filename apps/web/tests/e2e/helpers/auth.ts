@@ -20,7 +20,9 @@ export async function login(
 
   await page.getByRole("button", { name: /inloggen|aanmelden/i }).click();
 
-  // Login slaagt als we van /login wegnavigeren
+  // Login slaagt als we van /login wegnavigeren. Pagina's kunnen meerdere
+  // nav-elementen hebben (sidebar + bv. "Snelle acties" op het dashboard) —
+  // .first() is de sidebar en volstaat als ingelogd-bewijs.
   await expect(page).not.toHaveURL(/\/login$/, { timeout: 15_000 });
-  await expect(page.getByRole("navigation")).toBeVisible();
+  await expect(page.getByRole("navigation").first()).toBeVisible();
 }
