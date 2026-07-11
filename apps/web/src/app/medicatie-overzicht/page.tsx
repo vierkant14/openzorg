@@ -1,5 +1,6 @@
 "use client";
 
+import { PageHeader } from "@openzorg/shared-ui";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
@@ -185,11 +186,10 @@ export default function MedicatieOverzichtPage() {
   return (
     <AppShell>
       <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-2xl font-bold text-fg">Medicatie overzicht</h1>
-          <p className="mt-1 text-sm text-fg-muted">Alle medicatievoorschriften binnen de organisatie</p>
-        </div>
+        <PageHeader
+          titel="Medicatie overzicht"
+          omschrijving="Alle medicatievoorschriften binnen de organisatie"
+        />
 
         {/* Stats cards */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">

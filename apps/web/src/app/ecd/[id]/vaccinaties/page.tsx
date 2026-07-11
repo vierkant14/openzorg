@@ -1,5 +1,6 @@
 "use client";
 
+import { ErrorState, LoadingSkeleton } from "@openzorg/shared-ui";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
@@ -60,18 +61,6 @@ const VEELGEBRUIKTE_VACCINS = [
   { code: "J07BC01", display: "Hepatitis B vaccin" },
   { code: "J07AM01", display: "DTP (difterie-tetanus-polio) vaccin" },
 ];
-
-function Spinner() {
-  return (
-    <div className="flex justify-center py-8">
-      <div className="h-6 w-6 animate-spin rounded-full border-4 border-brand-300 border-t-brand-700" />
-    </div>
-  );
-}
-
-function ErrorMsg({ msg }: { msg: string }) {
-  return <p className="my-2 text-sm text-coral-600">{msg}</p>;
-}
 
 export default function VaccinatiesPage() {
   const params = useParams<{ id: string }>();
@@ -196,8 +185,8 @@ export default function VaccinatiesPage() {
     load();
   }
 
-  if (loading) return <Spinner />;
-  if (error) return <ErrorMsg msg={error} />;
+  if (loading) return <LoadingSkeleton regels={6} />;
+  if (error) return <ErrorState melding={error} onOpnieuw={load} />;
 
   return (
     <div>

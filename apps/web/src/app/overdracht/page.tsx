@@ -1,5 +1,6 @@
 "use client";
 
+import { PageHeader } from "@openzorg/shared-ui";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import AppShell from "../../components/AppShell";
@@ -277,31 +278,22 @@ export default function OverdrachtPage() {
     <AppShell>
       <div className="px-6 lg:px-10 py-8 max-w-[1200px] mx-auto">
         {/* ── Header ── */}
-        <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-8">
-          <div>
-            <h1 className="text-display-lg text-fg">Dienst Overdracht</h1>
-            <p className="text-body text-fg-muted mt-1">
-              {formatDatumLang(new Date())}
-            </p>
-          </div>
-
+        <PageHeader titel="Dienst Overdracht" omschrijving={formatDatumLang(new Date())}>
           {/* Shift selector */}
-          <div className="flex items-center gap-2">
-            {(Object.entries(SHIFTS) as [Shift, ShiftDef][]).map(([key, _def]) => (
-              <button
-                key={key}
-                onClick={() => setShift(key)}
-                className={`px-4 py-2 rounded-xl text-body-sm font-medium transition-colors btn-press ${
-                  shift === key
-                    ? "bg-brand-600 text-white shadow-soft"
-                    : "bg-raised border border-default text-fg-muted hover:bg-sunken"
-                }`}
-              >
-                {key.charAt(0).toUpperCase() + key.slice(1)}
-              </button>
-            ))}
-          </div>
-        </div>
+          {(Object.entries(SHIFTS) as [Shift, ShiftDef][]).map(([key, _def]) => (
+            <button
+              key={key}
+              onClick={() => setShift(key)}
+              className={`px-4 py-2 rounded-xl text-body-sm font-medium transition-colors btn-press ${
+                shift === key
+                  ? "bg-brand-600 text-white shadow-soft"
+                  : "bg-raised border border-default text-fg-muted hover:bg-sunken"
+              }`}
+            >
+              {key.charAt(0).toUpperCase() + key.slice(1)}
+            </button>
+          ))}
+        </PageHeader>
 
         {/* ── Info banner ── */}
         <div className="rounded-xl bg-brand-50 dark:bg-brand-950/20 border border-brand-200 dark:border-brand-800 px-5 py-3 mb-6 flex items-center gap-3">
