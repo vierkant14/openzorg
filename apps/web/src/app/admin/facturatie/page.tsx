@@ -1,5 +1,6 @@
 "use client";
 
+import { PageHeader } from "@openzorg/shared-ui";
 import { useEffect, useState, type FormEvent } from "react";
 
 import AppShell from "../../../components/AppShell";
@@ -212,10 +213,10 @@ function FacturatiePageInner() {
   return (
     <AppShell>
       <main className="max-w-7xl mx-auto px-6 py-8 space-y-6">
-        <div>
-          <h1 className="text-display-lg text-fg">Facturatie</h1>
-          <p className="text-body text-fg-muted mt-1">Zorgprestaties registreren, declaraties aanmaken en indienen.</p>
-        </div>
+        <PageHeader
+          titel="Facturatie"
+          omschrijving="Zorgprestaties registreren, declaraties aanmaken en indienen."
+        />
 
         {error && (
           <div className="bg-coral-50 border border-coral-200 text-coral-600 rounded-lg p-4 text-sm">

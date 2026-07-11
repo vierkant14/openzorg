@@ -1,5 +1,6 @@
 "use client";
 
+import { PageHeader } from "@openzorg/shared-ui";
 import { useEffect, useState, type FormEvent } from "react";
 
 import AppShell from "../../components/AppShell";
@@ -153,14 +154,13 @@ export default function BerichtenPage() {
           &larr; Terug
         </a>
 
-        <div className="flex items-center gap-3">
-          <h2 className="text-2xl font-bold text-fg">Berichten</h2>
+        <PageHeader titel="Berichten">
           {unreadCount > 0 && (
             <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-coral-500 text-white text-xs font-bold">
               {unreadCount}
             </span>
           )}
-        </div>
+        </PageHeader>
 
         {error && (
           <div className="p-3 bg-coral-50 border border-coral-200 rounded text-coral-600 text-sm">
