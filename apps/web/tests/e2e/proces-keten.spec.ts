@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 
 import { login } from "./helpers/auth";
 import { TEST_USERS } from "./helpers/test-users";
@@ -15,6 +15,17 @@ import { TEST_USERS } from "./helpers/test-users";
 
 const KETEN_ACHTERNAAM = `Ketentest${Date.now()}`;
 
+/**
+ * Kaart-locator: alle kaarten (sjablonen, taken, instanties) zijn
+ * `div.rounded-xl`-blokken. Op kaartniveau lokaliseren voorkomt dat we in
+ * een binnenste flex-div belanden waar de actieknoppen buiten vallen.
+ */
+function kaart(page: Page, kop: string): Locator {
+  return page
+    .locator("div.rounded-xl")
+    .filter({ has: page.getByRole("heading", { name: kop }) });
+}
+
 async function naarWerkbakTab(page: Page, tab: RegExp): Promise<void> {
   await page.goto("/werkbak");
   await expect(page.getByRole("heading", { name: "Werkbak" })).toBeVisible();
@@ -26,17 +37,15 @@ test.describe.serial("Proces-keten: intake van activeren tot afronden", () => {
     await login(page, TEST_USERS.zorgmedewerker, { rol: "beheerder" });
 
     await page.goto("/admin/workflows?tab=sjablonen");
-    const intakeKaart = page
-      .locator("div", { has: page.getByRole("heading", { name: "Intake nieuwe cliënt" }) })
-      .last();
+    const intakeKaart = kaart(page, "Intake nieuwe cliënt").first();
     await expect(intakeKaart).toBeVisible({ timeout: 15_000 });
 
-    const activeerKnop = intakeKaart.getByRole("button", { name: "Activeren" });
+    const activeerKnop = intakeKaart.getByRole("button", { name: /^Activeren/ });
     if (await activeerKnop.isVisible().catch(() => false)) {
       await activeerKnop.click();
     }
-    // Na activeren (of als hij al actief was): actief-label zichtbaar
-    await expect(page.getByText(/Actief · v\d+/).first()).toBeVisible({ timeout: 15_000 });
+    // Na activeren (of als hij al actief was): actief-label op de intake-kaart
+    await expect(intakeKaart.getByText(/Actief · v\d+/)).toBeVisible({ timeout: 20_000 });
   });
 
   test("nieuwe cliënt start automatisch het intake-zorgpad", async ({ page }) => {
@@ -60,10 +69,9 @@ test.describe.serial("Proces-keten: intake van activeren tot afronden", () => {
 
     await naarWerkbakTab(page, /Beschikbaar/);
 
-    const taakKaart = page
-      .locator("div", { has: page.getByRole("heading", { name: "Aanmelding beoordelen" }) })
+    const taakKaart = kaart(page, "Aanmelding beoordelen")
       .filter({ hasText: KETEN_ACHTERNAAM })
-      .last();
+      .first();
     await expect(taakKaart).toBeVisible({ timeout: 20_000 });
     await expect(taakKaart.getByText("Intake nieuwe cliënt")).toBeVisible();
 
@@ -71,10 +79,9 @@ test.describe.serial("Proces-keten: intake van activeren tot afronden", () => {
 
     // Persoonlijke claim: de taak staat nu onder "Mijn taken", opgepakt door jou
     await naarWerkbakTab(page, /Mijn taken/);
-    const mijnKaart = page
-      .locator("div", { has: page.getByRole("heading", { name: "Aanmelding beoordelen" }) })
+    const mijnKaart = kaart(page, "Aanmelding beoordelen")
       .filter({ hasText: KETEN_ACHTERNAAM })
-      .last();
+      .first();
     await expect(mijnKaart).toBeVisible({ timeout: 15_000 });
     await expect(mijnKaart.getByText(/Opgepakt door\s+jou/)).toBeVisible();
 
@@ -94,9 +101,10 @@ test.describe.serial("Proces-keten: intake van activeren tot afronden", () => {
 
     await page.goto("/admin/workflows?tab=lopend");
     const instantieKaart = page
-      .locator("div", { hasText: "Intake nieuwe cliënt" })
+      .locator("div.rounded-xl")
+      .filter({ hasText: "Intake nieuwe cliënt" })
       .filter({ hasText: "Huidige stap" })
-      .last();
+      .first();
     await expect(instantieKaart).toBeVisible({ timeout: 20_000 });
     await expect(instantieKaart.getByText("Intake gesprek plannen")).toBeVisible();
   });
@@ -105,19 +113,17 @@ test.describe.serial("Proces-keten: intake van activeren tot afronden", () => {
     await login(page, TEST_USERS.zorgmedewerker, { rol: "zorgmedewerker" });
 
     await naarWerkbakTab(page, /Beschikbaar/);
-    const vervolgKaart = page
-      .locator("div", { has: page.getByRole("heading", { name: "Intake gesprek plannen" }) })
+    const vervolgKaart = kaart(page, "Intake gesprek plannen")
       .filter({ hasText: KETEN_ACHTERNAAM })
-      .last();
+      .first();
     await expect(vervolgKaart).toBeVisible({ timeout: 20_000 });
 
     await vervolgKaart.getByRole("button", { name: "Oppakken" }).click();
 
     await naarWerkbakTab(page, /Mijn taken/);
-    const mijnVervolg = page
-      .locator("div", { has: page.getByRole("heading", { name: "Intake gesprek plannen" }) })
+    const mijnVervolg = kaart(page, "Intake gesprek plannen")
       .filter({ hasText: KETEN_ACHTERNAAM })
-      .last();
+      .first();
     await expect(mijnVervolg).toBeVisible({ timeout: 15_000 });
     await mijnVervolg.getByRole("button", { name: "Afronden" }).click();
     await mijnVervolg.getByLabel("Opmerking").fill("Intake ingepland (e2e)");

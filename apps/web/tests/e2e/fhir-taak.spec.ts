@@ -19,9 +19,10 @@ test("een FHIR-taak is opneembaar en afrondbaar zonder fout", async ({ page }) =
   await page.getByRole("tab", { name: /Beschikbaar/ }).click();
 
   const fhirKaart = page
-    .locator("div", { hasText: "Zorgplan-evaluatie" })
+    .locator("div.rounded-xl")
+    .filter({ hasText: "Zorgplan-evaluatie" })
     .filter({ has: page.getByRole("button", { name: "Oppakken" }) })
-    .last();
+    .first();
 
   const aanwezig = await fhirKaart.isVisible().catch(() => false);
   test.skip(!aanwezig, "Geen open FHIR-evaluatietaak in de seed-data — niets te bewijzen");
@@ -31,9 +32,10 @@ test("een FHIR-taak is opneembaar en afrondbaar zonder fout", async ({ page }) =
   // Geen fout-state; taak verschijnt onder Mijn taken
   await page.getByRole("tab", { name: /Mijn taken/ }).click();
   const mijnKaart = page
-    .locator("div", { hasText: "Zorgplan-evaluatie" })
+    .locator("div.rounded-xl")
+    .filter({ hasText: "Zorgplan-evaluatie" })
     .filter({ has: page.getByRole("button", { name: "Afronden" }) })
-    .last();
+    .first();
   await expect(mijnKaart).toBeVisible({ timeout: 15_000 });
 
   await mijnKaart.getByRole("button", { name: "Afronden" }).click();
