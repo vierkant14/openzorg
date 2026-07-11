@@ -1,0 +1,4 @@
+achternaam;voornaam;geboortedatum;bsn;straat;huisnummer;postcode;plaats;locatie
+Voorbeeld;Piet;1948-03-12;123456782;Dorpsstraat;12;1234 AB;Zorgstad;
+Voorbeeldsen;Anna;1952-11-30;;Kerkweg;8;5678 CD;Zorgstad;
+Testcliënt;Willem;1940-01-05;111222333;Molenlaan;3;9012 EF;Zorgdorp;
