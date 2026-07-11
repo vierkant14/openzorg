@@ -3,7 +3,7 @@
 import { EmptyState, LoadingSkeleton, Section } from "@openzorg/shared-ui";
 import { useEffect, useState } from "react";
 
-import { ecdFetch } from "../../../lib/api";
+import { ecdFetch, getUserId } from "../../../lib/api";
 
 interface AuditEntry {
   id: string;
@@ -56,9 +56,11 @@ function tijdLabel(iso: string): string {
 
 /**
  * De laatste 10 audit-events van de ingelogde gebruiker als leesbare zinnen.
- * De audit-log registreert per gebruiker het token-voorvoegsel; daarop
- * filteren we. Inzage kan permissie-gebonden zijn: bij 403 (stil403) of een
- * fout verdwijnt de sectie volledig.
+ * De audit-log registreert de persoon (X-User-Id / practitioner-ID) met het
+ * token-voorvoegsel als terugval voor sessies zonder profiel — we filteren
+ * op dezelfde volgorde, zodat de feed sessies overleeft zodra het account
+ * een profiel heeft. Inzage kan permissie-gebonden zijn: bij 403 (stil403)
+ * of een fout verdwijnt de sectie volledig.
  */
 export function ActiviteitenFeed({ onResultaat }: ActiviteitenFeedProps) {
   const [events, setEvents] = useState<AuditEntry[]>([]);
@@ -68,15 +70,16 @@ export function ActiviteitenFeed({ onResultaat }: ActiviteitenFeedProps) {
   useEffect(() => {
     let actief = true;
     const token = localStorage.getItem("openzorg_token");
-    if (!token) {
-      // Zonder sessie-token is er geen gebruikersspoor — sectie overslaan.
+    const practitionerId = getUserId();
+    if (!token && !practitionerId) {
+      // Zonder identiteit of sessie-token is er geen gebruikersspoor.
       setVerborgen(true);
       setLaden(false);
       onResultaat(true);
       return;
     }
-    // De audit-middleware registreert de eerste 36 tekens van het token als user_id.
-    const auditGebruiker = token.slice(0, 36);
+    // Zelfde voorrangsregel als de audit-middleware: persoon, anders token-prefix.
+    const auditGebruiker = practitionerId ?? token!.slice(0, 36);
     ecdFetch<AuditResponse>(
       `/api/admin/audit-log?page=1&limit=10&user=${encodeURIComponent(auditGebruiker)}`,
       { stil403: true },
