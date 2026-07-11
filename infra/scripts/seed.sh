@@ -76,8 +76,9 @@ async function register(email, password, firstName, lastName, projectName) {
   });
   const token = await r3.json();
   const projectId = token.project?.reference?.replace('Project/', '') || '';
+  const profileRef = token.profile?.reference || '';
   console.log('  ' + email + ': OK (project: ' + projectId + ')');
-  return { accessToken: token.access_token || null, projectId };
+  return { accessToken: token.access_token || null, projectId, profileRef };
 }
 
 // ── FHIR helper ──
@@ -94,6 +95,136 @@ async function fhirCreate(token, resource) {
   });
   const result = await r.json();
   return result.id || null;
+}
+
+// ── Rol-accounts (W3): per-rol login-accounts + rol-extensie ──
+
+const ROL_EXTENSION_URL = 'https://openzorg.nl/extensions/rol';
+
+// Per-rol testaccounts per tenant. Wachtwoorden volgen het bestaande
+// tenant-prefix-patroon (Hz! / Ld!) en staan óók in CLAUDE.md + testplan.
+const ROL_ACCOUNTS = {
+  horizon: [
+    { email: 'zorg@horizon.nl',       password: 'Hz!Zorg#2026fZ4a', firstName: 'Fatima', lastName: 'Zorg',       rol: 'zorgmedewerker' },
+    { email: 'planner@horizon.nl',    password: 'Hz!Plan#2026pT7b', firstName: 'Peter',  lastName: 'Planner',    rol: 'planner' },
+    { email: 'teamleider@horizon.nl', password: 'Hz!Team#2026tL9c', firstName: 'Tessa',  lastName: 'Teamleider', rol: 'teamleider' },
+    { email: 'beheer@horizon.nl',     password: 'Hz!Behr#2026bB3d', firstName: 'Bram',   lastName: 'Beheer',     rol: 'beheerder' },
+  ],
+  linde: [
+    { email: 'zorg@delinde.nl',       password: 'Ld!Zorg#2026fZ5e', firstName: 'Fatima', lastName: 'Zorg',       rol: 'zorgmedewerker' },
+    { email: 'planner@delinde.nl',    password: 'Ld!Plan#2026pT8f', firstName: 'Peter',  lastName: 'Planner',    rol: 'planner' },
+    { email: 'teamleider@delinde.nl', password: 'Ld!Team#2026tL2g', firstName: 'Tessa',  lastName: 'Teamleider', rol: 'teamleider' },
+    { email: 'beheer@delinde.nl',     password: 'Ld!Behr#2026bB6h', firstName: 'Bram',   lastName: 'Beheer',     rol: 'beheerder' },
+  ],
+};
+
+// Geauthenticeerde Medplum-call; retourneert { ok, status, data }.
+async function medplumAuthed(token, path, method, body) {
+  const headers = { 'Authorization': 'Bearer ' + token };
+  const opts = { method: method || 'GET', headers };
+  if (body !== undefined) {
+    headers['Content-Type'] = 'application/json';
+    opts.body = JSON.stringify(body);
+  }
+  const r = await fetch(MEDPLUM + path, opts);
+  const text = await r.text();
+  let data = null;
+  try { data = JSON.parse(text); } catch (e) { data = text; }
+  return { ok: r.ok, status: r.status, data };
+}
+
+// Zoekt een bestaande Practitioner op (idempotentie): eerst op e-mail, dan op naam.
+async function findPractitioner(token, acc) {
+  const viaEmail = await medplumAuthed(token, '/fhir/R4/Practitioner?email=' + encodeURIComponent(acc.email));
+  if (viaEmail.ok && viaEmail.data && viaEmail.data.entry && viaEmail.data.entry.length > 0) {
+    return viaEmail.data.entry[0].resource.id;
+  }
+  const viaNaam = await medplumAuthed(token, '/fhir/R4/Practitioner?family=' + encodeURIComponent(acc.lastName) + '&given=' + encodeURIComponent(acc.firstName));
+  if (viaNaam.ok && viaNaam.data && viaNaam.data.entry && viaNaam.data.entry.length > 0) {
+    return viaNaam.data.entry[0].resource.id;
+  }
+  return null;
+}
+
+// Nodigt één rol-account uit via de Medplum admin invite-API (project-admin-token).
+// Maakt User + ProjectMembership + Practitioner in één call. Idempotent: een
+// bestaand e-mailadres levert een 4xx op → we zoeken de Practitioner op i.p.v. te falen.
+async function inviteRolAccount(adminToken, projectId, acc) {
+  const res = await medplumAuthed(adminToken, '/admin/projects/' + projectId + '/invite', 'POST', {
+    resourceType: 'Practitioner',
+    firstName: acc.firstName,
+    lastName: acc.lastName,
+    email: acc.email,
+    password: acc.password,
+    sendEmail: false,
+    membership: { admin: false },
+  });
+
+  if (res.ok) {
+    const ref = res.data && res.data.profile && res.data.profile.reference;
+    const id = ref ? ref.split('/')[1] : null;
+    console.log('    ' + acc.email + ' (' + acc.rol + '): uitgenodigd -> ' + (ref || '(geen profile-ref in respons)'));
+    if (!id) console.log('    !! GEEN profile-reference in invite-respons: ' + JSON.stringify(res.data).slice(0, 300));
+    return id;
+  }
+
+  console.log('    ' + acc.email + ' (' + acc.rol + '): invite HTTP ' + res.status + ' -> account bestaat mogelijk al, opzoeken...');
+  const bestaand = await findPractitioner(adminToken, acc);
+  if (bestaand) {
+    console.log('      bestaande Practitioner/' + bestaand + ' hergebruikt');
+    return bestaand;
+  }
+  console.log('    !! INVITE MISLUKT voor ' + acc.email + ' en geen bestaande Practitioner gevonden (HTTP ' + res.status + '): ' + JSON.stringify(res.data).slice(0, 300));
+  return null;
+}
+
+// Zet de OpenZorg-rol-extensie op een Practitioner (bestaande extensies blijven behouden).
+async function zetRol(adminToken, practitionerId, rol) {
+  if (!practitionerId) return false;
+  const res = await medplumAuthed(adminToken, '/fhir/R4/Practitioner/' + practitionerId);
+  if (!res.ok || !res.data || res.data.resourceType !== 'Practitioner') {
+    console.log('      !! kon Practitioner/' + practitionerId + ' niet ophalen (HTTP ' + res.status + ')');
+    return false;
+  }
+  const pract = res.data;
+  const behouden = (pract.extension || []).filter(function (e) { return e.url !== ROL_EXTENSION_URL; });
+  pract.extension = behouden.concat([{ url: ROL_EXTENSION_URL, valueCode: rol }]);
+  const put = await medplumAuthed(adminToken, '/fhir/R4/Practitioner/' + practitionerId, 'PUT', pract);
+  if (!put.ok) {
+    console.log('      !! rol-extensie zetten mislukt voor Practitioner/' + practitionerId + ' (HTTP ' + put.status + '): ' + JSON.stringify(put.data).slice(0, 200));
+    return false;
+  }
+  return true;
+}
+
+// Maakt de vier per-rol login-accounts voor een tenant en zet de rol-extensie
+// op elk account én op de tenant-admin (jan/maria -> tenant-admin).
+async function seedRolAccounts(adminToken, projectId, adminProfileRef, accounts, tenantName) {
+  if (!adminToken || !projectId) {
+    console.log('  Rol-accounts overgeslagen voor ' + tenantName + ' (geen admin-token/projectId — bestond de tenant al?)');
+    return;
+  }
+  console.log('  Rol-accounts aanmaken voor ' + tenantName + '...');
+
+  // Tenant-admin (jan/maria) krijgt de tenant-admin-rol op het eigen profiel.
+  if (adminProfileRef && adminProfileRef.indexOf('Practitioner/') === 0) {
+    const okAdmin = await zetRol(adminToken, adminProfileRef.split('/')[1], 'tenant-admin');
+    console.log('    tenant-admin-rol ' + (okAdmin ? 'gezet op ' : 'NIET gezet op ') + adminProfileRef);
+  } else {
+    console.log('    !! geen admin-profile-reference bekend -> tenant-admin-rol niet gezet');
+  }
+
+  // Vier per-rol accounts.
+  for (let i = 0; i < accounts.length; i++) {
+    const acc = accounts[i];
+    const practitionerId = await inviteRolAccount(adminToken, projectId, acc);
+    if (practitionerId) {
+      const ok = await zetRol(adminToken, practitionerId, acc.rol);
+      if (ok) console.log('      rol ' + acc.rol + ' gezet op Practitioner/' + practitionerId);
+      else console.log('    !! rol ' + acc.rol + ' NIET gezet voor ' + acc.email);
+    }
+  }
+  console.log('  Rol-accounts voor ' + tenantName + ' klaar.');
 }
 
 // ── Test data creation ──
@@ -934,12 +1065,14 @@ async function seedTenantData(token, tenantName) {
   console.log('--- Tenant 1: Zorggroep Horizon ---');
   const horizon = await register('jan@horizon.nl', 'Hz!J4n#2026pKw8', 'Jan', 'de Vries', 'Zorggroep Horizon');
   await seedTenantData(horizon.accessToken, 'Zorggroep Horizon');
+  await seedRolAccounts(horizon.accessToken, horizon.projectId, horizon.profileRef, ROL_ACCOUNTS.horizon, 'Zorggroep Horizon');
 
   // Tenant 2: Thuiszorg De Linde (kleinere thuiszorg)
   console.log('');
   console.log('--- Tenant 2: Thuiszorg De Linde ---');
   const linde = await register('maria@delinde.nl', 'Ld!M4r1a#2026nRt5', 'Maria', 'Jansen', 'Thuiszorg De Linde');
   await seedTenantData(linde.accessToken, 'Thuiszorg De Linde');
+  await seedRolAccounts(linde.accessToken, linde.projectId, linde.profileRef, ROL_ACCOUNTS.linde, 'Thuiszorg De Linde');
 
   // Write Medplum project IDs to temp file for psql update
   const fs = require('fs');
@@ -958,9 +1091,19 @@ async function seedTenantData(token, tenantName) {
   console.log('  kevin@openzorg.nl   / Oz!K3v1n#2026xYp4');
   console.log('  meneka@openzorg.nl  / Oz!M3n3k4#2026wZr7');
   console.log('');
-  console.log('Tenant accounts:');
+  console.log('Tenant admin accounts:');
   console.log('  Zorggroep Horizon:  jan@horizon.nl    / Hz!J4n#2026pKw8');
   console.log('  Thuiszorg De Linde: maria@delinde.nl  / Ld!M4r1a#2026nRt5');
+  console.log('');
+  console.log('Per-rol testaccounts (server-rol gekoppeld):');
+  console.log('  Horizon  zorgmedewerker: zorg@horizon.nl       / Hz!Zorg#2026fZ4a');
+  console.log('  Horizon  planner:        planner@horizon.nl    / Hz!Plan#2026pT7b');
+  console.log('  Horizon  teamleider:     teamleider@horizon.nl / Hz!Team#2026tL9c');
+  console.log('  Horizon  beheerder:      beheer@horizon.nl     / Hz!Behr#2026bB3d');
+  console.log('  De Linde zorgmedewerker: zorg@delinde.nl       / Ld!Zorg#2026fZ5e');
+  console.log('  De Linde planner:        planner@delinde.nl    / Ld!Plan#2026pT8f');
+  console.log('  De Linde teamleider:     teamleider@delinde.nl / Ld!Team#2026tL2g');
+  console.log('  De Linde beheerder:      beheer@delinde.nl     / Ld!Behr#2026bB6h');
   console.log('');
   console.log('Per tenant: 20 medewerkers, 20 contracten, 50 clienten, 15 zorgplannen,');
   console.log('  40 rapportages, 28 medicaties, 10 allergieen, 18 vaccinaties,');
