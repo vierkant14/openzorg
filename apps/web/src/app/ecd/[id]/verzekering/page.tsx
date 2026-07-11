@@ -68,8 +68,8 @@ function formatDate(iso: string | undefined): string {
 }
 
 function statusBadge(status: string, period?: { start?: string; end?: string }): { label: string; color: string } {
-  if (status === "cancelled") return { label: "Geannuleerd", color: "bg-gray-100 text-gray-600" };
-  if (status !== "active") return { label: status, color: "bg-gray-100 text-gray-600" };
+  if (status === "cancelled") return { label: "Geannuleerd", color: "bg-surface-100 text-fg-muted dark:bg-surface-800" };
+  if (status !== "active") return { label: status, color: "bg-surface-100 text-fg-muted dark:bg-surface-800" };
   if (period?.end) {
     const end = new Date(period.end);
     const now = new Date();
