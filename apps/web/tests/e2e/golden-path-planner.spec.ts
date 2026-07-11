@@ -25,7 +25,9 @@ test.describe("Golden path: planner", () => {
     await expect(page.getByRole("heading", { level: 1, name: "Dagplanning" })).toBeVisible();
     await expect(page).not.toHaveURL(/\/geen-toegang/);
     await expect(page.getByLabel("Medewerker", { exact: true })).toBeVisible();
-    await expect(page.getByRole("alert")).toHaveCount(0);
+    // Alleen alerts mét inhoud tellen: Next.js injecteert een lege
+    // route-announcer met role="alert" bij client-side navigatie.
+    await expect(page.getByRole("alert").filter({ hasText: /\S/ })).toHaveCount(0);
 
     // 3. Werkbak is bereikbaar via de zij-navigatie
     await page
