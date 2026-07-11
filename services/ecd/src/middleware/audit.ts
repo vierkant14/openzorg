@@ -79,7 +79,13 @@ export async function auditMiddleware(c: Context<AppEnv>, next: Next): Promise<v
 
   // Log asynchronously — don't block the response
   const tenantId = c.get("tenantId");
-  const userId = c.req.header("Authorization")?.replace("Bearer ", "").slice(0, 36) ?? "anonymous";
+  // NEN 7513: log de persoon. X-User-Id (practitioner-ID, sinds de
+  // identiteitslaag door beide clients meegestuurd) heeft voorrang;
+  // token-voorvoegsel blijft de terugval voor sessies zonder profiel.
+  const userId =
+    c.req.header("X-User-Id") ??
+    c.req.header("Authorization")?.replace("Bearer ", "").slice(0, 36) ??
+    "anonymous";
   const role = c.req.header("X-User-Role") ?? "unknown";
   const action = METHOD_TO_ACTION[c.req.method] ?? "unknown";
   const { resourceType, resourceId } = extractResourceInfo(path);

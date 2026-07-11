@@ -11,9 +11,17 @@ import { TEST_USERS } from "./helpers/test-users";
  *
  * Zelf-seedend: activeert het intake-zorgpad via de UI en maakt een eigen
  * cliënt aan — geen aparte seed-stap nodig in CI.
+ *
+ * Robuustheids-ontwerp (les uit CI-flakiness):
+ * - De cliëntnaam wordt in stap 2 gegenereerd, niet op module-niveau: bij
+ *   een serial-retry ontstaat zo een verse identiteit i.p.v. een duplicaat.
+ * - De intake start fire-and-forget op de backend en de werkbak laadt
+ *   eenmalig bij mount — stappen 3-5 pollen daarom met herladen.
+ * - De Lopend-controle filtert op de cliëntnaam: er kunnen meerdere
+ *   intakes lopen (bv. uit de import-test).
  */
 
-const KETEN_ACHTERNAAM = `Ketentest${Date.now()}`;
+let ketenAchternaam = "";
 
 /**
  * Kaart-locator: alle kaarten (sjablonen, taken, instanties) zijn
@@ -30,6 +38,26 @@ async function naarWerkbakTab(page: Page, tab: RegExp): Promise<void> {
   await page.goto("/werkbak");
   await expect(page.getByRole("heading", { name: "Werkbak" })).toBeVisible();
   await page.getByRole("tab", { name: tab }).click();
+}
+
+/**
+ * Wacht op een taakkaart die pas verschijnt nadat de backend-trigger klaar
+ * is: herlaadt de werkbak-tab elke ~4s tot de kaart er is (max ~48s).
+ */
+async function wachtOpTaakkaart(
+  page: Page,
+  tab: RegExp,
+  kop: string,
+  bevatTekst: string,
+): Promise<Locator> {
+  const zoek = () => kaart(page, kop).filter({ hasText: bevatTekst }).first();
+  for (let poging = 0; poging < 12; poging++) {
+    await naarWerkbakTab(page, tab);
+    if (await zoek().isVisible().catch(() => false)) return zoek();
+    await page.waitForTimeout(4000);
+  }
+  await expect(zoek()).toBeVisible(); // nette Playwright-fout met context
+  return zoek();
 }
 
 test.describe.serial("Proces-keten: intake van activeren tot afronden", () => {
@@ -49,6 +77,9 @@ test.describe.serial("Proces-keten: intake van activeren tot afronden", () => {
   });
 
   test("nieuwe cliënt start automatisch het intake-zorgpad", async ({ page }) => {
+    // Naam hier genereren: een serial-retry krijgt zo een verse identiteit
+    ketenAchternaam = `Ketentest${Date.now()}`;
+
     await login(page, TEST_USERS.zorgmedewerker, { rol: "zorgmedewerker" });
 
     await page.goto("/ecd/nieuw");
@@ -56,7 +87,7 @@ test.describe.serial("Proces-keten: intake van activeren tot afronden", () => {
 
     // FormLabel is niet aan de input gekoppeld — selecteer binnen het veld-blok
     await page.locator('div:has(> label:text-is("Voornaam")) > input').fill("Erik");
-    await page.locator('div:has(> label:text-is("Achternaam")) > input').fill(KETEN_ACHTERNAAM);
+    await page.locator('div:has(> label:text-is("Achternaam")) > input').fill(ketenAchternaam);
     await page.locator('div:has(> label:text-is("Geboortedatum")) > input').fill("1948-03-12");
 
     await page.getByRole("button", { name: /Client aanmaken/ }).click();
@@ -67,22 +98,13 @@ test.describe.serial("Proces-keten: intake van activeren tot afronden", () => {
   test("planner pakt de intake-taak op en keurt goed (geconfigureerd formulier)", async ({ page }) => {
     await login(page, TEST_USERS.zorgmedewerker, { rol: "planner" });
 
-    await naarWerkbakTab(page, /Beschikbaar/);
-
-    const taakKaart = kaart(page, "Aanmelding beoordelen")
-      .filter({ hasText: KETEN_ACHTERNAAM })
-      .first();
-    await expect(taakKaart).toBeVisible({ timeout: 20_000 });
+    const taakKaart = await wachtOpTaakkaart(page, /Beschikbaar/, "Aanmelding beoordelen", ketenAchternaam);
     await expect(taakKaart.getByText("Intake nieuwe cliënt")).toBeVisible();
 
     await taakKaart.getByRole("button", { name: "Oppakken" }).click();
 
     // Persoonlijke claim: de taak staat nu onder "Mijn taken", opgepakt door jou
-    await naarWerkbakTab(page, /Mijn taken/);
-    const mijnKaart = kaart(page, "Aanmelding beoordelen")
-      .filter({ hasText: KETEN_ACHTERNAAM })
-      .first();
-    await expect(mijnKaart).toBeVisible({ timeout: 15_000 });
+    const mijnKaart = await wachtOpTaakkaart(page, /Mijn taken/, "Aanmelding beoordelen", ketenAchternaam);
     await expect(mijnKaart.getByText(/Opgepakt door\s+jou/)).toBeVisible();
 
     // Afronden met het catalogus-formulier: verplicht Ja/Nee + opmerking
@@ -100,10 +122,11 @@ test.describe.serial("Proces-keten: intake van activeren tot afronden", () => {
     await login(page, TEST_USERS.zorgmedewerker, { rol: "beheerder" });
 
     await page.goto("/admin/workflows?tab=lopend");
+    // Filter op de cliëntnaam: er kunnen meerdere intakes lopen (import-tests)
     const instantieKaart = page
       .locator("div.rounded-xl")
       .filter({ hasText: "Intake nieuwe cliënt" })
-      .filter({ hasText: "Huidige stap" })
+      .filter({ hasText: ketenAchternaam })
       .first();
     await expect(instantieKaart).toBeVisible({ timeout: 20_000 });
     await expect(instantieKaart.getByText("Intake gesprek plannen")).toBeVisible();
@@ -112,19 +135,10 @@ test.describe.serial("Proces-keten: intake van activeren tot afronden", () => {
   test("zorgmedewerker rondt de vervolgstap af — zorgpad compleet", async ({ page }) => {
     await login(page, TEST_USERS.zorgmedewerker, { rol: "zorgmedewerker" });
 
-    await naarWerkbakTab(page, /Beschikbaar/);
-    const vervolgKaart = kaart(page, "Intake gesprek plannen")
-      .filter({ hasText: KETEN_ACHTERNAAM })
-      .first();
-    await expect(vervolgKaart).toBeVisible({ timeout: 20_000 });
-
+    const vervolgKaart = await wachtOpTaakkaart(page, /Beschikbaar/, "Intake gesprek plannen", ketenAchternaam);
     await vervolgKaart.getByRole("button", { name: "Oppakken" }).click();
 
-    await naarWerkbakTab(page, /Mijn taken/);
-    const mijnVervolg = kaart(page, "Intake gesprek plannen")
-      .filter({ hasText: KETEN_ACHTERNAAM })
-      .first();
-    await expect(mijnVervolg).toBeVisible({ timeout: 15_000 });
+    const mijnVervolg = await wachtOpTaakkaart(page, /Mijn taken/, "Intake gesprek plannen", ketenAchternaam);
     await mijnVervolg.getByRole("button", { name: "Afronden" }).click();
     await mijnVervolg.getByLabel("Opmerking").fill("Intake ingepland (e2e)");
     await mijnVervolg.locator('button[type="submit"]').click();
