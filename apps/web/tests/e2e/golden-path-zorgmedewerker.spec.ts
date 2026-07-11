@@ -20,7 +20,7 @@ test.describe("Golden path: zorgmedewerker", () => {
     // 2. Eerste cliënt-detaillink openen — match FHIR-id pad /ecd/<uuid>
     // Exclude /ecd/nieuw and de sidebar-link /ecd
     const clientLink = page
-      .locator('a[href^="/ecd/"]:not([href="/ecd/nieuw"]):not([href="/ecd"])')
+      .locator('a[href^="/ecd/"]:not([href="/ecd/nieuw"]):not([href="/ecd/import"]):not([href="/ecd"])')
       .first();
     await expect(clientLink).toBeVisible({ timeout: 15_000 });
     await clientLink.click();

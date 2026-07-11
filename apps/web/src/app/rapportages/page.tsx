@@ -96,7 +96,7 @@ function isToday(iso?: string): boolean {
 
 const TYPE_CLASSES: Record<string, string> = {
   SOEP: "bg-brand-100 text-brand-800 dark:bg-brand-950/30 dark:text-brand-300",
-  Vrij: "bg-slate-100 text-slate-800 dark:bg-slate-950/30 dark:text-slate-300",
+  Vrij: "bg-surface-100 text-fg-muted dark:bg-surface-800",
 };
 
 /* -- Component -- */
