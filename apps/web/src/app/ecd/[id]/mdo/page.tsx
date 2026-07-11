@@ -1,5 +1,6 @@
 "use client";
 
+import { ErrorState, LoadingSkeleton } from "@openzorg/shared-ui";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
@@ -34,18 +35,6 @@ function formatDate(iso?: string): string {
   } catch {
     return iso;
   }
-}
-
-function Spinner() {
-  return (
-    <div className="flex justify-center py-8">
-      <div className="h-6 w-6 animate-spin rounded-full border-4 border-brand-300 border-t-brand-700" />
-    </div>
-  );
-}
-
-function ErrorMsg({ msg }: { msg: string }) {
-  return <p className="my-2 text-sm text-coral-600">{msg}</p>;
 }
 
 interface Deelnemer {
@@ -129,7 +118,7 @@ function MdoForm({ clientId, onSaved }: { clientId: string; onSaved: () => void 
   return (
     <form onSubmit={handleSubmit} className="mb-5 rounded-lg border border-default bg-raised p-5 shadow-sm">
       <h3 className="mb-4 font-semibold text-fg">MDO plannen</h3>
-      {error && <ErrorMsg msg={error} />}
+      {error && <p className="my-2 text-sm text-coral-600">{error}</p>}
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
@@ -269,8 +258,8 @@ export default function MdoPage() {
         <MdoForm clientId={clientId} onSaved={() => { setShowForm(false); load(); }} />
       )}
 
-      {loading && <Spinner />}
-      {error && <ErrorMsg msg={error} />}
+      {loading && <LoadingSkeleton regels={6} />}
+      {!loading && error && <ErrorState melding={error} onOpnieuw={load} />}
 
       {!loading && !error && items.length === 0 && (
         <p className="py-8 text-center text-sm text-fg-subtle">Nog geen MDO&apos;s geregistreerd.</p>
