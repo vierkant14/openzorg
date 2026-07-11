@@ -13,6 +13,7 @@ import { apiDocsRoutes } from "./routes/api-docs.js";
 import { auditLogRoutes } from "./routes/audit-log.js";
 import { berichtenRoutes } from "./routes/berichten.js";
 import { capaciteitRoutes } from "./routes/capaciteit.js";
+import { clientImportRoutes } from "./routes/client-import.js";
 import { clientRoutes } from "./routes/client.js";
 import { codelijstenRoutes } from "./routes/codelijsten.js";
 import { configuratieRoutes } from "./routes/configuratie.js";
@@ -93,6 +94,9 @@ app.get("/api/status", (c) => {
 
 // Identiteitslaag: ingelogde gebruiker → Practitioner + rol (ME-01)
 app.route("/api", meRoutes);
+
+// CSV-cliëntimport — vóór clientRoutes (route-volgorde: specifiek eerst)
+app.route("/api/clients", clientImportRoutes);
 
 // Client (Patient) CRUD
 app.route("/api/clients", clientRoutes);
