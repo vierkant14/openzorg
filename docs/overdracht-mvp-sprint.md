@@ -1,6 +1,6 @@
 # Overdrachtsrapport — MVP-eindsprint (levend document)
 
-**Gestart**: 2026-07-10 · **Uitvoerder**: Claude (autonoom, in opdracht van Kevin) · **Laatst bijgewerkt**: 2026-07-10 (avond)
+**Gestart**: 2026-07-10 · **Uitvoerder**: Claude (autonoom, in opdracht van Kevin) · **Laatst bijgewerkt**: 2026-07-11 (ochtend)
 
 Spec: `docs/superpowers/specs/2026-07-10-verkoopbare-mvp-vvt-thuiszorg-design.md` · Plannen: `docs/superpowers/plans/2026-07-10-w*.md` · Voortgangsgeheugen: memory `project_state`.
 
@@ -14,13 +14,16 @@ Spec: `docs/superpowers/specs/2026-07-10-verkoopbare-mvp-vvt-thuiszorg-design.md
 | Spec + plannen | ✅ Gemerged (PR #16) | — |
 | W1-1 bridge-hardening | ✅ Gemerged (PR #17) | 34 bridge-tests; Flowable-tenancy-integratietest bewees per-tenant deploy/start/query's in CI |
 | W1-2 identiteitslaag | ✅ Gemerged (PR #18) | 4 me-route-tests; CI-E2E login-flow |
-| W1-3 werkbak + catalogus | 🟡 PR #19 open | 39 bridge- + 44 ECD-tests lokaal groen; werkbak-e2e geschreven; **wacht op CI (zie blokkers)** |
-| W1-4 Processen-hub | 🟡 PR #20 open (stapelt op #19) | typecheck/lint groen; admin-processen-e2e geschreven |
-| W1-5 + W1-6 keten | 🟡 PR #21 open (stapelt op #20) | 46 bridge- + 46 ECD-tests lokaal; proces-keten-e2e + fhir-taak-e2e geschreven (zelf-seedend) |
-| W2 reparaties | 🔨 In uitvoering (branch feat/w2-reparaties) | dashboard-stub verwijderd, gray-fixes; custom-fields-splitsing loopt; dashboard-landingsscherm volgt ná W1-merges |
-| W3 pilotprofiel | ⬜ Plan klaar | — |
-| W4 live platform | ⬜ Voorbereid (CHANGELOG-concept staat) | **geblokkeerd: Unraid onbereikbaar** |
-| W5 verkooppakket | ⬜ Plan klaar | — |
+| W1-3 werkbak + catalogus | 🟡 PR #24 open (verving #19 na Actions-storing) | 39 bridge- + 44 ECD-tests lokaal groen; werkbak-e2e; CI draait |
+| W1-4 Processen-hub | 🟡 PR #25 open (stapelt op #24; verving #20) | typecheck/lint groen; admin-processen-e2e |
+| W1-5 + W1-6 keten | 🟡 PR #26 open (stapelt op #25; verving #21) | 46 bridge- + 46 ECD-tests lokaal; proces-keten-e2e + fhir-taak-e2e (zelf-seedend) |
+| W2-1 reparaties | ✅ Gemerged (PR #22) | dashboard-stub weg, 0 raw-gray, custom-fields gesplitst, CHANGELOG + dit rapport |
+| W2-2 dashboard/dedupe | ⬜ Na W1-merges | consumeert useWerkbak + /api/me |
+| W3-1 CSV-cliëntimport | 🟡 PR #23 open | 6 route-tests + import-e2e; CI draait |
+| W3-2/3 pilotprofiel + golden paths | ⬜ Plan klaar | — |
+| W4 live platform | ⬜ Voorbereid (CHANGELOG-concept staat) | **geblokkeerd: Unraid staat uit (bevestigd door Kevin 2026-07-11)** |
+| W5 verkooppakket | ⬜ Plan klaar | compliance-kolom voedt uit `docs/compliance/audit-readiness.md` |
+| Compliance-dossier | 🟢 Aangemaakt (2026-07-11, op verzoek Kevin) | `docs/compliance/audit-readiness.md` — eerlijke NEN 7510/7513/AVG-status met codebewijs, gaten → backlog-IDs, auditor-documentenregister |
 
 ## De 10 procesmanagement-problemen (spec §2.2) — allemaal geadresseerd
 
@@ -39,8 +42,8 @@ Spec: `docs/superpowers/specs/2026-07-10-verkoopbare-mvp-vvt-thuiszorg-design.md
 
 ## Actieve blokkers
 
-1. **GitHub Actions verwerkt sinds 2026-07-10 ±19:00 (NL) geen events meer** voor dit repo: geen runs op PR-open/reopen/pushes; workflows staan op actief, repo is publiek, statuspagina meldt operationeel. Effect: PR #19/#20/#21 kunnen niet CI-geverifieerd en dus niet gemerged worden (protocol: nooit mergen zonder groene CI incl. E2E). **Actie bij herstel: mergen in volgorde #19 → #20 → #21** (gestapeld; elke merge verkleint de volgende diff).
-2. **Unraid (192.168.1.10) onbereikbaar** (SSH-timeout, hele sessie al). Blokkeert W4-uitrol en staging-verificatie. Open punt 2 voor Kevin: staat de server uit?
+1. ~~GitHub Actions-storing~~ **Opgelost 2026-07-11 ±08:10**: Actions verwerkte ±13 uur geen events (2026-07-10 ±20:55 → 2026-07-11 ±08:10 NL). Belangrijk restant: **PR's die tijdens de storing zijn aangemaakt krijgen blijvend geen webhook-events** (push/reopen op #19-21 deed niets); oplossing was ze sluiten en als verse PR's heropenen (#24/#25/#26). Merge-volgorde: #24 → #25 → #26, daarna is W1 compleet.
+2. **Unraid staat uit** (bevestigd door Kevin, 2026-07-11). W4-uitrol wacht; alles is voorbereid — zodra de server aan staat is het W4-plan één sessie werk.
 
 ## Besluiten van vandaag die Kevin moet weten (naast spec §7)
 
