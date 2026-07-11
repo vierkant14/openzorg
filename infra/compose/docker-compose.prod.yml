@@ -43,6 +43,8 @@ services:
       NODE_ENV: production
       MEDPLUM_PORT: 8103
       MEDPLUM_BASE_URL: ${MEDPLUM_PUBLIC_URL:?MEDPLUM_PUBLIC_URL is verplicht (bijv. https://fhir.voorbeeld.nl/)}
+      # Vereist voor de admin-invite-API (set-wachtwoord-URL); wijs naar de web-UI
+      MEDPLUM_APP_BASE_URL: ${OPENZORG_PUBLIC_URL:-${MEDPLUM_PUBLIC_URL}}
       MEDPLUM_DATABASE_HOST: postgres
       MEDPLUM_DATABASE_PORT: 5432
       MEDPLUM_DATABASE_DBNAME: medplum

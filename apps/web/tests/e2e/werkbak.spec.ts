@@ -36,7 +36,7 @@ test.describe("Werkbak", () => {
   });
 
   test("teamleider ziet de oversight-tab \"Alle taken\"", async ({ page }) => {
-    await login(page, TEST_USERS.zorgmedewerker, { rol: "teamleider" });
+    await login(page, TEST_USERS.teamleider);
 
     await page.goto("/werkbak");
     await expect(page.getByRole("heading", { name: "Werkbak" })).toBeVisible();

@@ -254,6 +254,19 @@ Zie `docs/deployment-production.md` voor het volledige runbook (secrets, backup/
 | Zorggroep Horizon | jan@horizon.nl | Hz!J4n#2026pKw8 | Tenant admin |
 | Thuiszorg De Linde | maria@delinde.nl | Ld!M4r1a#2026nRt5 | Tenant admin |
 
+**Per-rol testaccounts** (elk met een gekoppelde server-rol via de Practitioner-extensie `https://openzorg.nl/extensions/rol` — de login-rolkeuze wordt genegeerd):
+
+| Account | Email | Password | Rol |
+|---------|-------|----------|-----|
+| Horizon · Fatima Zorg | zorg@horizon.nl | Hz!Zorg#2026fZ4a | Zorgmedewerker |
+| Horizon · Peter Planner | planner@horizon.nl | Hz!Plan#2026pT7b | Planner |
+| Horizon · Tessa Teamleider | teamleider@horizon.nl | Hz!Team#2026tL9c | Teamleider |
+| Horizon · Bram Beheer | beheer@horizon.nl | Hz!Behr#2026bB3d | Beheerder |
+| De Linde · Fatima Zorg | zorg@delinde.nl | Ld!Zorg#2026fZ5e | Zorgmedewerker |
+| De Linde · Peter Planner | planner@delinde.nl | Ld!Plan#2026pT8f | Planner |
+| De Linde · Tessa Teamleider | teamleider@delinde.nl | Ld!Team#2026tL2g | Teamleider |
+| De Linde · Bram Beheer | beheer@delinde.nl | Ld!Behr#2026bB6h | Beheerder |
+
 ### Test Data (seeded per tenant)
 
 6 medewerkers, 8 clienten (BSN, adres, indicatie), 4 zorgplannen met doelen, 10 rapportages (SOEP + vrij), 7 medicatievoorschriften, 4 allergieen, 6 vaccinaties, 5 contactpersonen, 6 afspraken.

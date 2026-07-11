@@ -16,12 +16,18 @@
 3. Controleer of alles draait: `docker compose ps` — alle services "healthy". De seed-container maakt automatisch testdata aan (2 organisaties, 8 cliënten p/st, medewerkers, afspraken).
 4. Open **http://localhost:3000** en log in:
 
-   | Account | Wachtwoord | Gebruik als |
+   | Account | Wachtwoord | Rol |
    |---|---|---|
-   | jan@horizon.nl | Hz!J4n#2026pKw8 | alle rollen (kies de rol in het loginscherm) |
-   | maria@delinde.nl | Ld!M4r1a#2026nRt5 | tweede organisatie (tenant-isolatie checken) |
+   | jan@horizon.nl | Hz!J4n#2026pKw8 | Tenant admin (Horizon) |
+   | zorg@horizon.nl | Hz!Zorg#2026fZ4a | Zorgmedewerker |
+   | planner@horizon.nl | Hz!Plan#2026pT7b | Planner |
+   | teamleider@horizon.nl | Hz!Team#2026tL9c | Teamleider |
+   | beheer@horizon.nl | Hz!Behr#2026bB3d | Functioneel beheerder |
+   | maria@delinde.nl | Ld!M4r1a#2026nRt5 | Tenant admin (tweede organisatie, tenant-isolatie checken) |
 
-5. **Rol wisselen** = uitloggen → opnieuw inloggen met een andere rol in de keuzelijst. Je ziet naast je naam een "demo-rol"-label — dat klopt en verdwijnt pas als accounts echte rollen krijgen (W3, zie §5).
+   > De Linde heeft dezelfde vier rol-accounts met prefix `Ld!` (zie `CLAUDE.md` → Test Accounts).
+
+5. **Rol wisselen** = uitloggen → inloggen met een ánder account uit de tabel. Sinds W3 heeft elk account een **echte, gekoppelde rol**; de rolkeuzelijst in het loginscherm is alleen nog een demo-terugval voor accounts zónder gekoppelde rol en wordt voor deze accounts genegeerd. De "demo-rol"-markering naast je naam verschijnt daarom niet meer bij deze accounts.
 
 **Reset nodig?** `docker compose down -v && docker compose up -d --build` (alles vers, incl. data).
 **Werkt iets niet op poort 3000?** Even hard verversen (Ctrl+Shift+R) — Next.js cache.

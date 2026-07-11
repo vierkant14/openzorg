@@ -12,7 +12,7 @@ import { TEST_USERS } from "./helpers/test-users";
  * minstens één. Zo niet, dan slaat de test over met een duidelijke reden.
  */
 test("een FHIR-taak is opneembaar en afrondbaar zonder fout", async ({ page }) => {
-  await login(page, TEST_USERS.zorgmedewerker, { rol: "zorgmedewerker" });
+  await login(page, TEST_USERS.zorgmedewerker);
 
   await page.goto("/werkbak");
   await expect(page.getByRole("heading", { name: "Werkbak" })).toBeVisible();

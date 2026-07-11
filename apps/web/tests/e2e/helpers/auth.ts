@@ -9,10 +9,11 @@ export async function login(
   await page.getByLabel(/e-?mail/i).fill(user.email);
   await page.getByLabel(/wachtwoord/i).fill(user.password);
 
-  // Demo-rolkeuze (zolang accounts geen server-rol hebben; verdwijnt in W3).
-  // De rol-select is alleen aanwezig zolang de identiteitslaag geen rol geeft.
+  // Demo-rolkeuze: enkel terugval voor accounts zonder gekoppelde server-rol.
+  // Per-rol accounts (W3) negeren deze keuze — de serverrol wint na login.
+  // De parameter blijft bestaan zodat oudere/legacy-aanroepen blijven werken.
   if (opties?.rol) {
-    const rolSelect = page.getByLabel("Rol", { exact: true });
+    const rolSelect = page.getByLabel(/^Rol \(alleen voor demo-accounts\)/);
     if (await rolSelect.isVisible().catch(() => false)) {
       await rolSelect.selectOption(opties.rol);
     }
