@@ -1,5 +1,6 @@
 "use client";
 
+import { ALL_ROLES } from "@openzorg/shared-domain";
 import { useCallback, useEffect, useState } from "react";
 
 import AppShell from "../../../components/AppShell";
@@ -35,7 +36,9 @@ const COLOR_BADGES: Record<string, string> = {
   coral: "bg-coral-100 text-coral-800 dark:bg-coral-950/30 dark:text-coral-300",
 };
 
-const AVAILABLE_ROLES = ["", "zorgmedewerker", "planner", "teamleider", "beheerder", "controller", "kwaliteitsmedewerker", "zorgadministratie", "mic-coordinator"] as const;
+// Rollen uit shared-domain — geen drift met rollen die niet bestaan
+// (de vorige lijst bevatte o.a. "controller" en "mic-coordinator").
+const AVAILABLE_ROLES = ["", ...ALL_ROLES] as const;
 
 export default function StateMachinesPage() {
   const [machines, setMachines] = useState<StateMachine[]>([]);
@@ -78,7 +81,7 @@ export default function StateMachinesPage() {
     const removed = machine.states[idx];
     if (!removed) return;
     if (machine.initialState === removed.slug) {
-      alert("Initiale state kan niet verwijderd worden. Wijzig eerst de initial state.");
+      setStatus({ ok: false, text: "De beginstatus kan niet verwijderd worden — wijzig eerst de beginstatus." });
       return;
     }
     setMachine({
@@ -127,9 +130,16 @@ export default function StateMachinesPage() {
     }
   }
 
+  const [resetBevestiging, setResetBevestiging] = useState(false);
+
   async function resetToDefaults() {
     if (!machine) return;
-    if (!confirm("Tenant-override verwijderen en terug naar de defaults?")) return;
+    // Inline bevestigingsstap i.p.v. browser-confirm()
+    if (!resetBevestiging) {
+      setResetBevestiging(true);
+      return;
+    }
+    setResetBevestiging(false);
     const { error } = await ecdFetch(`/api/admin/state-machines/${machine.resourceType}/reset`, {
       method: "POST",
     });
@@ -148,7 +158,7 @@ export default function StateMachinesPage() {
           <h1 className="text-2xl font-bold text-fg">State-machines</h1>
           <p className="mt-1 text-sm text-fg-muted">
             Per resource-type definieer je welke statussen bestaan en welke overgangen toegestaan zijn.
-            Guards worden bij fase 4 afgedwongen bij save — nu alleen informatief.
+            Guard-expressies zijn informatief (documentatie voor de beheerder); automatische afdwinging staat op de roadmap.
           </p>
         </div>
 
@@ -321,7 +331,8 @@ export default function StateMachinesPage() {
                         type="text"
                         value={t.guard ?? ""}
                         onChange={(e) => updateTransition(i, { guard: e.target.value || undefined })}
-                        placeholder="Guard expr (optioneel)"
+                        placeholder="Guard (informatief — wordt nog niet afgedwongen)"
+                        title="Guards zijn documentatie voor de beheerder; automatische afdwinging staat op de roadmap."
                         className="rounded border border-default bg-raised px-2 py-1 font-mono text-xs text-fg"
                       />
                     </div>
@@ -332,13 +343,28 @@ export default function StateMachinesPage() {
 
             {/* Actions */}
             <div className="flex justify-between">
-              <button
-                type="button"
-                onClick={resetToDefaults}
-                className="rounded-lg border border-default px-4 py-2 text-sm font-medium text-fg-muted hover:bg-sunken"
-              >
-                Reset naar defaults
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={resetToDefaults}
+                  className={`rounded-lg border px-4 py-2 text-sm font-medium ${
+                    resetBevestiging
+                      ? "border-coral-300 bg-coral-50 text-coral-700 hover:bg-coral-100 dark:border-coral-800 dark:bg-coral-950/20 dark:text-coral-300"
+                      : "border-default text-fg-muted hover:bg-sunken"
+                  }`}
+                >
+                  {resetBevestiging ? "Klik nogmaals om te bevestigen" : "Reset naar defaults"}
+                </button>
+                {resetBevestiging && (
+                  <button
+                    type="button"
+                    onClick={() => setResetBevestiging(false)}
+                    className="text-sm text-fg-subtle hover:text-fg"
+                  >
+                    Annuleren
+                  </button>
+                )}
+              </div>
               <button
                 type="button"
                 onClick={save}

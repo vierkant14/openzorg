@@ -97,6 +97,7 @@ clientRoutes.post("/", async (c) => {
       "Patient",
       resultBody as Record<string, unknown>,
       tenantId,
+      c.req.header("Authorization"),
     ).catch(() => {
       // Workflow failure should never block patient creation
     });

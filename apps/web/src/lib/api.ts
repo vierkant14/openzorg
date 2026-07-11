@@ -12,9 +12,18 @@ export interface ApiError {
   issue?: Array<{ diagnostics: string }>;
 }
 
+export interface EcdFetchOpties extends RequestInit {
+  /**
+   * Optionele neven-data: bij 403 géén harde redirect naar /geen-toegang,
+   * maar gewoon een error-resultaat teruggeven zodat de pagina het veld kan
+   * verbergen. De redirect blijft de default voor hoofd-data.
+   */
+  stil403?: boolean;
+}
+
 export async function ecdFetch<T = unknown>(
   path: string,
-  options: RequestInit = {},
+  options: EcdFetchOpties = {},
 ): Promise<{ data: T | null; error: string | null; status: number }> {
   const headers: Record<string, string> = {
     "X-Tenant-ID": getTenantId(),
@@ -55,7 +64,9 @@ export async function ecdFetch<T = unknown>(
 
       // Redirect to forbidden page on 403 (insufficient permissions)
       if (res.status === 403 && typeof window !== "undefined") {
-        window.location.href = "/geen-toegang";
+        if (!options.stil403) {
+          window.location.href = "/geen-toegang";
+        }
         return { data: null, error: "Onvoldoende rechten", status: 403 };
       }
 

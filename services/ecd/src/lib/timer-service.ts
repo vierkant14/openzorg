@@ -1,12 +1,24 @@
 /**
- * Timer Service — checks for upcoming evaluations and herindicaties.
+ * Timer Service — signaleert naderende zorgplan-evaluaties en start het
+ * bijbehorende zorgpad (zorgplan-evaluatie) via de workflow-bridge.
  *
- * Runs on a configurable interval (default: every 6 hours).
- * Scans CarePlans for volgende-evaluatie-datum and Patient extensions
- * for indicatie-einddatum. Creates workflow tasks when deadlines approach.
+ * Draait op een interval (default: elke 6 uur). W1-5 repareerde drie bugs:
+ *  1. De bridge-call miste de X-Tenant-ID-header → altijd 400. De tenant
+ *     wordt nu per CarePlan afgeleid uit meta.project (elke Medplum-resource
+ *     draagt zijn project) en het super-admin-token mag namens élke tenant
+ *     starten (auth-middleware W1-1).
+ *  2. Variabelen werden als array door Object.entries gehaald → keys "0","1".
+ *     De bridge verwacht een Record en mapt zelf.
+ *  3. Geen idempotentie → elke run startte een duplicaatproces. Na een
+ *     succesvolle start stempelt de service de CarePlan-extensie
+ *     `evaluatie-gesignaleerd-op` met de evaluatiedatum en slaat gelijke
+ *     datums voortaan over.
  *
- * This is a simple polling approach. For production, consider
- * Flowable timer boundary events or a proper job scheduler.
+ * Herindicatie-signalering is bewust verwijderd (timebox-besluit W1-plan
+ * Task 13): Patient-extensies zijn zonder eigen SearchParameter niet
+ * doorzoekbaar, dus dit vergt een eigen build — roadmap, zie
+ * overdrachtsrapport. De herindicatie-BPMN-template blijft handmatig
+ * startbaar via de Processen-hub.
  */
 
 const WORKFLOW_BRIDGE_URL =
@@ -19,11 +31,27 @@ const CHECK_INTERVAL_MS = Number(process.env.TIMER_INTERVAL_MS) || 6 * 60 * 60 *
 
 /** How many days before a deadline to fire the signalering */
 const EVALUATIE_WARNING_DAYS = 28; // 4 weeks
-const HERINDICATIE_WARNING_DAYS = 56; // 8 weeks
+
+const EVALUATIE_DATUM_URL = "https://openzorg.nl/extensions/volgende-evaluatie-datum";
+const GESIGNALEERD_URL = "https://openzorg.nl/extensions/evaluatie-gesignaleerd-op";
 
 interface TimerCheckResult {
   evaluatiesGesignaleerd: number;
-  herindicatiesGesignaleerd: number;
+  overgeslagen: number;
+}
+
+interface FhirExtension {
+  url: string;
+  valueDate?: string;
+}
+
+interface CarePlanResource {
+  resourceType: "CarePlan";
+  id?: string;
+  meta?: { project?: string };
+  subject?: { reference?: string };
+  extension?: FhirExtension[];
+  [key: string]: unknown;
 }
 
 /**
@@ -55,12 +83,12 @@ export function startTimerService(): () => void {
   };
 }
 
-async function runTimerCheck(): Promise<TimerCheckResult> {
-  const result: TimerCheckResult = { evaluatiesGesignaleerd: 0, herindicatiesGesignaleerd: 0 };
+/** Exported voor tests. */
+export async function runTimerCheck(): Promise<TimerCheckResult> {
+  const result: TimerCheckResult = { evaluatiesGesignaleerd: 0, overgeslagen: 0 };
 
   try {
-    // This is a system-level check — we need a super admin token or service account.
-    // For now, we'll use the Medplum super admin credentials if available.
+    // Systeembrede check — vereist een super-admin-token (mag namens elke tenant).
     const token = process.env.MEDPLUM_SUPER_ADMIN_TOKEN;
     if (!token) {
       // No token available — skip timer check silently
@@ -71,38 +99,60 @@ async function runTimerCheck(): Promise<TimerCheckResult> {
     const evalWarningDate = new Date(today);
     evalWarningDate.setDate(evalWarningDate.getDate() + EVALUATIE_WARNING_DAYS);
 
-    const herindicatieWarningDate = new Date(today);
-    herindicatieWarningDate.setDate(herindicatieWarningDate.getDate() + HERINDICATIE_WARNING_DAYS);
-
-    // Check CarePlans with volgende-evaluatie-datum approaching
     const cpRes = await fetch(
       `${MEDPLUM_URL}/fhir/R4/CarePlan?status=active&_count=200`,
       { headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/fhir+json" } },
     );
 
-    if (cpRes.ok) {
-      const bundle = await cpRes.json() as { entry?: Array<{ resource: Record<string, unknown> }> };
-      for (const entry of bundle.entry ?? []) {
-        const cp = entry.resource;
-        const exts = cp["extension"] as Array<{ url: string; valueDate?: string }> | undefined;
-        const evalDateStr = exts?.find((e) => e.url === "https://openzorg.nl/extensions/volgende-evaluatie-datum")?.valueDate;
+    if (!cpRes.ok) {
+      console.error("[timer-service] CarePlan-query faalde:", cpRes.status);
+      return result;
+    }
 
-        if (evalDateStr) {
-          const evalDate = new Date(evalDateStr);
-          if (evalDate <= evalWarningDate && evalDate >= today) {
-            // Evaluation is due within warning period — start workflow
-            await startProcess("zorgplan-evaluatie", {
-              zorgplanId: cp["id"] as string,
-              clientId: (cp["subject"] as { reference?: string })?.reference ?? "",
-              signaleringType: "evaluatie-herinnering",
-            });
-            result.evaluatiesGesignaleerd++;
-          }
-        }
+    const bundle = (await cpRes.json()) as { entry?: Array<{ resource: CarePlanResource }> };
+
+    for (const entry of bundle.entry ?? []) {
+      const careplan = entry.resource;
+      const evalDateStr = careplan.extension?.find((e) => e.url === EVALUATIE_DATUM_URL)?.valueDate;
+      if (!evalDateStr) continue;
+
+      const evalDate = new Date(evalDateStr);
+      if (!(evalDate <= evalWarningDate && evalDate >= today)) continue;
+
+      // Idempotentie: al gesignaleerd voor déze evaluatiedatum → overslaan
+      const gesignaleerdOp = careplan.extension?.find((e) => e.url === GESIGNALEERD_URL)?.valueDate;
+      if (gesignaleerdOp === evalDateStr) {
+        result.overgeslagen++;
+        continue;
+      }
+
+      // Tenant van deze CarePlan: elke Medplum-resource draagt zijn project
+      const tenantId = careplan.meta?.project;
+      if (!tenantId) {
+        console.warn(`[timer-service] CarePlan ${careplan.id} zonder meta.project — overgeslagen`);
+        continue;
+      }
+
+      const gestart = await startProces(
+        "zorgplan-evaluatie",
+        {
+          zorgplanId: careplan.id ?? "",
+          clientRef: careplan.subject?.reference ?? "",
+          signaleringType: "evaluatie-herinnering",
+        },
+        tenantId,
+        token,
+      );
+
+      if (gestart) {
+        await stempelGesignaleerd(careplan, evalDateStr, token);
+        result.evaluatiesGesignaleerd++;
       }
     }
 
-    console.warn(`[timer-service] Check complete: ${result.evaluatiesGesignaleerd} evaluaties, ${result.herindicatiesGesignaleerd} herindicaties gesignaleerd`);
+    console.warn(
+      `[timer-service] Check complete: ${result.evaluatiesGesignaleerd} evaluaties gestart, ${result.overgeslagen} al gesignaleerd`,
+    );
   } catch (err) {
     console.error("[timer-service] Error during check:", err);
   }
@@ -110,22 +160,50 @@ async function runTimerCheck(): Promise<TimerCheckResult> {
   return result;
 }
 
-async function startProcess(
+async function startProces(
   processKey: string,
   variables: Record<string, string>,
+  tenantId: string,
+  token: string,
+): Promise<boolean> {
+  try {
+    const res = await fetch(`${WORKFLOW_BRIDGE_URL}/api/processen/${processKey}/start`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Tenant-ID": tenantId,
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ variables }),
+    });
+    if (!res.ok) {
+      console.error(`[timer-service] Start ${processKey} voor tenant ${tenantId} faalde:`, res.status);
+    }
+    return res.ok;
+  } catch (err) {
+    console.error(`[timer-service] Start ${processKey} onbereikbaar:`, err);
+    return false;
+  }
+}
+
+/** Stempelt de CarePlan met de gesignaleerde evaluatiedatum (idempotentie-marker). */
+async function stempelGesignaleerd(
+  careplan: CarePlanResource,
+  evalDateStr: string,
+  token: string,
 ): Promise<void> {
   try {
-    const flowableVars = Object.entries(variables).map(([name, value]) => ({
-      name,
-      value,
-    }));
+    const extensies = (careplan.extension ?? []).filter((e) => e.url !== GESIGNALEERD_URL);
+    extensies.push({ url: GESIGNALEERD_URL, valueDate: evalDateStr });
 
-    await fetch(`${WORKFLOW_BRIDGE_URL}/api/processen/${processKey}/start`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ variables: flowableVars }),
+    await fetch(`${MEDPLUM_URL}/fhir/R4/CarePlan/${careplan.id}`, {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/fhir+json" },
+      body: JSON.stringify({ ...careplan, extension: extensies }),
     });
-  } catch {
-    // Fire-and-forget
+  } catch (err) {
+    // Marker-fout is niet fataal; volgende run probeert opnieuw (start is dan dubbel —
+    // gelogd zodat het opvalt)
+    console.error("[timer-service] Kon gesignaleerd-marker niet zetten:", err);
   }
 }

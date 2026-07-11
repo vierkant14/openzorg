@@ -141,6 +141,7 @@ micMeldingRoutes.post("/", async (c) => {
       "AuditEvent",
       resultBody,
       tenantId,
+      c.req.header("Authorization"),
     ).catch(() => {
       // Workflow failure should never block MIC melding creation
     });

@@ -169,6 +169,7 @@ export async function fireWorkflowTriggers(
   resourceType: string,
   resource: Record<string, unknown>,
   tenantId: string,
+  authHeader?: string,
 ): Promise<void> {
   try {
     const triggers = await loadTriggers(tenantId);
@@ -185,7 +186,7 @@ export async function fireWorkflowTriggers(
 
     // Fire all matching triggers concurrently, fire-and-forget
     const promises = matching.map((trigger) =>
-      startProcess(trigger, resource, tenantId),
+      startProcess(trigger, resource, tenantId, authHeader),
     );
 
     // We await the batch so individual errors are logged,
@@ -202,17 +203,15 @@ async function startProcess(
   trigger: WorkflowTrigger,
   resource: Record<string, unknown>,
   tenantId: string,
+  authHeader?: string,
 ): Promise<void> {
-  // Resolve variable mappings
-  const variables = Object.entries(trigger.variables).map(
-    ([name, path]) => ({
-      name,
-      value: extractJsonPath(path, resource) ?? "",
-    }),
-  );
-
-  // Always pass tenantId
-  variables.push({ name: "tenantId", value: tenantId });
+  // Resolve variable mappings — als Record; de bridge mapt zelf naar
+  // Flowable-vorm (een array zou via Object.entries keys "0","1" opleveren)
+  const variables: Record<string, unknown> = {};
+  for (const [name, path] of Object.entries(trigger.variables)) {
+    variables[name] = extractJsonPath(path, resource) ?? "";
+  }
+  variables["tenantId"] = tenantId;
 
   const url = `${WORKFLOW_BRIDGE_URL}/api/processen/${trigger.processKey}/start`;
 
@@ -222,6 +221,9 @@ async function startProcess(
       headers: {
         "Content-Type": "application/json",
         "X-Tenant-ID": tenantId,
+        // De bridge verifieert tokens (W1-1) — geef het token van de
+        // veroorzakende gebruiker door
+        ...(authHeader ? { Authorization: authHeader } : {}),
       },
       body: JSON.stringify({ variables }),
     });

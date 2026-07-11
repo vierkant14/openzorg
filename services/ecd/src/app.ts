@@ -23,6 +23,7 @@ import { coverageRoutes } from "./routes/coverage.js";
 import { diagnoseRoutes } from "./routes/diagnose.js";
 import { documentenRoutes } from "./routes/documenten.js";
 import { featureFlagRoutes } from "./routes/feature-flags.js";
+import { fhirTakenRoutes } from "./routes/fhir-taken.js";
 import { healthRoutes } from "./routes/health.js";
 import { indicatieRoutes } from "./routes/indicaties.js";
 import { integratieRoutes } from "./routes/integraties.js";
@@ -94,6 +95,9 @@ app.get("/api/status", (c) => {
 
 // Identiteitslaag: ingelogde gebruiker → Practitioner + rol (ME-01)
 app.route("/api", meRoutes);
+
+// FHIR-taken (werkbak-bron 2): lijst + claim/complete
+app.route("/api", fhirTakenRoutes);
 
 // CSV-cliëntimport — vóór clientRoutes (route-volgorde: specifiek eerst)
 app.route("/api/clients", clientImportRoutes);

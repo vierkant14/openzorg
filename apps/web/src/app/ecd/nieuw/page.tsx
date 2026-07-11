@@ -53,10 +53,12 @@ export default function NieuweClientPage() {
   const [postcode, setPostcode] = useState("");
   const [woonplaats, setWoonplaats] = useState("");
 
-  // Medewerkers lookup
+  // Medewerkers lookup — optionele hulpdata: zorgmedewerker mag deze lijst
+  // niet lezen (medewerkers:read); stil403 voorkomt de harde 403-redirect
+  // die het aanmaken van een cliënt voor die rol volledig blokkeerde.
   const [medewerkers, setMedewerkers] = useState<Array<{ id: string; name: string }>>([]);
   useEffect(() => {
-    ecdFetch<{ entry?: Array<{ resource: { id: string; name?: Array<{ family?: string; given?: string[] }> } }> }>("/api/medewerkers")
+    ecdFetch<{ entry?: Array<{ resource: { id: string; name?: Array<{ family?: string; given?: string[] }> } }> }>("/api/medewerkers", { stil403: true })
       .then(({ data }) => {
         const list = data?.entry?.map((e) => ({
           id: e.resource.id,
@@ -70,10 +72,10 @@ export default function NieuweClientPage() {
       .catch(() => { /* ignore */ });
   }, []);
 
-  // Organisatie locaties lookup
+  // Organisatie locaties lookup — idem: optionele hulpdata (organisatie:read)
   const [locaties, setLocaties] = useState<Array<{ id: string; name: string }>>([]);
   useEffect(() => {
-    ecdFetch<{ entry?: Array<{ resource: { id: string; name?: string } }> }>("/api/organisatie")
+    ecdFetch<{ entry?: Array<{ resource: { id: string; name?: string } }> }>("/api/organisatie", { stil403: true })
       .then(({ data }) => {
         const list = data?.entry?.map((e) => ({
           id: e.resource.id,
