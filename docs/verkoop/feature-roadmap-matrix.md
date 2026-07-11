@@ -39,7 +39,7 @@
 
 | Werkt nu (met bewijs) | Gedeeltelijk (wel / niet) | Roadmap (blokkade · doorlooptijd · kosten) |
 |---|---|---|
-| Rooster met sleep-en-neerzet, dienst-configuratie, bezettingsprofielen, **planning-engine** (valideer/optimaliseer/genereer), CAO/ATW-basisregels, herhalingen, wachtlijst. *Bewijs: CHANGELOG v0.2.0.* **Kanttekening**: nog géén dedicated e2e — planner-golden-path is W3-roadmap (testplan §5); werkt in product, CI-bewijs in aanbouw. | Kernrooster werkt; **niet** compleet: CAO-VVT edge-cases (pauze/weekend/max-nachten), competentie-matching, publicatie-/medewerker-akkoord-flow zijn dun. | CAO-edge (E-01), competentie-matching (E-02), publicatie/akkoord (E-05): **eigen build, M-L ≈ 6-8 wk**, geen externe blokkade. |
+| Rooster met sleep-en-neerzet, dienst-configuratie, bezettingsprofielen, **planning-engine** (valideer/optimaliseer/genereer), CAO/ATW-basisregels, herhalingen, wachtlijst. *Bewijs: CHANGELOG v0.2.0.* *Bewijs aangevuld: `golden-path-planner.spec.ts` (rooster-grid → dagplanning → werkbak) draait sinds W3 in CI.* | Kernrooster werkt; **niet** compleet: CAO-VVT edge-cases (pauze/weekend/max-nachten), competentie-matching, publicatie-/medewerker-akkoord-flow zijn dun. | CAO-edge (E-01), competentie-matching (E-02), publicatie/akkoord (E-05): **eigen build, M-L ≈ 6-8 wk**, geen externe blokkade. |
 
 ### 6 · Planning — thuiszorg (extramuraal)
 
