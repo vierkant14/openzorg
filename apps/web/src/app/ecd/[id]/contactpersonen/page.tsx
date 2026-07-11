@@ -1,5 +1,6 @@
 "use client";
 
+import { ErrorState, LoadingSkeleton } from "@openzorg/shared-ui";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
@@ -32,18 +33,6 @@ const RELATIE_TYPES = [
   { code: "NBOR", display: "Buur" },
   { code: "O", display: "Overig" },
 ];
-
-function Spinner() {
-  return (
-    <div className="flex justify-center py-8">
-      <div className="h-6 w-6 animate-spin rounded-full border-4 border-brand-300 border-t-brand-700" />
-    </div>
-  );
-}
-
-function ErrorMsg({ msg }: { msg: string }) {
-  return <p className="my-2 text-sm text-coral-600">{msg}</p>;
-}
 
 export default function ContactpersonenPage() {
   const params = useParams<{ id: string }>();
@@ -244,8 +233,8 @@ export default function ContactpersonenPage() {
         </form>
       )}
 
-      {loading && <Spinner />}
-      {error && <ErrorMsg msg={error} />}
+      {loading && <LoadingSkeleton regels={6} />}
+      {!loading && error && <ErrorState melding={error} onOpnieuw={load} />}
 
       {!loading && !error && items.length === 0 && (
         <p className="py-8 text-center text-sm text-fg-subtle">

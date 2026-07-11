@@ -1,5 +1,6 @@
 "use client";
 
+import { PageHeader } from "@openzorg/shared-ui";
 import { useCallback, useEffect, useState } from "react";
 
 import AppShell from "../../../components/AppShell";
@@ -216,16 +217,12 @@ export default function ContractenPage() {
   return (
     <AppShell>
       <div className="px-6 lg:px-10 py-8 max-w-[1400px] mx-auto">
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <h1 className="text-display-lg text-fg">Contracten</h1>
-            <p className="text-body text-fg-muted mt-1">Beheer medewerkercontracten, FTE en uren.</p>
-          </div>
+        <PageHeader titel="Contracten" omschrijving="Beheer medewerkercontracten, FTE en uren.">
           <button onClick={() => setShowForm(!showForm)}
             className="rounded-md bg-brand-700 px-5 py-2.5 text-white text-body-sm font-semibold hover:bg-brand-800 transition-colors btn-press">
             {showForm ? "Annuleren" : "+ Nieuw contract"}
           </button>
-        </div>
+        </PageHeader>
 
         {error && (
           <div className="p-3 bg-coral-50 border border-coral-200 rounded-lg text-coral-600 text-sm mb-6">

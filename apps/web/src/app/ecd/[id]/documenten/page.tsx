@@ -1,5 +1,6 @@
 "use client";
 
+import { ErrorState, LoadingSkeleton } from "@openzorg/shared-ui";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -32,18 +33,6 @@ function formatDate(iso?: string): string {
   } catch {
     return iso;
   }
-}
-
-function Spinner() {
-  return (
-    <div className="flex justify-center py-8">
-      <div className="h-6 w-6 animate-spin rounded-full border-4 border-brand-300 border-t-brand-700" />
-    </div>
-  );
-}
-
-function ErrorMsg({ msg }: { msg: string }) {
-  return <p className="my-2 text-sm text-coral-600">{msg}</p>;
 }
 
 export default function DocumentenPage() {
@@ -115,9 +104,9 @@ export default function DocumentenPage() {
         </label>
       </div>
 
-      {uploadError && <ErrorMsg msg={uploadError} />}
-      {loading && <Spinner />}
-      {error && <ErrorMsg msg={error} />}
+      {uploadError && <p className="my-2 text-sm text-coral-600">{uploadError}</p>}
+      {loading && <LoadingSkeleton regels={6} />}
+      {!loading && error && <ErrorState melding={error} onOpnieuw={load} />}
 
       {!loading && !error && items.length === 0 && (
         <p className="py-8 text-center text-sm text-fg-subtle">Geen documenten gevonden.</p>

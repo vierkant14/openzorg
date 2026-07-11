@@ -1,5 +1,6 @@
 "use client";
 
+import { ErrorState, LoadingSkeleton } from "@openzorg/shared-ui";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
@@ -43,18 +44,6 @@ function formatDate(iso?: string): string {
   } catch {
     return iso;
   }
-}
-
-function Spinner() {
-  return (
-    <div className="flex justify-center py-8">
-      <div className="h-6 w-6 animate-spin rounded-full border-4 border-brand-300 border-t-brand-700" />
-    </div>
-  );
-}
-
-function ErrorMsg({ msg }: { msg: string }) {
-  return <p className="my-2 text-sm text-coral-600">{msg}</p>;
 }
 
 export default function WilsverklaringenPage() {
@@ -133,7 +122,7 @@ export default function WilsverklaringenPage() {
       {showForm && (
         <form onSubmit={handleSubmit} className="mb-5 rounded-lg border border-default bg-raised p-5 shadow-sm">
           <h3 className="mb-4 font-semibold text-fg">Nieuwe wilsverklaring</h3>
-          {formError && <ErrorMsg msg={formError} />}
+          {formError && <p className="my-2 text-sm text-coral-600">{formError}</p>}
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <label className="mb-1 block text-sm font-medium text-fg-muted">Type *</label>
@@ -170,8 +159,8 @@ export default function WilsverklaringenPage() {
         </form>
       )}
 
-      {loading && <Spinner />}
-      {error && <ErrorMsg msg={error} />}
+      {loading && <LoadingSkeleton regels={6} />}
+      {!loading && error && <ErrorState melding={error} onOpnieuw={load} />}
 
       {!loading && !error && items.length === 0 && (
         <p className="py-8 text-center text-sm text-fg-subtle">Geen wilsverklaringen gevonden.</p>

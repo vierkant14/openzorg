@@ -1,5 +1,6 @@
 "use client";
 
+import { ErrorState, LoadingSkeleton } from "@openzorg/shared-ui";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
@@ -18,18 +19,6 @@ interface CustomFieldDef {
   fieldType: string;
   extensionUrl: string;
   required?: boolean;
-}
-
-function Spinner() {
-  return (
-    <div className="flex justify-center py-8">
-      <div className="h-6 w-6 animate-spin rounded-full border-4 border-brand-300 border-t-brand-700" />
-    </div>
-  );
-}
-
-function ErrorMsg({ msg }: { msg: string }) {
-  return <p className="my-2 text-sm text-coral-600">{msg}</p>;
 }
 
 function ExtraVeldenInner({ clientId, client }: { clientId: string; client: ClientResource }) {
@@ -101,7 +90,7 @@ function ExtraVeldenInner({ clientId, client }: { clientId: string; client: Clie
     }
   }
 
-  if (loading) return <Spinner />;
+  if (loading) return <LoadingSkeleton regels={4} />;
 
   if (fieldDefs.length === 0) {
     return (
@@ -131,7 +120,7 @@ function ExtraVeldenInner({ clientId, client }: { clientId: string; client: Clie
         <span className="text-xs text-fg-subtle">{fieldDefs.length} veld(en) geconfigureerd</span>
       </div>
 
-      {error && <ErrorMsg msg={error} />}
+      {error && <p className="my-2 text-sm text-coral-600">{error}</p>}
       {success && <p className="mb-3 text-sm text-green-600">{success}</p>}
 
       <div className="rounded-lg border border-default bg-raised p-5 shadow-sm">
@@ -200,8 +189,8 @@ export default function ExtraVeldenPage() {
     return () => { cancelled = true; };
   }, [clientId]);
 
-  if (loading) return <Spinner />;
-  if (error) return <ErrorMsg msg={error} />;
-  if (!client) return <ErrorMsg msg="Cliënt niet gevonden" />;
+  if (loading) return <LoadingSkeleton regels={4} />;
+  if (error) return <ErrorState melding={error} />;
+  if (!client) return <ErrorState melding="Cliënt niet gevonden" />;
   return <ExtraVeldenInner clientId={clientId} client={client} />;
 }
