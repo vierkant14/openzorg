@@ -45,6 +45,8 @@ services:
       NODE_ENV: development
       MEDPLUM_PORT: 8103
       MEDPLUM_BASE_URL: http://localhost:8103/
+      # Vereist voor de admin-invite-API (bouwt set-wachtwoord-URL; crasht anders met 500)
+      MEDPLUM_APP_BASE_URL: http://localhost:3000/
       MEDPLUM_DATABASE_HOST: postgres
       MEDPLUM_DATABASE_PORT: 5432
       MEDPLUM_DATABASE_DBNAME: medplum
