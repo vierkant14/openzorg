@@ -62,7 +62,7 @@ async function wachtOpTaakkaart(
 
 test.describe.serial("Proces-keten: intake van activeren tot afronden", () => {
   test("beheerder activeert het intake-zorgpad", async ({ page }) => {
-    await login(page, TEST_USERS.zorgmedewerker, { rol: "beheerder" });
+    await login(page, TEST_USERS.beheerder);
 
     await page.goto("/admin/workflows?tab=sjablonen");
     const intakeKaart = kaart(page, "Intake nieuwe cliënt").first();
@@ -80,7 +80,7 @@ test.describe.serial("Proces-keten: intake van activeren tot afronden", () => {
     // Naam hier genereren: een serial-retry krijgt zo een verse identiteit
     ketenAchternaam = `Ketentest${Date.now()}`;
 
-    await login(page, TEST_USERS.zorgmedewerker, { rol: "zorgmedewerker" });
+    await login(page, TEST_USERS.zorgmedewerker);
 
     await page.goto("/ecd/nieuw");
     await expect(page.getByRole("heading", { name: /Nieuwe client aanmaken/i })).toBeVisible();
@@ -96,7 +96,7 @@ test.describe.serial("Proces-keten: intake van activeren tot afronden", () => {
   });
 
   test("planner pakt de intake-taak op en keurt goed (geconfigureerd formulier)", async ({ page }) => {
-    await login(page, TEST_USERS.zorgmedewerker, { rol: "planner" });
+    await login(page, TEST_USERS.planner);
 
     const taakKaart = await wachtOpTaakkaart(page, /Beschikbaar/, "Aanmelding beoordelen", ketenAchternaam);
     await expect(taakKaart.getByText("Intake nieuwe cliënt")).toBeVisible();
@@ -119,7 +119,7 @@ test.describe.serial("Proces-keten: intake van activeren tot afronden", () => {
 
   test("de vervolgstap verschijnt en de hub toont het lopende zorgpad", async ({ page }) => {
     // Beheerder (oversight) ziet zowel de Lopend-tab als Alle taken
-    await login(page, TEST_USERS.zorgmedewerker, { rol: "beheerder" });
+    await login(page, TEST_USERS.beheerder);
 
     await page.goto("/admin/workflows?tab=lopend");
     // Filter op de cliëntnaam: er kunnen meerdere intakes lopen (import-tests)
@@ -133,7 +133,7 @@ test.describe.serial("Proces-keten: intake van activeren tot afronden", () => {
   });
 
   test("zorgmedewerker rondt de vervolgstap af — zorgpad compleet", async ({ page }) => {
-    await login(page, TEST_USERS.zorgmedewerker, { rol: "zorgmedewerker" });
+    await login(page, TEST_USERS.zorgmedewerker);
 
     const vervolgKaart = await wachtOpTaakkaart(page, /Beschikbaar/, "Intake gesprek plannen", ketenAchternaam);
     await vervolgKaart.getByRole("button", { name: "Oppakken" }).click();

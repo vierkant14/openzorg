@@ -4,7 +4,7 @@ import { login } from "./helpers/auth";
 import { TEST_USERS } from "./helpers/test-users";
 
 test("dashboard toont begroeting en degradeert zonder foutmeldingen", async ({ page }) => {
-  await login(page, TEST_USERS.zorgmedewerker, { rol: "teamleider" });
+  await login(page, TEST_USERS.teamleider);
   await page.goto("/dashboard");
 
   // Begroeting op dagdeel — de WelkomKop is de paginakop (h1)

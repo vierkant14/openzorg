@@ -9,7 +9,7 @@ import { TEST_USERS } from "./helpers/test-users";
  * pilotprofiel-belofte "80 cliënten in minuten".
  */
 test("beheerder importeert een CSV met één foute rij en ziet een bruikbaar rapport", async ({ page }) => {
-  await login(page, TEST_USERS.zorgmedewerker, { rol: "beheerder" });
+  await login(page, TEST_USERS.beheerder);
 
   const uniek = `Import${Date.now()}`;
   const csv = [

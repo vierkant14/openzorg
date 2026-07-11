@@ -148,10 +148,11 @@ function LoginForm() {
             />
           </div>
 
-          {/* Role selector — shown until PractitionerRole-based role assignment is implemented */}
+          {/* Rol-keuze is enkel een demo-terugval: accounts met een gekoppelde
+              server-rol (via /api/me) negeren deze keuze volledig. */}
           <div>
             <label htmlFor="role" className="block text-body-sm font-medium text-fg mb-1.5">
-              Rol
+              Rol (alleen voor demo-accounts)
             </label>
               <select
                 id="role"
@@ -164,7 +165,7 @@ function LoginForm() {
                 ))}
               </select>
             <p className="text-caption text-fg-subtle mt-1.5">
-              In productie wordt je rol automatisch bepaald door de beheerder.
+              Heeft je account een gekoppelde rol, dan wordt die gebruikt en wordt deze keuze genegeerd.
             </p>
           </div>
 

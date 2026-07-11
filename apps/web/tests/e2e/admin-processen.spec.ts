@@ -9,7 +9,7 @@ import { TEST_USERS } from "./helpers/test-users";
  */
 test.describe("Processen-hub", () => {
   test("beheerder ziet de hub met vier tabs en de sjablonen-galerij", async ({ page }) => {
-    await login(page, TEST_USERS.zorgmedewerker, { rol: "beheerder" });
+    await login(page, TEST_USERS.beheerder);
 
     await page
       .getByRole("navigation")
@@ -38,7 +38,7 @@ test.describe("Processen-hub", () => {
   });
 
   test("oude instanties- en voorbeelden-routes verwijzen door naar de hub", async ({ page }) => {
-    await login(page, TEST_USERS.zorgmedewerker, { rol: "beheerder" });
+    await login(page, TEST_USERS.beheerder);
 
     await page.goto("/admin/workflows/instanties");
     await expect(page).toHaveURL(/\/admin\/workflows\?tab=lopend/, { timeout: 15_000 });
