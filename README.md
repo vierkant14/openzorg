@@ -4,6 +4,17 @@ Open source modulair zorgplatform voor Nederlandse zorginstellingen (VVT).
 
 > **Status**: Sprint 1 — Fundament. De basis-architectuur, multi-tenancy, authenticatie en CI-pipeline staan.
 
+## Voor zorginstellingen
+
+Overweegt u een pilot met OpenZorg? Deze documenten vertellen het eerlijke verhaal — wat vandaag aantoonbaar werkt, wat op de roadmap staat, en hoe een pilot verloopt:
+
+- **[Demo-script](docs/verkoop/demo-script.md)** — een demo van 30 minuten langs dossier, rapportage, planning en procesmanagement, opgebouwd rond het pilotprofiel (4 locaties, intramuraal + thuiszorg). Elke stap verwijst naar de test die de flow bewijst.
+- **[Feature- vs. roadmap-matrix](docs/verkoop/feature-roadmap-matrix.md)** — per domein: wat werkt nu (met bewijs), wat is gedeeltelijk, wat is roadmap (met doorlooptijd en kosten-orde van de externe randvoorwaarden).
+- **[Pilot-onboarding-runbook](docs/verkoop/pilot-onboarding-runbook.md)** — van handtekening naar draaiende pilot in genummerde stappen, met eigenaar en doorlooptijd per stap.
+- **[Compliance & audit-gereedheid](docs/compliance/audit-readiness.md)** — NEN 7510/7513/7516 en AVG: welke maatregelen er zijn (met codebewijs), welke gaten er zijn en wat een auditor opvraagt.
+
+> Prijsstelling en commerciële voorwaarden staan bewust buiten deze documenten — die lopen separaat.
+
 ## Snel starten (< 15 minuten)
 
 ### Vereisten
