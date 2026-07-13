@@ -1,61 +1,58 @@
-# Overdrachtsrapport — MVP-eindsprint (levend document)
+# Overdracht — MVP-eindsprint (eindstand)
 
-**Gestart**: 2026-07-10 · **Uitvoerder**: Claude (autonoom, in opdracht van Kevin) · **Laatst bijgewerkt**: 2026-07-11 (ochtend)
+**Sprint**: 2026-07-10 t/m 2026-07-11 · **Uitvoerder**: Claude Fable 5 (autonoom, in opdracht van Kevin), bouw-subagents op Opus · **Status**: bouw compleet — dit document is de overdracht aan het volgende model (Opus) en aan Kevin.
 
-Spec: `docs/superpowers/specs/2026-07-10-verkoopbare-mvp-vvt-thuiszorg-design.md` · Plannen: `docs/superpowers/plans/2026-07-10-w*.md` · Voortgangsgeheugen: memory `project_state`.
+**Leesvolgorde voor een vers model**: (1) dit document, (2) de spec `docs/superpowers/specs/2026-07-10-verkoopbare-mvp-vvt-thuiszorg-design.md` (§6 = uitvoeringsprotocol, §8 = open punten Kevin), (3) memory `project_state`, (4) `CLAUDE.md`.
 
 ---
 
-## Stand per werkstroom
+## 1 · Eindstand: wat is af (15 PR's, alles op `main`)
 
-| Werkstroom | Status | Bewijs |
-|---|---|---|
-| W0 planning-slice | ✅ Gemerged (PR #15) | CI groen incl. E2E |
-| Spec + plannen | ✅ Gemerged (PR #16) | — |
-| W1-1 bridge-hardening | ✅ Gemerged (PR #17) | 34 bridge-tests; Flowable-tenancy-integratietest bewees per-tenant deploy/start/query's in CI |
-| W1-2 identiteitslaag | ✅ Gemerged (PR #18) | 4 me-route-tests; CI-E2E login-flow |
-| W1-3 werkbak + catalogus | 🟡 PR #24 open (verving #19 na Actions-storing) | 39 bridge- + 44 ECD-tests lokaal groen; werkbak-e2e; CI draait |
-| W1-4 Processen-hub | 🟡 PR #25 open (stapelt op #24; verving #20) | typecheck/lint groen; admin-processen-e2e |
-| W1-5 + W1-6 keten | 🟡 PR #26 open (stapelt op #25; verving #21) | 46 bridge- + 46 ECD-tests lokaal; proces-keten-e2e + fhir-taak-e2e (zelf-seedend) |
-| W2-1 reparaties | ✅ Gemerged (PR #22) | dashboard-stub weg, 0 raw-gray, custom-fields gesplitst, CHANGELOG + dit rapport |
-| W2-2 dashboard/dedupe | ⬜ Na W1-merges | consumeert useWerkbak + /api/me |
-| W3-1 CSV-cliëntimport | 🟡 PR #23 open | 6 route-tests + import-e2e; CI draait |
-| W3-2/3 pilotprofiel + golden paths | ⬜ Plan klaar | — |
-| W4 live platform | ⬜ Voorbereid (CHANGELOG-concept staat) | **geblokkeerd: Unraid staat uit (bevestigd door Kevin 2026-07-11)** |
-| W5 verkooppakket | ⬜ Plan klaar | compliance-kolom voedt uit `docs/compliance/audit-readiness.md` |
-| Compliance-dossier | 🟢 Aangemaakt (2026-07-11, op verzoek Kevin) | `docs/compliance/audit-readiness.md` — eerlijke NEN 7510/7513/AVG-status met codebewijs, gaten → backlog-IDs, auditor-documentenregister |
-
-## De 10 procesmanagement-problemen (spec §2.2) — allemaal geadresseerd
-
-| # | Probleem | Oplossing | Waar |
+| Werkstroom | Inhoud | PR's | Bewijs |
 |---|---|---|---|
-| 1 | Instanties dubbel kapot | native tenant-instanties + `processInstanceId`-filter + Lopend-tab | PR #17 (backend), #20 (UI) |
-| 2 | FHIR-taken onbruikbaar | eigen claim/complete-routes + bron-routing in werkbak | PR #19 |
-| 3 | Timer-service start nooit | header/variabelen/idempotentie gefixt + tests | PR #21 |
-| 4 | Tenant-isolatie fail-open | fail-closed native tenancy, geen legacy-fallback | PR #17 |
-| 5 | Geen auth op bridge | token-verificatie via Medplum + tenant-crosscheck | PR #17 |
-| 6 | Claim = rol i.p.v. persoon | /api/me + X-User-Id + persoonlijke claims + audit op persoon | PR #18/#19 |
-| 7 | Nul patroonlaag-hergebruik | werkbak/hub/taakformulieren/state-machines op shared-ui | PR #19/#20 |
-| 8 | Duplicaat- en drift-UI | Taakwerkbak-sectie weg; proces-catalogus = één bron; redirects | PR #19/#20 |
-| 9 | Werkbak niet in nav | nav-item in vandaag/rooster/team + N+1-oversight weg | PR #19 |
-| 10 | Schijn-features | DI compleet, canvas-identiteit gefixt, DMN "Experimenteel", guards/triggers eerlijk gelabeld, ensure-deployed, keten-e2e | PR #21 |
+| W0 planning-slice | 7 planning-pagina's genormaliseerd | #15 | CI+E2E |
+| Spec + plannen | verkoopbare-MVP-spec + W1-W5-plannen | #16 | — |
+| **W1 procesmanagement-revamp** | tenant-native bridge (fail-closed) · token-verificatie · identiteitslaag /api/me · proces-catalogus (Laag 1⊕2) · werkbak-revamp (persoonlijke inbox) · Processen-hub in domeintaal · FHIR-taken claim/complete · timer-fixes+idempotentie · BPMN-DI · canvas-opschoning · DMN "Experimenteel" | #17 #18 #31 | 46 bridge- + 49 ECD-tests; zelf-seedende **proces-keten-e2e** + fhir-taak-e2e; alle 10 spec-§2.2-problemen opgelost |
+| **W2 alles-werkt** | 3 laatste niet-genormaliseerde pagina's · dashboard-landingsscherm (begroeting/taken/acties/signalen/feed) · dedupe 12→0 lokale states · zorgplan 872→7 bestanden · audit op persoon | #22 #33 #34 | dashboard-e2e; grep-bewijzen in PR's |
+| **W3 pilotprofiel** | CSV-cliëntimport (I-05-light) · per-rol accounts + rol-extensies (demo-label weg) · seed-pilotprofiel (4 locaties, 80 cliënten vía de import) · pilot-inrichtingsdraaiboek · golden paths planner/beheerder/teamleider | #23 #35 #36 | import-e2e; golden-path-e2e ×4 rollen; invite-flow bewezen op verse CI-stack |
+| **W5 verkooppakket** | demo-script · feature-roadmap-matrix (eerlijk, met R-nummers/doorlooptijden) · pilot-onboarding-runbook · README-sectie | #37 | forbidden-words; claims verwijzen naar e2e/testplan |
+| Compliance | `docs/compliance/audit-readiness.md` (eerlijke NEN/AVG-stand met codebewijs) | #27 | — |
+| PO-testplan | `docs/testplan-acceptatie-mvp.md` (30 scenario's A-H) | #32 | — |
 
-## Actieve blokkers
+**E2E-dekking op de verse CI-stack (elke PR):** smoke · auth (serverrollen, geen demo-label) · vandaag · golden paths zorgmedewerker/planner/beheerder/teamleider · werkbak · admin-processen · **proces-keten (kroonscenario)** · fhir-taak · client-import · rapportage-soep · flowable-tenancy (isolatie-guard) · dashboard.
 
-1. ~~GitHub Actions-storing~~ **Opgelost 2026-07-11 ±08:10**: Actions verwerkte ±13 uur geen events (2026-07-10 ±20:55 → 2026-07-11 ±08:10 NL). Belangrijk restant: **PR's die tijdens de storing zijn aangemaakt krijgen blijvend geen webhook-events** (push/reopen op #19-21 deed niets); oplossing was ze sluiten en als verse PR's heropenen (#24/#25/#26). Merge-volgorde: #24 → #25 → #26, daarna is W1 compleet.
-2. **Unraid staat uit** (bevestigd door Kevin, 2026-07-11). W4-uitrol wacht; alles is voorbereid — zodra de server aan staat is het W4-plan één sessie werk.
+**De 10 procesmanagement-problemen uit spec §2.2 zijn allemaal opgelost** (details en per-probleem-verwijzing: PR #31-beschrijving); de keten-e2e ving daarbovenop twee vooraf onbekende productiebugs (zorgmedewerker kon geen cliënt aanmaken; Medplum-invite-500).
 
-## Besluiten van vandaag die Kevin moet weten (naast spec §7)
+## 2 · Wat nog open staat
 
-- Werkbak-nav verving "Medewerkers" (rooster-werkruimte) en "Cliënten" (team-werkruimte) vanwege de max-5-regel — bevestigen (spec §8 punt 3).
-- Herindicatie-signalering uit de timer-service verwijderd (vereist SearchParameter-build; template blijft handmatig startbaar via de hub) — roadmap-item.
-- DMN blijft zichtbaar als "Experimenteel" (sandbox); opslaan naar de engine = roadmap.
-- De twee `timer.cron`-entries in de trigger-config staan op `enabled:false` met uitleg (werden nooit door de trigger-engine uitgevoerd — schijn-actief).
-- Verweesde route `/ecd/[id]/dashboard` (stub "nog niet gemigreerd") verwijderd — het werkgebied Overzicht ís het dashboard.
+| # | Wat | Eigenaar | Hoe |
+|---|---|---|---|
+| 1 | **W4 live platform** | model + Kevin | **Geblokkeerd: Unraid staat uit.** Zodra aan: volg `docs/superpowers/plans/2026-07-10-w4-live-platform.md` letterlijk (release v0.3.0 taggen → GHCR → prod-compose in aparte map → Cloudflare-hostname → bootstrap zónder seed → backup-cron + geteste restore). **Extra sinds het plan: zet in de server-`medplum.config.json` de `appBaseUrl` op de publieke web-URL** (anders crasht de invite/onboarding-flow — geleerd in W3-2). GHCR-packages mogelijk nog privé (Kevins token mist packages-scope). |
+| 2 | **Kevins acceptatie-testronde** | Kevin → model | Testplan A-H; bevindingen met testnummer melden; model fixt per bevinding (branch → PR → CI). Verse seed nodig voor de nieuwe accounts: `docker compose down -v && docker compose up -d --build`. |
+| 3 | Spec §8 open punten | Kevin | domeinnaam live · nav-ruilen (rooster: Medewerkers→Werkbak, team: Cliënten→Werkbak) bevestigen · beheerder-IA · deploy.yml-opruiming (zit in W4-plan Task 2) |
+| 4 | Notion-backlog bijwerken | model | workflow-cluster-items + ME-01 + I-05-light afvinken; Notion-MCP werkt weer sinds 2026-07-11-avond; eindsprint-overzicht staat in Notion (zie memory `reference_notion`) |
+| 5 | Roadmap-restjes uit de sprint | later | herindicatie-autosignalering (bewust verwijderd; handmatig starten kan via de hub) · DMN-opslaan · assignee-námen in werkbak (nu "jou/collega") · E-03/E-04 mobiel · timer-cron-entries staan eerlijk op `enabled:false` |
 
-## Hervat-instructie (voor elke sessie/elk model)
+## 3 · Werkwijze voor het vervolg (Opus)
 
-1. Lees memory `project_state` + dit rapport + spec §6 (uitvoeringsprotocol).
-2. Check `gh run list --limit 5`: verwerkt Actions weer events? → PR's #19/#20/#21 na groene CI in volgorde mergen; daarna W2-branch rebasen op main en afmaken (dashboard-landingsscherm consumeert `useWerkbak` + `haalMe`).
-3. Check Unraid (`ssh -o ConnectTimeout=8 root@192.168.1.10 "echo ok"`): bereikbaar? → W4-plan volgen (release v0.3.0 eerst).
-4. Werk de tabel hierboven en memory bij na elke gemergde PR.
+- **Protocol**: spec §6 — branch vanaf main → (TDD waar logica) → typecheck/lint/test lokaal (PATH-fix: `$env:PATH = "C:\Program Files\nodejs;$env:PATH"`) → PR → **CI incl. E2E groen** → merge. Geen lokale Docker in de agent-shell (Docker Desktop is er wel, voor Kevins handmatige test); CI is de stack-verificatie.
+- **Kevins voorkeur**: bouwen via subagents met strak recept (bestanden, contracten, verificatie-eisen, rapport-format); hoofdsessie ontwerpt, reviewt (steekproef op het grootste risico), merget en houdt het status-artifact bij: https://claude.ai/code/artifact/c192660b-739d-4968-823c-a0cee13ca1d9 (zelfde bestandspad herpubliceren → zelfde URL; bron-HTML in de sessie-scratchpad, bij verlies opnieuw opbouwen).
+- **Reviewen zonder de werkboom te storen** (terwijl een agent bouwt): `git worktree add <scratchpad-pad> <branch>` → fix/commit/push → `git worktree remove`.
+- **Limieten-protocol** (Kevin): pauzeren op een PR-grens — alles gepusht, memory + dit document bij — en later naadloos verder.
+
+## 4 · Valkuilen & lessen (bespaart het volgende model uren)
+
+1. **Medplum-config**: de gemounte `infra/medplum/medplum.config.json` is de énige config-bron — `MEDPLUM_*`-env-vars worden genegeerd. `appBaseUrl` is verplicht voor de invite-API.
+2. **GitHub Actions-storing-playbook**: krijgen PR's geen checks (webhook-events weg), niet blijven her-pushen — `gh workflow run CI --ref <branch>` (workflow_dispatch zit sinds deze sprint in ci.yml) en de run watchen; check-runs landen op de branch-SHA. PR's die tijdens een storing zijn aangemaakt kunnen blijvend event-dood zijn → sluiten en vers heropenen.
+3. **E2E-lessen**: kaartlocators op `div.rounded-xl`-niveau (binnenste divs missen de knoppen) · unieke testdata-namen ín de test genereren, niet op module-niveau (serial-retry = duplicaat) · pagina's verversen niet vanzelf na fire-and-forget-backendwerk → herlaad-poll (`wachtOpTaakkaart` in proces-keten.spec) · `getByRole("alert")` matcht ook Next.js' lege route-announcer → filter `hasText: /\S/` · login-helper: `getByRole("navigation").first()`.
+4. **RBAC-hulpdata**: optionele neven-fetches op pagina's `{ stil403: true }` meegeven (ecdFetch) — anders blokkeert de generieke 403-redirect de hele pagina voor rollen zonder die permissie.
+5. **Flowable**: alles per tenant (native tenantId; "Activeren" = deploy voor díe tenant); taken/instanties zonder tenant zijn een bug (fail-closed). De catalogus-test bewaakt catalogus↔BPMN-templates.
+6. **Windows-shell**: node staat niet op het sessie-PATH (fix per commando); Python is beschikbaar voor scripted edits; PowerShell én Git Bash werken, elk met eigen syntax.
+
+## 5 · Accounts & omgevingen
+
+- Testaccounts (per-rol, met serverrollen): `CLAUDE.md` → Test Accounts, of testplan §1.
+- Staging Unraid: `ssh root@192.168.1.10`, repo `/mnt/user/appdata/openzorg`, web :13000, tunnel ecd.windahelden.nl — **server staat momenteel uit**.
+- CI: `.github/workflows/ci.yml` — 5 checks; E2E draait de volledige compose-stack + seed; `workflow_dispatch` als vangnet.
+
+*Laatst bijgewerkt: 2026-07-11 (avond) — einde Fable-sprint, overdracht aan Opus.*
