@@ -13,13 +13,14 @@ interface ProcessenActiefProps {
   instanties: ProcesInstantie[];
   onGestart: () => void;
   naarSjablonen: () => void;
+  naarLopend: () => void;
 }
 
 /**
  * Actief-tab: welke zorgpaden draaien er voor deze organisatie, hoeveel
  * instanties lopen er, en per zorgpad de stappen in gewone taal.
  */
-export function ProcessenActief({ catalogus, definities, instanties, onGestart, naarSjablonen }: ProcessenActiefProps) {
+export function ProcessenActief({ catalogus, definities, instanties, onGestart, naarSjablonen, naarLopend }: ProcessenActiefProps) {
   const [bezigMet, setBezigMet] = useState<string | null>(null);
   const [melding, setMelding] = useState<string | null>(null);
   const [fout, setFout] = useState<string | null>(null);
@@ -98,12 +99,18 @@ export function ProcessenActief({ catalogus, definities, instanties, onGestart, 
                     <span className="text-xs text-fg-subtle">v{definitie.version}</span>
                   </div>
                   {proces && <p className="mt-1 text-sm text-fg-muted">{proces.omschrijving}</p>}
-                  <p className="mt-1.5 text-xs text-fg-subtle">
-                    {lopend === 0
-                      ? "Geen lopende instanties"
-                      : lopend === 1
-                        ? "1 lopende instantie"
-                        : `${lopend} lopende instanties`}
+                  <p className="mt-1.5 text-xs">
+                    {lopend === 0 ? (
+                      <span className="text-fg-subtle">Geen lopende instanties</span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={naarLopend}
+                        className="font-medium text-brand-600 hover:text-brand-800 hover:underline"
+                      >
+                        {lopend === 1 ? "1 lopende instantie" : `${lopend} lopende instanties`} →
+                      </button>
+                    )}
                   </p>
                 </div>
 
