@@ -150,6 +150,7 @@ function ProcessenHub() {
                 instanties={instanties}
                 onGestart={() => void herlaad()}
                 naarSjablonen={() => gaNaarTab("sjablonen")}
+                naarLopend={() => gaNaarTab("lopend")}
               />
             )}
             {tab === "sjablonen" && (
