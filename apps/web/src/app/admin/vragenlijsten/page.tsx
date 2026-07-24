@@ -10,7 +10,12 @@ interface Questionnaire {
   title?: string;
   description?: string;
   status?: string;
-  item?: Array<{ linkId?: string; text?: string; type?: string }>;
+  item?: Array<{
+    linkId?: string;
+    text?: string;
+    type?: string;
+    answerOption?: Array<{ valueCoding?: { display?: string }; valueString?: string }>;
+  }>;
 }
 
 interface QBundle {
@@ -94,11 +99,26 @@ const VOORBEELDEN = [
   },
 ];
 
+/** NL-label per FHIR-vraagtype voor de vragen-preview. */
+const VRAAGTYPE_LABELS: Record<string, string> = {
+  boolean: "ja/nee",
+  choice: "keuze",
+  "open-choice": "keuze + vrij",
+  integer: "getal",
+  decimal: "getal",
+  string: "kort antwoord",
+  text: "vrije tekst",
+  date: "datum",
+  group: "groep",
+  display: "toelichting",
+};
+
 export default function VragenlijstenAdminPage() {
   const [templates, setTemplates] = useState<Questionnaire[]>([]);
   const [loading, setLoading] = useState(true);
   const [seeding, setSeeding] = useState(false);
   const [status, setStatus] = useState<{ ok: boolean; text: string } | null>(null);
+  const [openVragen, setOpenVragen] = useState<string | null>(null);
 
   async function load() {
     setLoading(true);
@@ -189,10 +209,44 @@ export default function VragenlijstenAdminPage() {
                     )}
                     <div className="mt-2 flex items-center gap-3 text-xs text-fg-subtle">
                       <span className="rounded bg-sunken px-2 py-0.5">{t.status ?? "unknown"}</span>
-                      <span>{t.item?.length ?? 0} vragen</span>
+                      {(t.item?.length ?? 0) > 0 ? (
+                        <button
+                          type="button"
+                          onClick={() => setOpenVragen(openVragen === t.id ? null : (t.id ?? null))}
+                          aria-expanded={openVragen === t.id}
+                          className="font-medium text-brand-600 hover:text-brand-800 hover:underline"
+                        >
+                          {openVragen === t.id ? "Verberg vragen" : `Bekijk ${t.item?.length} vragen`}
+                        </button>
+                      ) : (
+                        <span>Geen vragen</span>
+                      )}
                     </div>
                   </div>
                 </div>
+
+                {openVragen === t.id && (
+                  <ol className="mt-4 space-y-2 border-t border-default pt-4">
+                    {t.item?.map((vraag, i) => (
+                      <li key={vraag.linkId ?? i} className="text-sm">
+                        <span className="text-fg">
+                          {i + 1}. {vraag.text ?? vraag.linkId}
+                        </span>
+                        <span className="ml-2 inline-flex items-center rounded bg-sunken px-1.5 py-0.5 text-xs text-fg-subtle">
+                          {VRAAGTYPE_LABELS[vraag.type ?? ""] ?? vraag.type}
+                        </span>
+                        {vraag.answerOption && vraag.answerOption.length > 0 && (
+                          <span className="ml-2 text-xs text-fg-subtle">
+                            ({vraag.answerOption
+                              .map((o) => o.valueCoding?.display ?? o.valueString ?? "")
+                              .filter(Boolean)
+                              .join(" / ")})
+                          </span>
+                        )}
+                      </li>
+                    ))}
+                  </ol>
+                )}
               </div>
             ))}
           </div>

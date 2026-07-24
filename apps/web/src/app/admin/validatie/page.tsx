@@ -27,6 +27,28 @@ const OPERATORS: Array<{ slug: ValidationRule["operator"]; label: string; valueT
   { slug: "in", label: "Toegestaan", valueType: "array" },
 ];
 
+
+/** NL-labels voor resource-types in de regel-lijst. */
+const RESOURCE_LABELS: Record<string, string> = {
+  Patient: "Cliënt",
+  Practitioner: "Medewerker",
+  Observation: "Rapportage/meting",
+  CarePlan: "Zorgplan",
+  MedicationRequest: "Medicatievoorschrift",
+  Appointment: "Afspraak",
+};
+
+/**
+ * Leesbare veldnaam voor de lijst: technische paden als
+ * "extension[trajectStatus].valueString" worden "extra veld 'trajectStatus'";
+ * overige paden blijven staan maar zonder FHIR-ruis waar mogelijk.
+ */
+function leesbaarVeld(fieldPath: string): string {
+  const extMatch = fieldPath.match(/^extension\[(.+?)\]/);
+  if (extMatch) return `extra veld ‘${extMatch[1]}’`;
+  return fieldPath;
+}
+
 function formatValue(rule: ValidationRule): string {
   if (rule.operator === "required") return "—";
   if (Array.isArray(rule.value)) return rule.value.join(", ");
@@ -251,8 +273,10 @@ export default function ValidatiePage() {
           <div>
             <h1 className="text-2xl font-bold text-fg">Validatieregels</h1>
             <p className="mt-1 text-sm text-fg-muted">
-              Laag 2 — definieer extra validaties die bovenop de kern-validatie draaien.
-              Kern-velden (BSN, AGB) zijn gelocked.
+              Extra invoercontroles bovenop de wettelijke kern-validatie: een regel
+              controleert één veld op het moment van opslaan (verplicht, toegestane
+              waarden, bereik of patroon) en toont jouw foutmelding aan de invuller.
+              Kern-velden (BSN-elfproef, AGB) liggen vast en zijn hier niet aanpasbaar.
             </p>
           </div>
           <button
@@ -282,6 +306,15 @@ export default function ValidatiePage() {
           <div className="grid gap-4 lg:grid-cols-[360px_1fr]">
             {/* Rules list */}
             <aside className="rounded-xl border border-default bg-raised p-2">
+              {/* Uitleg: wat doet een validatieregel? */}
+              <div className="mb-3 rounded-lg border border-brand-200 bg-brand-50/30 p-3 text-xs text-fg-muted dark:border-brand-800 dark:bg-brand-950/10">
+                <p className="font-semibold text-brand-800 dark:text-brand-200">Hoe werkt dit?</p>
+                <p className="mt-1">
+                  Kies een resource-type (bijv. Cliënt), het veld en de controle — zoals
+                  <em> Verplicht</em> of <em>Toegestaan</em> (alleen deze waarden). Bij het
+                  opslaan wordt het veld gecontroleerd en ziet de invuller jouw foutmelding.
+                </p>
+              </div>
               {rules.length === 0 ? (
                 <p className="p-4 text-xs text-fg-subtle">Nog geen regels. Klik "+ Nieuwe regel" om te beginnen.</p>
               ) : (
@@ -297,7 +330,9 @@ export default function ValidatiePage() {
                     }`}
                   >
                     <div className="flex items-center justify-between">
-                      <span className="font-medium">{rule.resourceType}.{rule.fieldPath}</span>
+                      <span className="font-medium">
+                        {RESOURCE_LABELS[rule.resourceType] ?? rule.resourceType} · {leesbaarVeld(rule.fieldPath)}
+                      </span>
                       {rule.active === false && (
                         <span className="text-xs text-fg-subtle">uit</span>
                       )}
@@ -306,6 +341,9 @@ export default function ValidatiePage() {
                       {OPERATORS.find((op) => op.slug === rule.operator)?.label ?? rule.operator}
                       {" · "}
                       {formatValue(rule)}
+                    </div>
+                    <div className="mt-0.5 font-mono text-[10px] text-fg-subtle/70">
+                      {rule.resourceType}.{rule.fieldPath}
                     </div>
                   </button>
                 ))
