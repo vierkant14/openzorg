@@ -35,9 +35,9 @@ function DmnInner() {
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-fg">DMN Beslistabellen</h1>
           <p className="mt-1 text-sm text-fg-muted">
-            Visuele editor voor Decision Model & Notation (DMN). Gebruik beslistabellen
-            voor business rules zoals &ldquo;indicatie hoog → traject A&rdquo;. Experimentele feature —
-            activeer via platform-instellingen.
+            Visuele editor voor beslistabellen (DMN): regels zoals &ldquo;indicatie hoog →
+            traject A&rdquo;. Experimentele functie — een sandbox om te verkennen; opslaan
+            naar de proces-engine staat op de roadmap.
           </p>
         </div>
 
